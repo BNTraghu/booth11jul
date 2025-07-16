@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Society Events Management Platform - Business Requirements Document</title>
+    <style>
+        @page {
+            margin: 1in;
+            size: A4;
+        }
+        
+        body {
+            font-family: 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.5;
+            color: #000;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            margin: 0;
+            text-transform: uppercase;
+        }
+        
+        .header h2 {
+            font-size: 14pt;
+            margin: 10px 0;
+            color: #333;
+        }
+        
+        .document-info {
+            margin-bottom: 30px;
+        }
+        
+        .document-info table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #000;
+        }
+        
+        .document-info td {
+            padding: 8px;
+            border: 1px solid #000;
+            vertical-align: top;
+        }
+        
+        .document-info td:first-child {
+            font-weight: bold;
+            width: 25%;
+            background-color: #f0f0f0;
+        }
+        
+        h1 {
+            font-size: 16pt;
+            font-weight: bold;
+            margin: 30px 0 15px 0;
+            page-break-before: auto;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        
+        h2 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 25px 0 10px 0;
+            color: #333;
+        }
+        
+        h3 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin: 20px 0 8px 0;
+            color: #555;
+        }
+        
+        h4 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin: 15px 0 5px 0;
+            color: #666;
+        }
+        
+        p {
+            margin: 10px 0;
+            text-align: justify;
+        }
+        
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        table, th, td {
+            border: 1px solid #000;
+        }
+        
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            padding: 10px;
+            text-align: left;
+        }
+        
+        td {
+            padding: 8px;
+            vertical-align: top;
+        }
+        
+        .toc {
+            margin: 30px 0;
+        }
+        
+        .toc h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            margin: 8px 0;
+            padding-left: 20px;
+            text-indent: -20px;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        .highlight {
+            background-color: #ffff99;
+            padding: 2px 4px;
+        }
+        
+        .requirement {
+            background-color: #f9f9f9;
+            border-left: 4px solid #007acc;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        
+        .requirement strong {
+            color: #007acc;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 10pt;
+            color: #666;
+        }
+        
+        @media print {
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Business Requirements Document</h1>
+        <h2>Society Events Management Platform</h2>
+        <p><strong>Version 1.0 | January 2025</strong></p>
+    </div>
+
+    <div class="document-info">
+        <table>
+            <tr>
+                <td>Document Version</td>
+                <td>1.0</td>
+            </tr>
+            <tr>
+                <td>Date</td>
+                <td>January 2025</td>
+            </tr>
+            <tr>
+                <td>Prepared By</td>
+                <td>System Analysis Team</td>
+            </tr>
+            <tr>
+                <td>Project</td>
+                <td>Society Events Management Platform</td>
+            </tr>
+            <tr>
+                <td>Status</td>
+                <td>Draft for Review</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li>1. Executive Summary</li>
+            <li>2. Business Requirements</li>
+            <li>3. Functional Requirements</li>
+            <li>4. Non-Functional Requirements</li>
+            <li>5. Technical Architecture</li>
+            <li>6. Data Requirements</li>
+            <li>7. Integration Requirements</li>
+            <li>8. Success Criteria</li>
+            <li>9. Risk Assessment</li>
+            <li>10. Implementation Timeline</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h1>1. Executive Summary</h1>
+
+    <h2>1.1 Project Overview</h2>
+    <p>The Society Events Management Platform is a comprehensive web-based solution designed to streamline event management for residential societies, vendors, exhibitors, and administrative staff. The platform serves as a centralized hub for managing all aspects of society events, from planning and vendor coordination to billing and reporting.</p>
+
+    <h2>1.2 Business Objectives</h2>
+    <ul>
+        <li><strong>Primary Goal:</strong> Digitize and automate society event management processes</li>
+        <li><strong>Secondary Goals:</strong>
+            <ul>
+                <li>Reduce manual paperwork and administrative overhead</li>
+                <li>Improve vendor-society coordination</li>
+                <li>Enhance revenue tracking and financial transparency</li>
+                <li>Provide data-driven insights for better decision making</li>
+                <li>Streamline exhibitor registration and management</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h2>1.3 Target Users</h2>
+    <ul>
+        <li><strong>Super Administrators:</strong> Platform-wide management and oversight</li>
+        <li><strong>City Administrators:</strong> Regional management and coordination</li>
+        <li><strong>Support Technical Staff:</strong> User assistance and technical support</li>
+        <li><strong>Sales & Marketing Teams:</strong> Lead generation and campaign management</li>
+        <li><strong>Accounting Teams:</strong> Financial management and billing</li>
+        <li><strong>Logistics Teams:</strong> Vendor and supply chain management</li>
+        <li><strong>Society Representatives:</strong> Event planning and management</li>
+        <li><strong>Vendors:</strong> Service provision and job management</li>
+        <li><strong>Exhibitors:</strong> Event participation and booth management</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>2. Business Requirements</h1>
+
+    <h2>2.1 User Management & Authentication</h2>
+
+    <h3>2.1.1 Role-Based Access Control</h3>
+    <div class="requirement">
+        <strong>Requirement:</strong> The system must support hierarchical role-based access control with the following roles:
+    </div>
+
+    <table>
+        <tr>
+            <th>Role</th>
+            <th>Description</th>
+            <th>Key Permissions</th>
+        </tr>
+        <tr>
+            <td>Super Admin</td>
+            <td>Full system access and control</td>
+            <td>User management, System configuration, Global reporting</td>
+        </tr>
+        <tr>
+            <td>City Admin</td>
+            <td>City-level administration</td>
+            <td>Local event management, Regional vendor coordination</td>
+        </tr>
+        <tr>
+            <td>Support Tech</td>
+            <td>Technical support and assistance</td>
+            <td>Event troubleshooting, System monitoring</td>
+        </tr>
+        <tr>
+            <td>Sales & Marketing</td>
+            <td>Lead management and conversion</td>
+            <td>Marketing campaigns, Customer relations</td>
+        </tr>
+        <tr>
+            <td>Accounting</td>
+            <td>Financial management</td>
+            <td>Financial reports, Invoice management</td>
+        </tr>
+        <tr>
+            <td>Logistics</td>
+            <td>Vendor and supply management</td>
+            <td>Vendor management, Supply chain oversight</td>
+        </tr>
+    </table>
+
+    <h3>2.1.2 User Authentication</h3>
+    <ul>
+        <li>Secure email/password authentication</li>
+        <li>Session management with configurable timeout</li>
+        <li>Password policy enforcement</li>
+        <li>Account lockout after failed attempts</li>
+        <li>Optional two-factor authentication</li>
+    </ul>
+
+    <h2>2.2 Society Management</h2>
+
+    <h3>2.2.1 Society Registration & Onboarding</h3>
+    <div class="requirement">
+        <strong>Requirement:</strong> The system must allow registration and management of residential societies with comprehensive profile management capabilities.
+    </div>
+
+    <h4>Society Profile Management</h4>
+    <ul>
+        <li>Basic information (name, location, contact details)</li>
+        <li>Membership count and demographics</li>
+        <li>Available facilities and amenities</li>
+        <li>Contact person assignment</li>
+        <li>Status tracking (active, pending, inactive)</li>
+    </ul>
+
+    <h4>Facility Management</h4>
+    <ul>
+        <li>Auditoriums and halls</li>
+        <li>Outdoor spaces and gardens</li>
+        <li>Parking facilities</li>
+        <li>Technical equipment availability</li>
+        <li>Capacity limitations</li>
+    </ul>
+
+    <h2>2.3 Event Management</h2>
+
+    <h3>2.3.1 Event Lifecycle Management</h3>
+    <div class="requirement">
+        <strong>Requirement:</strong> The system must support complete event lifecycle management from creation to completion.
+    </div>
+
+    <h4>Event Creation & Planning</h4>
+    <ul>
+        <li>Event details (title, description, date, time, venue)</li>
+        <li>Capacity management and attendee limits</li>
+        <li>Multi-status workflow (draft, published, ongoing, completed, cancelled)</li>
+        <li>Vendor assignment and coordination</li>
+        <li>Budget planning and tracking</li>
+    </ul>
+
+    <h4>Event Execution</h4>
+    <ul>
+        <li>Real-time attendee tracking</li>
+        <li>Vendor coordination and communication</li>
+        <li>Live event updates and notifications</li>
+        <li>Issue tracking and resolution</li>
+    </ul>
+
+    <h4>Post-Event Management</h4>
+    <ul>
+        <li>Revenue calculation and reporting</li>
+        <li>Vendor performance evaluation</li>
+        <li>Attendee feedback collection</li>
+        <li>Event analytics and insights</li>
+    </ul>
+
+    <h2>2.4 Vendor Management</h2>
+
+    <h3>2.4.1 Vendor Registration & Onboarding</h3>
+    <div class="requirement">
+        <strong>Requirement:</strong> The system must support comprehensive vendor management across multiple service categories.
+    </div>
+
+    <h4>Vendor Categories</h4>
+    <ul>
+        <li>Sound & Lighting services</li>
+        <li>Catering and food services</li>
+        <li>Decoration and event styling</li>
+        <li>Security services</li>
+        <li>Transportation and logistics</li>
+        <li>Housekeeping and maintenance</li>
+    </ul>
+
+    <h4>Vendor Profiles</h4>
+    <ul>
+        <li>Company information and credentials</li>
+        <li>Service offerings and specializations</li>
+        <li>Pricing structures and packages</li>
+        <li>Geographic service areas</li>
+        <li>Performance history and ratings</li>
+    </ul>
+
+    <h2>2.5 Exhibitor Management</h2>
+
+    <h3>2.5.1 Exhibitor Registration</h3>
+    <div class="requirement">
+        <strong>Requirement:</strong> The system must facilitate exhibitor participation in events with comprehensive registration and booth management.
+    </div>
+
+    <h4>Registration Process</h4>
+    <ul>
+        <li>Company information and contact details</li>
+        <li>Product/service category classification</li>
+        <li>Booth preferences and requirements</li>
+        <li>Payment processing and tracking</li>
+        <li>Registration status management</li>
+    </ul>
+
+    <h4>Booth Management</h4>
+    <ul>
+        <li>Booth allocation and assignment</li>
+        <li>Layout planning and visualization</li>
+        <li>Equipment and utility requirements</li>
+        <li>Setup and breakdown scheduling</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>3. Functional Requirements</h1>
+
+    <h2>3.1 Core System Functions</h2>
+
+    <h3>3.1.1 User Management</h3>
+    <ul>
+        <li>User registration and profile management</li>
+        <li>Role assignment and permission control</li>
+        <li>Password management and security</li>
+        <li>Activity logging and audit trails</li>
+    </ul>
+
+    <h3>3.1.2 Data Management</h3>
+    <ul>
+        <li>CRUD operations for all entities</li>
+        <li>Data validation and integrity checks</li>
+        <li>Backup and recovery procedures</li>
+        <li>Data archiving and retention</li>
+    </ul>
+
+    <h3>3.1.3 Integration Capabilities</h3>
+    <ul>
+        <li>Payment gateway integration (Razorpay, PayU, Stripe)</li>
+        <li>Email service integration (SendGrid, Mailgun)</li>
+        <li>SMS service integration (Twilio, MSG91)</li>
+        <li>Analytics integration (Google Analytics)</li>
+    </ul>
+
+    <h2>3.2 Business Logic Requirements</h2>
+
+    <h3>3.2.1 Event Workflow</h3>
+    <ul>
+        <li>Event approval and publishing workflow</li>
+        <li>Vendor assignment and coordination</li>
+        <li>Capacity management and overbooking prevention</li>
+        <li>Automated status transitions</li>
+    </ul>
+
+    <h3>3.2.2 Financial Calculations</h3>
+    <ul>
+        <li>Dynamic pricing based on event type and size</li>
+        <li>Commission calculations for vendors</li>
+        <li>Tax calculations and compliance</li>
+        <li>Revenue sharing and distribution</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>4. Non-Functional Requirements</h1>
+
+    <h2>4.1 Performance Requirements</h2>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Requirement</th>
+            <th>Target</th>
+        </tr>
+        <tr>
+            <td>Response Time</td>
+            <td>Page load times</td>
+            <td>Under 3 seconds</td>
+        </tr>
+        <tr>
+            <td>Throughput</td>
+            <td>Concurrent users</td>
+            <td>1000+ users</td>
+        </tr>
+        <tr>
+            <td>Scalability</td>
+            <td>System growth</td>
+            <td>Horizontal scaling capability</td>
+        </tr>
+        <tr>
+            <td>Availability</td>
+            <td>System uptime</td>
+            <td>99.9% SLA</td>
+        </tr>
+    </table>
+
+    <h2>4.2 Security Requirements</h2>
+    <ul>
+        <li><strong>Data Encryption:</strong> SSL/TLS for data in transit</li>
+        <li><strong>Authentication:</strong> Multi-factor authentication support</li>
+        <li><strong>Authorization:</strong> Role-based access control</li>
+        <li><strong>Audit:</strong> Comprehensive activity logging</li>
+    </ul>
+
+    <h2>4.3 Usability Requirements</h2>
+    <ul>
+        <li><strong>Responsive Design:</strong> Mobile-first approach</li>
+        <li><strong>Accessibility:</strong> WCAG 2.1 AA compliance</li>
+        <li><strong>Browser Support:</strong> Modern browsers (Chrome, Firefox, Safari, Edge)</li>
+        <li><strong>User Experience:</strong> Intuitive navigation and workflows</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>5. Technical Architecture</h1>
+
+    <h2>5.1 Frontend Requirements</h2>
+    <ul>
+        <li><strong>Framework:</strong> React.js with TypeScript</li>
+        <li><strong>Styling:</strong> Tailwind CSS for responsive design</li>
+        <li><strong>State Management:</strong> React hooks and context</li>
+        <li><strong>Icons:</strong> Lucide React icon library</li>
+    </ul>
+
+    <h2>5.2 Backend Requirements</h2>
+    <ul>
+        <li><strong>Database:</strong> Supabase (PostgreSQL)</li>
+        <li><strong>Authentication:</strong> Supabase Auth</li>
+        <li><strong>API:</strong> RESTful API design</li>
+        <li><strong>File Storage:</strong> Supabase Storage</li>
+    </ul>
+
+    <h2>5.3 Infrastructure Requirements</h2>
+    <ul>
+        <li><strong>Hosting:</strong> Cloud-based deployment</li>
+        <li><strong>CDN:</strong> Content delivery network for static assets</li>
+        <li><strong>Monitoring:</strong> Application performance monitoring</li>
+        <li><strong>Backup:</strong> Automated database backups</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>6. Data Requirements</h1>
+
+    <h2>6.1 Core Entities</h2>
+    <table>
+        <tr>
+            <th>Entity</th>
+            <th>Description</th>
+            <th>Key Attributes</th>
+        </tr>
+        <tr>
+            <td>Users</td>
+            <td>System users and authentication</td>
+            <td>ID, Email, Role, Status, Profile Data</td>
+        </tr>
+        <tr>
+            <td>Societies</td>
+            <td>Residential society information</td>
+            <td>Name, Location, Facilities, Contact Info</td>
+        </tr>
+        <tr>
+            <td>Events</td>
+            <td>Event details and lifecycle</td>
+            <td>Title, Date, Venue, Status, Capacity</td>
+        </tr>
+        <tr>
+            <td>Vendors</td>
+            <td>Service provider information</td>
+            <td>Company, Category, Rating, Pricing</td>
+        </tr>
+        <tr>
+            <td>Exhibitors</td>
+            <td>Exhibition participant data</td>
+            <td>Company, Booth, Category, Payment Status</td>
+        </tr>
+        <tr>
+            <td>Invoices</td>
+            <td>Financial transaction records</td>
+            <td>Amount, Date, Status, Payment Method</td>
+        </tr>
+    </table>
+
+    <h2>6.2 Data Relationships</h2>
+    <ul>
+        <li>Many-to-many relationships between events and vendors</li>
+        <li>One-to-many relationships between societies and events</li>
+        <li>Hierarchical user role relationships</li>
+        <li>Audit trail relationships for all entities</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>7. Integration Requirements</h1>
+
+    <h2>7.1 Payment Processing</h2>
+    <ul>
+        <li>Multiple payment gateway support</li>
+        <li>Recurring billing for subscriptions</li>
+        <li>Refund and chargeback handling</li>
+        <li>Payment reconciliation and reporting</li>
+    </ul>
+
+    <h2>7.2 Communication Services</h2>
+    <ul>
+        <li>Email delivery and tracking</li>
+        <li>SMS gateway integration</li>
+        <li>Push notification services</li>
+        <li>Communication analytics and reporting</li>
+    </ul>
+
+    <h2>7.3 Third-Party Services</h2>
+    <ul>
+        <li>Calendar integration (Google Calendar, Outlook)</li>
+        <li>Social media integration</li>
+        <li>Analytics and tracking services</li>
+        <li>Document generation and storage</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>8. Success Criteria</h1>
+
+    <h2>8.1 Business Metrics</h2>
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Timeline</th>
+        </tr>
+        <tr>
+            <td>User Adoption</td>
+            <td>80% of target societies onboarded</td>
+            <td>6 months</td>
+        </tr>
+        <tr>
+            <td>Revenue Growth</td>
+            <td>25% increase in event revenue</td>
+            <td>12 months</td>
+        </tr>
+        <tr>
+            <td>Efficiency Gains</td>
+            <td>50% reduction in planning time</td>
+            <td>6 months</td>
+        </tr>
+        <tr>
+            <td>User Satisfaction</td>
+            <td>90% satisfaction rating</td>
+            <td>Ongoing</td>
+        </tr>
+    </table>
+
+    <h2>8.2 Technical Metrics</h2>
+    <ul>
+        <li><strong>System Performance:</strong> Sub-3-second page load times</li>
+        <li><strong>Reliability:</strong> 99.9% system uptime</li>
+        <li><strong>Security:</strong> Zero critical security incidents</li>
+        <li><strong>Scalability:</strong> Support for 10,000+ concurrent users</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>9. Risk Assessment</h1>
+
+    <h2>9.1 Technical Risks</h2>
+    <table>
+        <tr>
+            <th>Risk</th>
+            <th>Impact</th>
+            <th>Probability</th>
+            <th>Mitigation Strategy</th>
+        </tr>
+        <tr>
+            <td>Data Migration</td>
+            <td>High</td>
+            <td>Medium</td>
+            <td>Comprehensive testing and backup procedures</td>
+        </tr>
+        <tr>
+            <td>Integration Complexity</td>
+            <td>Medium</td>
+            <td>High</td>
+            <td>Phased integration approach</td>
+        </tr>
+        <tr>
+            <td>Performance Issues</td>
+            <td>High</td>
+            <td>Medium</td>
+            <td>Load testing and optimization</td>
+        </tr>
+        <tr>
+            <td>Security Vulnerabilities</td>
+            <td>High</td>
+            <td>Low</td>
+            <td>Regular security audits</td>
+        </tr>
+    </table>
+
+    <h2>9.2 Business Risks</h2>
+    <ul>
+        <li><strong>User Adoption:</strong> Slow adoption by target users</li>
+        <li><strong>Competition:</strong> Competitive pressure from existing solutions</li>
+        <li><strong>Regulatory Changes:</strong> Changes in compliance requirements</li>
+        <li><strong>Economic Factors:</strong> Economic downturns affecting customer spending</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>10. Implementation Timeline</h1>
+
+    <h2>10.1 Phase 1: Core Platform (Months 1-3)</h2>
+    <ul>
+        <li>User management and authentication</li>
+        <li>Basic society and event management</li>
+        <li>Core vendor functionality</li>
+        <li>Basic reporting and analytics</li>
+    </ul>
+
+    <h2>10.2 Phase 2: Advanced Features (Months 4-6)</h2>
+    <ul>
+        <li>Exhibitor management system</li>
+        <li>Advanced billing and invoicing</li>
+        <li>Marketing and advertising tools</li>
+        <li>Enhanced reporting capabilities</li>
+    </ul>
+
+    <h2>10.3 Phase 3: Integration & Optimization (Months 7-9)</h2>
+    <ul>
+        <li>Third-party integrations</li>
+        <li>Performance optimization</li>
+        <li>Advanced analytics and insights</li>
+        <li>Mobile application development</li>
+    </ul>
+
+    <h2>10.4 Phase 4: Launch & Scale (Months 10-12)</h2>
+    <ul>
+        <li>Production deployment</li>
+        <li>User onboarding and training</li>
+        <li>Performance monitoring and optimization</li>
+        <li>Feature enhancements based on feedback</li>
+    </ul>
+
+    <div class="page-break"></div>
+
+    <h1>Appendices</h1>
+
+    <h2>Appendix A: Glossary</h2>
+    <table>
+        <tr>
+            <th>Term</th>
+            <th>Definition</th>
+        </tr>
+        <tr>
+            <td>API</td>
+            <td>Application Programming Interface</td>
+        </tr>
+        <tr>
+            <td>CRUD</td>
+            <td>Create, Read, Update, Delete operations</td>
+        </tr>
+        <tr>
+            <td>SLA</td>
+            <td>Service Level Agreement</td>
+        </tr>
+        <tr>
+            <td>WCAG</td>
+            <td>Web Content Accessibility Guidelines</td>
+        </tr>
+    </table>
+
+    <h2>Appendix B: References</h2>
+    <ul>
+        <li>React.js Documentation - https://reactjs.org/</li>
+        <li>Supabase Documentation - https://supabase.com/docs</li>
+        <li>Tailwind CSS Documentation - https://tailwindcss.com/docs</li>
+        <li>WCAG 2.1 Guidelines - https://www.w3.org/WAI/WCAG21/</li>
+    </ul>
+
+    <div class="footer no-print">
+        <p>Society Events Management Platform - Business Requirements Document v1.0</p>
+    </div>
+
+    <script>
+        // Add page numbers and print functionality
+        window.onload = function() {
+            // Auto-print functionality can be added here if needed
+        };
+    </script>
+</body>
+</html>
