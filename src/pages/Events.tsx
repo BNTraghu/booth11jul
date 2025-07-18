@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
@@ -7,9 +7,10 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockEvents } from '../data/mockData';
 import { Event } from '../types';
+import { useEvents } from '../hooks/useSupabaseData';
 
 export const Events: React.FC = () => {
-  const [events, setEvents] = useState(mockEvents);
+  const { events, loading, error, refetch } = useEvents();
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,12 +20,19 @@ export const Events: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Event | null>(null);
 
+  useEffect(() => {
+    if (localStorage.getItem('eventCreated')) {
+      refetch();
+      localStorage.removeItem('eventCreated');
+    }
+  }, []);
+
   const filteredEvents = events.filter(event => {
     const matchesFilter = filter === 'all' || event.status === filter;
     const matchesSearch = searchTerm === '' || 
       event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.city.toLowerCase().includes(searchTerm.toLowerCase());
+      (event.city ?? '').toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -57,20 +65,22 @@ export const Events: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (editFormData) {
-      setEvents(prev => prev.map(event => 
-        event.id === editFormData.id ? editFormData : event
-      ));
+      // This part needs to be updated to use Supabase update
+      // For now, it will just close the modal and refetch
       setShowEditModal(false);
       setEditFormData(null);
       setSelectedEvent(null);
+      refetch(); // Refetch to update the list
     }
   };
 
   const handleConfirmDelete = () => {
     if (selectedEvent) {
-      setEvents(prev => prev.filter(event => event.id !== selectedEvent.id));
+      // This part needs to be updated to use Supabase delete
+      // For now, it will just close the modal and refetch
       setShowDeleteModal(false);
       setSelectedEvent(null);
+      refetch(); // Refetch to update the list
     }
   };
 
@@ -257,7 +267,7 @@ export const Events: React.FC = () => {
                       <div>
                         <div className="font-medium text-gray-900 line-clamp-1">{event.title}</div>
                         <div className="text-sm text-gray-500 sm:hidden">{event.date}</div>
-                        <div className="text-sm text-gray-500 md:hidden">{event.city}</div>
+                        <div className="text-sm text-gray-500 md:hidden">{event.city ?? ''}</div>
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
@@ -269,7 +279,7 @@ export const Events: React.FC = () => {
                     <TableCell className="hidden md:table-cell">
                       <div className="text-sm">
                         <div>{event.venue}</div>
-                        <div className="text-gray-500">{event.city}</div>
+                        <div className="text-gray-500">{event.city ?? ''}</div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -486,7 +496,7 @@ export const Events: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                   <select
                     value={editFormData.status}
-                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
+                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value as string})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="draft">Draft</option>

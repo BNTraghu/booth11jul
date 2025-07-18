@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Building2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -49,7 +50,8 @@ export const Login: React.FC = () => {
         localStorage.setItem('user', JSON.stringify(mockUser));
         
         // Redirect to dashboard
-        window.location.href = '/dashboard';
+        // window.location.href = '/dashboard';
+        navigate('/dashboard');
         return;
       }
       

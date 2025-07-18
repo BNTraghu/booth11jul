@@ -185,7 +185,8 @@ export const CreateEvent: React.FC = () => {
       console.log('Event created successfully:', data);
       
       setSubmitSuccess(true);
-      
+      // Set a flag in localStorage to trigger refetch on Events page
+      localStorage.setItem('eventCreated', '1');
       // Redirect after success
       setTimeout(() => {
         navigate('/events');

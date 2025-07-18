@@ -30,6 +30,7 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface FormData {
   // Company Information
@@ -155,6 +156,8 @@ export const AddExhibitor: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  // Add acceptTerms to state
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     // Company Information
@@ -272,6 +275,9 @@ export const AddExhibitor: React.FC = () => {
         if (!formData.boothSize) newErrors.boothSize = 'Booth size is required';
         if (!formData.expectedVisitors.trim()) newErrors.expectedVisitors = 'Expected visitors is required';
         break;
+      case 5:
+        if (!acceptTerms) newErrors.acceptTerms = 'You must accept the terms and conditions';
+        break;
     }
 
     setErrors(newErrors);
@@ -281,11 +287,11 @@ export const AddExhibitor: React.FC = () => {
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => {
       if (field.includes('.')) {
-        const [parent, child] = field.split('.');
+        const [parent, child] = field.split('.') as [keyof FormData, string];
         return {
           ...prev,
           [parent]: {
-            ...prev[parent as keyof FormData],
+            ...(prev[parent] as any),
             [child]: value
           }
         };
@@ -295,7 +301,7 @@ export const AddExhibitor: React.FC = () => {
     
     // Clear error when user starts typing
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors(errors => ({ ...errors, [field]: '' }));
     }
   };
 
@@ -359,18 +365,38 @@ export const AddExhibitor: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('Creating exhibitor:', formData);
-      
+      // Insert exhibitor into Supabase
+      const { data, error } = await supabase
+        .from('exhibitors')
+        .insert({
+          company_name: formData.companyName,
+          contact_person: formData.contactPerson,
+          email: formData.email,
+          phone: formData.phone,
+          category: formData.category,
+          city: formData.city,
+          booth: formData.boothPreference,
+          registration_date: new Date().toISOString(),
+          status: formData.status,
+          payment_status: formData.paymentStatus
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      console.log('Exhibitor created successfully:', data);
+
       setSubmitSuccess(true);
-      
+      // Set a flag in localStorage to trigger refetch on Exhibitors page
+      localStorage.setItem('exhibitorCreated', '1');
       // Redirect after success
       setTimeout(() => {
         navigate('/exhibitors');
       }, 2000);
-      
+
     } catch (error) {
       console.error('Error creating exhibitor:', error);
       setErrors({ submit: 'Failed to create exhibitor. Please try again.' });
@@ -1463,6 +1489,8 @@ export const AddExhibitor: React.FC = () => {
                         type="checkbox"
                         id="acceptTerms"
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        checked={acceptTerms}
+                        onChange={e => setAcceptTerms(e.target.checked)}
                         required
                       />
                       <label htmlFor="acceptTerms" className="ml-2 block text-sm text-gray-700">
@@ -1475,6 +1503,12 @@ export const AddExhibitor: React.FC = () => {
                     <div className="text-sm text-red-600 flex items-center">
                       <AlertCircle className="h-4 w-4 mr-1" />
                       {errors.submit}
+                    </div>
+                  )}
+                  {errors.acceptTerms && (
+                    <div className="text-sm text-red-600 flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-1" />
+                      {errors.acceptTerms}
                     </div>
                   )}
                 </div>
@@ -1592,7 +1626,7 @@ export const AddExhibitor: React.FC = () => {
             ) : (
               <Button
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !acceptTerms || !!errors.acceptTerms}
                 className="w-full flex items-center justify-center space-x-2"
               >
                 {isSubmitting ? (

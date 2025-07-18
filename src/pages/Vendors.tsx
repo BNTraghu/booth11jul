@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Star, Phone, Mail, Search, Filter, Eye, X, Save, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
@@ -7,9 +7,10 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockVendors } from '../data/mockData';
 import { Vendor } from '../types';
+import { useVendors } from '../hooks/useSupabaseData';
 
 export const Vendors: React.FC = () => {
-  const [vendors, setVendors] = useState(mockVendors);
+  const { vendors, loading, error, refetch } = useVendors();
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
@@ -19,12 +20,19 @@ export const Vendors: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Vendor | null>(null);
 
+  useEffect(() => {
+    if (localStorage.getItem('vendorCreated')) {
+      refetch();
+      localStorage.removeItem('vendorCreated');
+    }
+  }, []);
+
   const filteredVendors = vendors.filter(vendor => {
     const matchesFilter = filter === 'all' || vendor.category === filter;
     const matchesSearch = searchTerm === '' || 
       vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendor.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendor.city.toLowerCase().includes(searchTerm.toLowerCase());
+      (vendor.contactPerson ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (vendor.city ?? '').toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -89,20 +97,22 @@ export const Vendors: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (editFormData) {
-      setVendors(prev => prev.map(vendor => 
-        vendor.id === editFormData.id ? editFormData : vendor
-      ));
+      // This part needs to be updated to use Supabase update
+      // For now, it will just close the modal and refetch
       setShowEditModal(false);
       setEditFormData(null);
       setSelectedVendor(null);
+      refetch(); // Refetch to update the list
     }
   };
 
   const handleConfirmDelete = () => {
     if (selectedVendor) {
-      setVendors(prev => prev.filter(vendor => vendor.id !== selectedVendor.id));
+      // This part needs to be updated to use Supabase delete
+      // For now, it will just close the modal and refetch
       setShowDeleteModal(false);
       setSelectedVendor(null);
+      refetch(); // Refetch to update the list
     }
   };
 
@@ -248,20 +258,20 @@ export const Vendors: React.FC = () => {
 
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Location</h4>
-                  <div className="text-sm text-gray-900">{selectedVendor.city}</div>
+                  <div className="text-sm text-gray-900">{selectedVendor.city ?? ''}</div>
                 </div>
 
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Contact Person</h4>
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">{selectedVendor.contactPerson}</div>
+                    <div className="text-sm font-medium">{selectedVendor.contactPerson ?? ''}</div>
                     <div className="text-sm text-gray-600 flex items-center">
                       <Mail className="h-4 w-4 mr-2" />
-                      {selectedVendor.email}
+                      {selectedVendor.email ?? ''}
                     </div>
                     <div className="text-sm text-gray-600 flex items-center">
                       <Phone className="h-4 w-4 mr-2" />
-                      {selectedVendor.phone}
+                      {selectedVendor.phone ?? ''}
                     </div>
                   </div>
                 </div>
@@ -271,11 +281,11 @@ export const Vendors: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex items-center">
                       <Star className="h-4 w-4 mr-2 text-yellow-400 fill-current" />
-                      <span className="font-medium">{selectedVendor.rating}</span>
+                      <span className="font-medium">{selectedVendor.rating ?? 0}</span>
                       <span className="text-sm text-gray-600 ml-2">rating</span>
                     </div>
                     <div className="text-sm text-gray-600">
-                      {selectedVendor.completedJobs} completed jobs
+                      {selectedVendor.completedJobs ?? 0} completed jobs
                     </div>
                   </div>
                 </div>
@@ -283,7 +293,7 @@ export const Vendors: React.FC = () => {
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Price Range</h4>
                   <div className="text-sm font-medium text-gray-900">
-                    {selectedVendor.priceRange}
+                    {selectedVendor.priceRange ?? ''}
                   </div>
                 </div>
 
@@ -399,7 +409,7 @@ export const Vendors: React.FC = () => {
                     min="0"
                     max="5"
                     step="0.1"
-                    value={editFormData.rating}
+                    value={editFormData.rating ?? 0}
                     onChange={(e) => setEditFormData({...editFormData, rating: parseFloat(e.target.value)})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -411,7 +421,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Completed Jobs</label>
                   <input
                     type="number"
-                    value={editFormData.completedJobs}
+                    value={editFormData.completedJobs ?? 0}
                     onChange={(e) => setEditFormData({...editFormData, completedJobs: parseInt(e.target.value)})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -501,29 +511,29 @@ export const Vendors: React.FC = () => {
                 <div className="flex items-center text-sm text-gray-600">
                   <div className="flex items-center">
                     <Star className="h-4 w-4 mr-1 text-yellow-400 fill-current" />
-                    <span className="font-medium">{vendor.rating}</span>
-                    <span className="ml-2">({vendor.completedJobs} jobs)</span>
+                    <span className="font-medium">{vendor.rating ?? 0}</span>
+                    <span className="ml-2">({vendor.completedJobs ?? 0} jobs)</span>
                   </div>
                 </div>
                 <div className="text-sm text-gray-600">
-                  <strong>Contact:</strong> {vendor.contactPerson}
+                  <strong>Contact:</strong> {vendor.contactPerson ?? ''}
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <Mail className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">{vendor.email}</span>
+                  <span className="truncate">{vendor.email ?? ''}</span>
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <Phone className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span>{vendor.phone}</span>
+                  <span>{vendor.phone ?? ''}</span>
                 </div>
                 <div className="text-sm text-gray-600">
-                  <strong>City:</strong> {vendor.city}
+                  <strong>City:</strong> {vendor.city ?? ''}
                 </div>
               </div>
 
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm font-medium text-gray-700">Price Range:</p>
-                <p className="text-sm text-gray-900">{vendor.priceRange}</p>
+                <p className="text-sm text-gray-900">{vendor.priceRange ?? ''}</p>
               </div>
               
               <div className="flex justify-between items-center pt-4 border-t border-gray-200">
@@ -598,7 +608,7 @@ export const Vendors: React.FC = () => {
                   <TableCell>
                     <div>
                       <div className="font-medium text-gray-900 line-clamp-1">{vendor.name}</div>
-                      <div className="text-sm text-gray-500">{vendor.city}</div>
+                      <div className="text-sm text-gray-500">{vendor.city ?? ''}</div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -609,18 +619,18 @@ export const Vendors: React.FC = () => {
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{vendor.contactPerson}</div>
-                      <div className="text-sm text-gray-500 truncate">{vendor.phone}</div>
+                      <div className="text-sm font-medium text-gray-900">{vendor.contactPerson ?? ''}</div>
+                      <div className="text-sm text-gray-500 truncate">{vendor.phone ?? ''}</div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center">
                       <Star className="h-4 w-4 mr-1 text-yellow-400 fill-current" />
-                      <span className="font-medium">{vendor.rating}</span>
+                      <span className="font-medium">{vendor.rating ?? 0}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden lg:table-cell font-medium">{vendor.completedJobs}</TableCell>
-                  <TableCell className="hidden xl:table-cell text-sm">{vendor.priceRange}</TableCell>
+                  <TableCell className="hidden lg:table-cell font-medium">{vendor.completedJobs ?? 0}</TableCell>
+                  <TableCell className="hidden xl:table-cell text-sm">{vendor.priceRange ?? ''}</TableCell>
                   <TableCell>
                     <Badge variant={vendor.status === 'active' ? 'success' : 'error'}>
                       {vendor.status}

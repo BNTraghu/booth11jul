@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Edit, 
@@ -31,6 +31,7 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockExhibitors } from '../data/mockData';
 import { Exhibitor } from '../types';
+import { useExhibitors } from '../hooks/useSupabaseData';
 
 interface ExhibitorFilters {
   status: string;
@@ -47,7 +48,7 @@ interface EmailFormData {
 }
 
 export const Exhibitors: React.FC = () => {
-  const [exhibitors, setExhibitors] = useState(mockExhibitors);
+  const { exhibitors, loading, error, refetch } = useExhibitors();
   const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
   const [selectedExhibitor, setSelectedExhibitor] = useState<Exhibitor | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -68,6 +69,13 @@ export const Exhibitors: React.FC = () => {
     search: ''
   });
 
+  useEffect(() => {
+    if (localStorage.getItem('exhibitorCreated')) {
+      refetch();
+      localStorage.removeItem('exhibitorCreated');
+    }
+  }, []);
+
   const filteredExhibitors = exhibitors.filter(exhibitor => {
     const matchesStatus = filters.status === 'all' || exhibitor.status === filters.status;
     const matchesPayment = filters.paymentStatus === 'all' || exhibitor.paymentStatus === filters.paymentStatus;
@@ -75,8 +83,8 @@ export const Exhibitors: React.FC = () => {
     const matchesCity = filters.city === 'all' || exhibitor.city === filters.city;
     const matchesSearch = filters.search === '' || 
       exhibitor.companyName.toLowerCase().includes(filters.search.toLowerCase()) ||
-      exhibitor.contactPerson.toLowerCase().includes(filters.search.toLowerCase()) ||
-      exhibitor.email.toLowerCase().includes(filters.search.toLowerCase());
+      (exhibitor.contactPerson ?? '').toLowerCase().includes(filters.search.toLowerCase()) ||
+      (exhibitor.email ?? '').toLowerCase().includes(filters.search.toLowerCase());
 
     return matchesStatus && matchesPayment && matchesCategory && matchesCity && matchesSearch;
   });
@@ -173,9 +181,10 @@ export const Exhibitors: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (editFormData) {
-      setExhibitors(prev => prev.map(exhibitor => 
-        exhibitor.id === editFormData.id ? editFormData : exhibitor
-      ));
+      // This part needs to be updated to use a Supabase client
+      // For now, we'll just log and refetch
+      console.log('Saving edit:', editFormData);
+      refetch();
       setShowEditModal(false);
       setEditFormData(null);
       setSelectedExhibitor(null);
@@ -195,7 +204,10 @@ export const Exhibitors: React.FC = () => {
 
   const handleConfirmDelete = () => {
     if (selectedExhibitor) {
-      setExhibitors(prev => prev.filter(exhibitor => exhibitor.id !== selectedExhibitor.id));
+      // This part needs to be updated to use a Supabase client
+      // For now, we'll just log and refetch
+      console.log('Deleting exhibitor:', selectedExhibitor);
+      refetch();
       setShowDeleteModal(false);
       setSelectedExhibitor(null);
     }
@@ -446,39 +458,39 @@ export const Exhibitors: React.FC = () => {
                       <div className="font-medium text-gray-900 line-clamp-1">{exhibitor.companyName}</div>
                       <div className="text-sm text-gray-500 flex items-center">
                         <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{exhibitor.city}</span>
+                        <span className="truncate">{exhibitor.city ?? ''}</span>
                       </div>
                       <div className="text-sm text-gray-500 md:hidden">
-                        {exhibitor.category}
+                        {exhibitor.category ?? ''}
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson}</div>
+                      <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson ?? ''}</div>
                       <div className="text-sm text-gray-500 flex items-center truncate">
                         <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{exhibitor.email}</span>
+                        <span className="truncate">{exhibitor.email ?? ''}</span>
                       </div>
                       <div className="text-sm text-gray-500 flex items-center">
                         <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span>{exhibitor.phone}</span>
+                        <span>{exhibitor.phone ?? ''}</span>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    <Badge variant="default">{exhibitor.category}</Badge>
+                    <Badge variant="default">{exhibitor.category ?? ''}</Badge>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
                     <div className="flex items-center">
                       <Building className="h-4 w-4 mr-2 text-blue-500" />
-                      <span className="font-medium">{exhibitor.booth}</span>
+                      <span className="font-medium">{exhibitor.booth ?? 0}</span>
                     </div>
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">
                     <div className="flex items-center text-sm text-gray-900">
                       <Calendar className="h-4 w-4 mr-1" />
-                      {new Date(exhibitor.registrationDate).toLocaleDateString()}
+                      {exhibitor.registrationDate ? new Date(exhibitor.registrationDate).toLocaleDateString() : ''}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -567,15 +579,15 @@ export const Exhibitors: React.FC = () => {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Category</label>
-                      <p className="text-gray-900">{selectedExhibitor.category}</p>
+                      <p className="text-gray-900">{selectedExhibitor.category ?? ''}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">City</label>
-                      <p className="text-gray-900">{selectedExhibitor.city}</p>
+                      <p className="text-gray-900">{selectedExhibitor.city ?? ''}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Booth Number</label>
-                      <p className="text-gray-900 font-medium">{selectedExhibitor.booth}</p>
+                      <p className="text-gray-900 font-medium">{selectedExhibitor.booth ?? 0}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -587,15 +599,15 @@ export const Exhibitors: React.FC = () => {
                   <CardContent className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-700">Contact Person</label>
-                      <p className="text-gray-900">{selectedExhibitor.contactPerson}</p>
+                      <p className="text-gray-900">{selectedExhibitor.contactPerson ?? ''}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Email</label>
-                      <p className="text-gray-900">{selectedExhibitor.email}</p>
+                      <p className="text-gray-900">{selectedExhibitor.email ?? ''}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Phone</label>
-                      <p className="text-gray-900">{selectedExhibitor.phone}</p>
+                      <p className="text-gray-900">{selectedExhibitor.phone ?? ''}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -619,7 +631,7 @@ export const Exhibitors: React.FC = () => {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Registration Date</label>
-                      <p className="text-gray-900">{new Date(selectedExhibitor.registrationDate).toLocaleDateString()}</p>
+                      <p className="text-gray-900">{selectedExhibitor.registrationDate ? new Date(selectedExhibitor.registrationDate).toLocaleDateString() : ''}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -810,9 +822,9 @@ export const Exhibitors: React.FC = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">Recipient</h4>
                 <div className="text-sm text-gray-600">
-                  <div><strong>{selectedExhibitor.contactPerson}</strong></div>
-                  <div>{selectedExhibitor.companyName}</div>
-                  <div>{selectedExhibitor.email}</div>
+                  <div><strong>{selectedExhibitor.contactPerson ?? ''}</strong></div>
+                  <div>{selectedExhibitor.companyName ?? ''}</div>
+                  <div>{selectedExhibitor.email ?? ''}</div>
                 </div>
               </div>
 
@@ -879,7 +891,7 @@ export const Exhibitors: React.FC = () => {
               </div>
               
               <p className="text-gray-700 mb-6">
-                Are you sure you want to delete "<strong>{selectedExhibitor.companyName}</strong>"? 
+                Are you sure you want to delete "<strong>{selectedExhibitor.companyName ?? ''}</strong>"? 
                 This will permanently remove the exhibitor and all associated data.
               </p>
 

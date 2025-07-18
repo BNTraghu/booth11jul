@@ -24,25 +24,17 @@ import { CreateCampaign } from './pages/CreateCampaign';
 import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
 import { BRDDownload } from './pages/BRDDownload';
-
+ 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
+  const { user } = useAuth();  
+ 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace={true} />;
   }
-
+ 
   return <Layout>{children}</Layout>;
 };
-
+ 
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
@@ -151,16 +143,31 @@ const AppRoutes: React.FC = () => {
     </Routes>
   );
 };
-
+ 
 function App() {
+  const { isLoading, user } = useAuth();
+
+  console.log(user);
+
+
   return (
-    <AuthProvider>
-      <Router>
-        <SupabaseConnectionStatus />
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <Router>
+      <SupabaseConnectionStatus />
+      {isLoading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      ) : (
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      )}
+    </Router>
   );
 }
-
-export default App;
+export default () => (
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+);
+ 

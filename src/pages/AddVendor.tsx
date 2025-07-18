@@ -161,7 +161,8 @@ export const AddVendor: React.FC = () => {
       console.log('Vendor created successfully:', data);
       
       setSubmitSuccess(true);
-      
+      // Set a flag in localStorage to trigger refetch on Vendors page
+      localStorage.setItem('vendorCreated', '1');
       // Redirect after success
       setTimeout(() => {
         navigate('/vendors');

@@ -1,14 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Fallback values for development if env vars are not set
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://wqxvcusrbwqyahuaehpq.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxeHZjdXNyYndxeWFodWFlaHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NDYwMjksImV4cCI6MjA2NzAyMjAyOX0.1jRe8nRYo8Fu26I4TsCk0LZX9KAVKkscZ_QEfE0YTxI';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;// || 'https://wqxvcusrbwqyahuaehpq.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;// || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxeHZjdXNyYndxeWFodWFlaHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NDYwMjksImV4cCI6MjA2NzAyMjAyOX0.1jRe8nRYo8Fu26I4TsCk0LZX9KAVKkscZ_QEfE0YTxI';
 
 // Log connection info for debugging
 console.log('Connecting to Supabase:', {
   url: supabaseUrl,
   keyLength: supabaseAnonKey.length,
 });
+
+if(!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase URL or key is not set');
+}
 
 // Create a single supabase client for interacting with your database
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -22,7 +26,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Test connection and log result
 const testConnection = async () => {
   try {
-    const { data, error } = await supabase.from('users').select('*').limit(1);
+    const { data, error } = await supabase.from('users').select('id').limit(1);
+
+    if(data && data.length > 0) {
+      console.log('Supabase connection test successful', data);
+    } else {
+      console.log('Supabase connection test failed', data);
+    }
+
     if (error) {
       console.error('Supabase connection test failed:', error);
     } else {
