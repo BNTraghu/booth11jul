@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export const SupabaseConnectionStatus: React.FC = () => {
+  const { user, isLoading } = useAuth();
   const [status, setStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
+    let isMounted = true;
+    if (isLoading || !user) return;
     const checkConnection = async () => {
       try {
         // Simple query to check if we can connect to Supabase
-        const { data, error } = await supabase.from('users').select('count()', { count: 'exact' });
+        const { data, error } = await supabase .from('users')
+        .select('id') // just a simple column
+        .limit(1);
+        ///await supabase.from('users').select('count()', { count: 'exact' });
+        if (!isMounted) return;
         
         if (error) {
           console.error('Supabase connection error:', error);
@@ -28,7 +36,10 @@ export const SupabaseConnectionStatus: React.FC = () => {
     };
 
     checkConnection();
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [user, isLoading]);
 
   if (status === 'checking') {
     return (

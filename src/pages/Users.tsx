@@ -1,12 +1,464 @@
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, UserPlus, Mail, Phone, Search, Filter, Eye } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useUsers } from '../hooks/useSupabaseData';
+import { X, Save, AlertTriangle } from 'lucide-react';
+import { User, UserRole } from '../types';
+import { supabase } from '../lib/supabase';
+
+interface FormData {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  city: string;
+  password: string;
+  confirmPassword: string;
+  status: 'active' | 'inactive';
+  sendWelcomeEmail: boolean;
+}
+
+interface FormErrors {
+  [key: string]: string;
+}
+// Modal Wrapper Component
+const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }> = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center p-6 border-b">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// View User Modal Component
+const ViewUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () => void }> = ({ user, isOpen, onClose }) => {
+  if (!user) return null;
+
+
+  function getRoleVariant(role: string): "default" | "error" | "success" | "warning" | "info" | undefined {
+    switch (role) {
+      case 'super_admin':
+        return 'error';
+      case 'admin':
+        return 'warning';
+      case 'support_tech':
+        return 'info';
+      case 'sales_marketing':
+        return 'success';
+      case 'accounting':
+      case 'logistics':
+        return 'default';
+      default:
+        return 'default';
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="User Details">
+      <div className="space-y-6">
+        <div className="flex items-center space-x-4">
+          <div className="h-16 w-16 rounded-full bg-gray-300 flex items-center justify-center">
+            <span className="text-lg font-medium text-gray-700">
+              {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{user.name}</h3>
+            <p className="text-sm text-gray-500">{user.email}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <Badge variant={getRoleVariant(user.role)}>
+                {user.role.replace('_', ' ').toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <Badge variant={user.status === 'active' ? 'success' : 'error'}>
+                {user.status.toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              {user.phone || 'N/A'}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              {user.city || 'N/A'}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Last Login</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              {user.last_login ? (
+                <div>
+                  <div>{new Date(user.last_login).toLocaleDateString()}</div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(user.last_login).toLocaleTimeString()}
+                  </div>
+                </div>
+              ) : (
+                'Never'
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
+            <div className="p-3 bg-gray-50 rounded-lg">
+              {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// Edit User Modal Component
+const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () => void; onSave: (updatedUser: User) => void }> = ({ user, isOpen, onClose, onSave }) => {
+  const [formData, setFormData] = useState<FormData>({
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    role: user?.role || 'super_admin',
+    city: user?.city || '',
+    password: '',
+    confirmPassword: '',
+    status: user?.status || 'active',
+    sendWelcomeEmail: false
+  }
+  );
+
+  const [errors, setErrors] = useState<FormErrors>({});
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const navigate = useNavigate();
+  const { hasRole } = useAuth();
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    // Name validation
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    } else if (formData.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!emailRegex.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    // Phone validation
+    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!phoneRegex.test(formData.phone.replace(/[\s\-\(\)]/g, ''))) {
+      newErrors.phone = 'Please enter a valid phone number';
+    }
+
+    // Role validation
+    if (!formData.role) {
+      newErrors.role = 'Role is required';
+    }
+
+    // City validation (required for non-super admin roles)
+    if (formData.role !== 'super_admin' && !formData.city) {
+      newErrors.city = 'City is required for this role';
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      newErrors.password = 'Password must contain uppercase, lowercase, and number';
+    }
+
+    // Confirm password validation
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleChange = (field: keyof FormData, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+  
+    if (!validateForm()) {
+      return;
+    }
+  
+    setIsSubmitting(true);
+  
+    try {
+      if (!user?.id) {
+        throw new Error("User ID not available for update");
+      }
+  
+      // Step 1: Update user profile in your public.users table
+      const { error: profileError } = await supabase
+        .from('users')
+        .update({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: formData.role as UserRole,
+          city: formData.role === 'super_admin' ? null : formData.city,
+          status: formData.status,
+        })
+        .eq('id', user.id);
+  
+      if (profileError) {
+        throw new Error('Failed to update user profile: ' + profileError.message);
+      }
+  
+      // Optional: If you want to update the user's email or password in Supabase Auth (Admin API)
+      if (formData.password || formData.email !== user.email) {
+        const { error: authError } = await supabase.auth.admin.updateUserById(user.id, {
+          email: formData.email !== user.email ? formData.email : undefined,
+          password: formData.password || undefined,
+        });
+  
+        if (authError) {
+          throw new Error('Failed to update auth user: ' + authError.message);
+        }
+      }
+  
+      // Step 2: Call the onSave callback with updated user data
+      const updatedUser: User = {
+        ...user,
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        role: formData.role as UserRole,
+        city: formData.role === 'super_admin' ? null : formData.city,
+        status: formData.status,
+        updated_at: new Date().toISOString(),
+      };
+      onSave(updatedUser);
+  
+      setSubmitSuccess(true);
+      setTimeout(() => {
+        navigate('/users');
+      }, 1000);
+  
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Something went wrong.';
+      setErrors({ submit: message });
+      console.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  
+
+  if (!user) return null;
+
+  // Only super admins can edit users
+  if (!hasRole(['super_admin'])) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600">You don't have permission to edit users.</p>
+        </div>
+      </div>
+    );
+  }
+
+  
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit User">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input
+            type="text"
+            value={formData.name || user.name}
+            onChange={(e) => handleChange('name', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input
+            type="email"
+            value={formData.email || user.email}
+            onChange={(e) => handleChange('email', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+          <input
+            type="tel"
+            value={formData.phone || user.phone || ''}
+            onChange={(e) => handleChange('phone', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+          <select
+            value={formData.role || user.role}
+            onChange={(e) => handleChange('role', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="super_admin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="support_tech">Support Tech</option>
+            <option value="sales_marketing">Sales & Marketing</option>
+            <option value="accounting">Accounting</option>
+            <option value="logistics">Logistics</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+          <input
+            type="text"
+            value={formData.city || user.city || ''}
+            onChange={(e) => handleChange('city', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select
+            value={formData.status || user.status}
+            onChange={(e) => handleChange('status', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div className="flex space-x-3 pt-4">
+          <Button
+            onClick={handleSubmit}
+            className="flex-1 flex items-center justify-center space-x-2"
+          >
+            <Save className="h-4 w-4" />
+            <span>Save Changes</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+  
+};
+
+// Delete Confirmation Modal Component
+const DeleteConfirmModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () => void; onConfirm: (id: string) => void }> = ({ user, isOpen, onClose, onConfirm }) => {
+  if (!user) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Confirm Delete">
+      <div className="space-y-4">
+        <div className="flex items-center space-x-3">
+          <div className="p-3 bg-red-100 rounded-full">
+            <AlertTriangle className="h-6 w-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Delete User</h3>
+            <p className="text-sm text-gray-500">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to delete <strong>{user.name}</strong> ({user.email})?
+          </p>
+        </div>
+
+        <div className="flex space-x-3">
+          <Button
+            onClick={() => onConfirm(user.id)}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white flex items-center justify-center space-x-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete User</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
 
 export const Users: React.FC = () => {
   const { users, loading } = useUsers();
@@ -14,6 +466,9 @@ export const Users: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const { hasRole } = useAuth();
+  const [viewModal, setViewModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
+  const [editModal, setEditModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
 
   // Only super admins can access this page
   if (!hasRole(['super_admin'])) {
@@ -29,11 +484,11 @@ export const Users: React.FC = () => {
 
   const filteredUsers = users.filter(user => {
     const matchesFilter = filter === 'all' || user.role === filter;
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.phone && user.phone.includes(searchTerm));
-    
+
     return matchesFilter && matchesSearch;
   });
 
@@ -60,8 +515,8 @@ export const Users: React.FC = () => {
   };
 
   const handleSelectUser = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
+    setSelectedUsers(prev =>
+      prev.includes(userId)
         ? prev.filter(id => id !== userId)
         : [...prev, userId]
     );
@@ -81,6 +536,33 @@ export const Users: React.FC = () => {
     setSelectedUsers([]);
   };
 
+  const handleView = (user: User) => {
+    setViewModal({ isOpen: true, user });
+  };
+
+  const handleUpdate = (user: User) => {
+    setEditModal({ isOpen: true, user });
+  };
+
+  const handleDelete = (user: User) => {
+    setDeleteModal({ isOpen: true, user });
+  };
+
+  const handleSaveEdit = (updatedUser: any) => {
+    // Here you would call your API to update the user
+    console.log('Saving user:', updatedUser);
+    setEditModal({ isOpen: false, user: null });
+    // You can add your actual update logic here
+  };
+
+  const handleConfirmDelete = (userId: any) => {
+    // Here you would call your API to delete the user
+    console.log('Deleting user with ID:', userId);
+    setDeleteModal({ isOpen: false, user: null });
+    // You can add your actual delete logic here
+  };
+
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -91,7 +573,7 @@ export const Users: React.FC = () => {
           </div>
           <div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
         </div>
-        
+
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
           {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <Card key={i}>
@@ -105,6 +587,8 @@ export const Users: React.FC = () => {
       </div>
     );
   }
+
+
 
   return (
     <div className="space-y-6">
@@ -206,11 +690,10 @@ export const Users: React.FC = () => {
           <button
             key={role}
             onClick={() => setFilter(role)}
-            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-colors duration-200 ${
-              filter === role
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-colors duration-200 ${filter === role
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
           >
             {role === 'all' ? 'All Users' : role.replace('_', ' ')}
             <span className="ml-1 sm:ml-2 text-xs">
@@ -349,13 +832,13 @@ export const Users: React.FC = () => {
                   <TableCell>
                     <div className="flex space-x-1">
                       <Button size="sm" variant="ghost">
-                        <Eye className="h-4 w-4" />
+                        <Eye className="h-4 w-4" onClick={() => handleView(user)} />
                       </Button>
                       <Button size="sm" variant="ghost" className="hidden sm:inline-flex">
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4" onClick={() => handleUpdate(user)} />
                       </Button>
                       <Button size="sm" variant="ghost" className="hidden sm:inline-flex">
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" onClick={() => handleDelete(user)} />
                       </Button>
                     </div>
                   </TableCell>
@@ -365,6 +848,25 @@ export const Users: React.FC = () => {
           </Table>
         </CardContent>
       </Card>
+      <ViewUserModal
+        user={viewModal.user}
+        isOpen={viewModal.isOpen}
+        onClose={() => setViewModal({ isOpen: false, user: null })}
+      />
+
+      <EditUserModal
+        user={editModal.user}
+        isOpen={editModal.isOpen}
+        onClose={() => setEditModal({ isOpen: false, user: null })}
+        onSave={handleSaveEdit}
+      />
+
+      <DeleteConfirmModal
+        user={deleteModal.user}
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, user: null })}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };

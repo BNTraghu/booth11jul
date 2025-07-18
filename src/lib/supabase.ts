@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Fallback values for development if env vars are not set
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xyzcompany.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5emNvbXBhbnkiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjE1MjU1MCwiZXhwIjoxOTMxNzI4NTUwfQ.eUGq3kQQZkf1XjmRNVA5a_Vo3Je4g_LQDk5zCwCEq7I';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL; //|| 'https://xyzcompany.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; //|| 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxeHZjdXNyYndxeWFodWFlaHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NDYwMjksImV4cCI6MjA2NzAyMjAyOX0.1jRe8nRYo8Fu26I4TsCk0LZX9KAVKkscZ_QEfE0YTxI' //'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5emNvbXBhbnkiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjE1MjU1MCwiZXhwIjoxOTMxNzI4NTUwfQ.eUGq3kQQZkf1XjmRNVA5a_Vo3Je4g_LQDk5zCwCEq7I';
 
 // Log connection info for debugging
 console.log('Connecting to Supabase:', {
@@ -10,6 +10,10 @@ console.log('Connecting to Supabase:', {
   keyLength: supabaseAnonKey.length,
 });
 
+// Ensure the environment variables are set
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase URL or Anon Key is not set. Please check your environment variables.');
+}
 // Create a single supabase client for interacting with your database
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -19,15 +23,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+
 // Test connection and log result
 const testConnection = async () => {
   try {
-    const { data, error } = await supabase.from('users').select('count()', { count: 'exact', head: true });
+    const { data, error } = await supabase.from('users')
+    .select('id') // just a simple column
+    .limit(1);
+  
+  if (data?.length) {
+    console.log("Records exist!");
+  }
+    // await supabase.from('users').select('count()', { count: 'exact', head: true });
     if (error) {
       console.error('Supabase connection test failed:', error);
     } else {
-      console.log('Supabase connection test successful');
+      console.log('Supabase connection success, user rows found:', data.length);
     }
+    // else {
+    //   console.log('Supabase connection test successful');
+    // }
   } catch (err) {
     console.error('Unexpected error testing Supabase connection:', err);
   }

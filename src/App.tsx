@@ -26,15 +26,7 @@ import { Reports } from './pages/Reports';
 import { BRDDownload } from './pages/BRDDownload';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const { user } = useAuth();  
 
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -153,14 +145,30 @@ const AppRoutes: React.FC = () => {
 };
 
 function App() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+  if (!isLoading && !localStorage.getItem('user')) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
-    <AuthProvider>
+    // <AuthProvider>
       <Router>
         <SupabaseConnectionStatus />
         <AppRoutes />
       </Router>
-    </AuthProvider>
+    // </AuthProvider>
   );
 }
-
-export default App;
+export default () => (
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+);

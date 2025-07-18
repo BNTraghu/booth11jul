@@ -281,11 +281,11 @@ export const AddExhibitor: React.FC = () => {
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => {
       if (field.includes('.')) {
-        const [parent, child] = field.split('.');
+        const [parent, child] = field.split('.') as [keyof FormData, string];;
         return {
           ...prev,
           [parent]: {
-            ...prev[parent as keyof FormData],
+            ...(prev[parent] as any),
             [child]: value
           }
         };
