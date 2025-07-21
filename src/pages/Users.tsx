@@ -150,166 +150,39 @@ const ViewUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
 };
 
 // Edit User Modal Component
-const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () => void; onSave: (updatedUser: User) => void }> = ({ user, isOpen, onClose, onSave }) => {
-  const [formData, setFormData] = useState<FormData>({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
-    role: user?.role || 'super_admin',
-    city: user?.city || '',
-    password: '',
-    confirmPassword: '',
-    status: user?.status || 'active',
-    sendWelcomeEmail: false
-  }
-  );
-
+const EditUserModal: React.FC<{
+  user: User | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (formData: User) => void;
+  setFormData: (user: User | null) => void;
+}> = ({ user, isOpen, onClose, onSave, setFormData }) => {
+  if (!user) return null;
   const [errors, setErrors] = useState<FormErrors>({});
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const navigate = useNavigate();
   const { hasRole } = useAuth();
 
-  const validateForm = (): boolean => {
+  const validateForm = (formData: User): boolean => {
     const newErrors: FormErrors = {};
-
-    // Name validation
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    } else if (formData.name.trim().length < 2) {
-      newErrors.name = 'Name must be at least 2 characters';
-    }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!emailRegex.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-
-    // Phone validation
-    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!phoneRegex.test(formData.phone.replace(/[\s\-\(\)]/g, ''))) {
-      newErrors.phone = 'Please enter a valid phone number';
-    }
-
-    // Role validation
-    if (!formData.role) {
-      newErrors.role = 'Role is required';
-    }
-
-    // City validation (required for non-super admin roles)
-    if (formData.role !== 'super_admin' && !formData.city) {
-      newErrors.city = 'City is required for this role';
-    }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and number';
-    }
-
-    // Confirm password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
+    if (!formData.name.trim()) newErrors.name = 'Name is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    if (!formData.phone || !formData.phone.trim()) newErrors.phone = 'Phone number is required';
+    if (!formData.role) newErrors.role = 'Role is required';
+    if (formData.role !== 'super_admin' && !formData.city) newErrors.city = 'City is required for this role';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleChange = (field: keyof FormData, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
+  const handleChange = (field: keyof User, value: string) => {
+    setFormData({ ...user, [field]: value });
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-  
-    if (!validateForm()) {
-      return;
-    }
-  
-    setIsSubmitting(true);
-  
-    try {
-      if (!user?.id) {
-        throw new Error("User ID not available for update");
-      }
-  
-      // Step 1: Update user profile in your public.users table
-      const { error: profileError } = await supabase
-        .from('users')
-        .update({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          role: formData.role as UserRole,
-          city: formData.role === 'super_admin' ? null : formData.city,
-          status: formData.status,
-        })
-        .eq('id', user.id);
-  
-      if (profileError) {
-        throw new Error('Failed to update user profile: ' + profileError.message);
-      }
-  
-      // Optional: If you want to update the user's email or password in Supabase Auth (Admin API)
-      if (formData.password || formData.email !== user.email) {
-        const { error: authError } = await supabase.auth.admin.updateUserById(user.id, {
-          email: formData.email !== user.email ? formData.email : undefined,
-          password: formData.password || undefined,
-        });
-  
-        if (authError) {
-          throw new Error('Failed to update auth user: ' + authError.message);
-        }
-      }
-  
-      // Step 2: Call the onSave callback with updated user data
-      const updatedUser: User = {
-        ...user,
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        role: formData.role as UserRole,
-        city: formData.role === 'super_admin' ? null : formData.city,
-        status: formData.status,
-        updated_at: new Date().toISOString(),
-      };
-      onSave(updatedUser);
-  
-      setSubmitSuccess(true);
-      setTimeout(() => {
-        navigate('/users');
-      }, 1000);
-  
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Something went wrong.';
-      setErrors({ submit: message });
-      console.error(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleSave = () => {
+    if (!user) return;
+    if (!validateForm(user)) return;
+    onSave(user);
   };
-  
-  
 
-  if (!user) return null;
-
-  // Only super admins can edit users
   if (!hasRole(['super_admin'])) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -321,7 +194,6 @@ const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
     );
   }
 
-  
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Edit User">
       <div className="space-y-4">
@@ -329,37 +201,37 @@ const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
           <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
           <input
             type="text"
-            value={formData.name || user.name}
-            onChange={(e) => handleChange('name', e.target.value)}
+            value={user.name}
+            onChange={e => handleChange('name', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          {errors.name && <div className="text-red-500 text-xs mt-1">{errors.name}</div>}
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
           <input
             type="email"
-            value={formData.email || user.email}
-            onChange={(e) => handleChange('email', e.target.value)}
+            value={user.email}
+            onChange={e => handleChange('email', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          {errors.email && <div className="text-red-500 text-xs mt-1">{errors.email}</div>}
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
           <input
             type="tel"
-            value={formData.phone || user.phone || ''}
-            onChange={(e) => handleChange('phone', e.target.value)}
+            value={user.phone || ''}
+            onChange={e => handleChange('phone', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          {errors.phone && <div className="text-red-500 text-xs mt-1">{errors.phone}</div>}
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
           <select
-            value={formData.role || user.role}
-            onChange={(e) => handleChange('role', e.target.value)}
+            value={user.role}
+            onChange={e => handleChange('role', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="super_admin">Super Admin</option>
@@ -369,33 +241,32 @@ const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
             <option value="accounting">Accounting</option>
             <option value="logistics">Logistics</option>
           </select>
+          {errors.role && <div className="text-red-500 text-xs mt-1">{errors.role}</div>}
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
           <input
             type="text"
-            value={formData.city || user.city || ''}
-            onChange={(e) => handleChange('city', e.target.value)}
+            value={user.city || ''}
+            onChange={e => handleChange('city', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+          {errors.city && <div className="text-red-500 text-xs mt-1">{errors.city}</div>}
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select
-            value={formData.status || user.status}
-            onChange={(e) => handleChange('status', e.target.value)}
+            value={user.status}
+            onChange={e => handleChange('status', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
         </div>
-
         <div className="flex space-x-3 pt-4">
           <Button
-            onClick={handleSubmit}
+            onClick={handleSave}
             className="flex-1 flex items-center justify-center space-x-2"
           >
             <Save className="h-4 w-4" />
@@ -412,7 +283,6 @@ const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
       </div>
     </Modal>
   );
-  
 };
 
 // Delete Confirmation Modal Component
@@ -461,7 +331,7 @@ const DeleteConfirmModal: React.FC<{ user: User | null; isOpen: boolean; onClose
 
 
 export const Users: React.FC = () => {
-  const { users, loading } = useUsers();
+  const { users, loading, error, refetch } = useUsers();
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -469,6 +339,8 @@ export const Users: React.FC = () => {
   const [viewModal, setViewModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
   const [editModal, setEditModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
+  // 1. In Users page, add editFormData state
+  const [editFormData, setEditFormData] = useState<User | null>(null);
 
   // Only super admins can access this page
   if (!hasRole(['super_admin'])) {
@@ -540,26 +412,56 @@ export const Users: React.FC = () => {
     setViewModal({ isOpen: true, user });
   };
 
+  // 2. When editing, set editFormData and open modal
   const handleUpdate = (user: User) => {
+    setEditFormData({ ...user });
     setEditModal({ isOpen: true, user });
+  };
+
+  // 3. Update user in Supabase in Users page
+  const handleSaveEdit = async (formData: User) => {
+    const { error } = await supabase
+      .from('users')
+      .update({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        role: formData.role,
+        city: formData.city,
+        status: formData.status,
+      })
+      .eq('id', formData.id);
+
+    if (!error) {
+      setEditModal({ isOpen: false, user: null });
+      setEditFormData(null);
+      refetch();
+    } else {
+      alert('Failed to update user: ' + error.message);
+    }
   };
 
   const handleDelete = (user: User) => {
     setDeleteModal({ isOpen: true, user });
   };
 
-  const handleSaveEdit = (updatedUser: any) => {
-    // Here you would call your API to update the user
-    console.log('Saving user:', updatedUser);
-    setEditModal({ isOpen: false, user: null });
-    // You can add your actual update logic here
-  };
+  const handleConfirmDelete = async (userId: any) => {
+    // Delete user from Supabase
+    const { error, data } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
 
-  const handleConfirmDelete = (userId: any) => {
-    // Here you would call your API to delete the user
-    console.log('Deleting user with ID:', userId);
-    setDeleteModal({ isOpen: false, user: null });
-    // You can add your actual delete logic here
+    if (!error) {
+      setDeleteModal({ isOpen: false, user: null });
+      refetch(); // reload users from Supabase
+      if (Array.isArray(data) && (data as any[]).length === 0) {
+        alert('No user was deleted. This may be due to row-level security or a missing ID.');
+      }
+    } else {
+      setDeleteModal({ isOpen: false, user: null });
+      alert('Failed to delete user: ' + error.message);
+    }
   };
 
 
@@ -854,11 +756,13 @@ export const Users: React.FC = () => {
         onClose={() => setViewModal({ isOpen: false, user: null })}
       />
 
+      {/* 4. Pass editFormData and setEditFormData to EditUserModal, and update its props and usage */}
       <EditUserModal
-        user={editModal.user}
+        user={editFormData}
         isOpen={editModal.isOpen}
-        onClose={() => setEditModal({ isOpen: false, user: null })}
+        onClose={() => { setEditModal({ isOpen: false, user: null }); setEditFormData(null); }}
         onSave={handleSaveEdit}
+        setFormData={setEditFormData}
       />
 
       <DeleteConfirmModal

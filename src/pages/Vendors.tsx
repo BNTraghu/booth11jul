@@ -7,9 +7,12 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockVendors } from '../data/mockData';
 import { Vendor } from '../types';
+import { supabase } from '../lib/supabase';
+import { useVendors } from '../hooks/useSupabaseData';
 
 export const Vendors: React.FC = () => {
-  const [vendors, setVendors] = useState(mockVendors);
+  const { vendors, loading, error, refetch } = useVendors();
+  const [localVendors, setLocalVendors] = useState<Vendor[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
@@ -23,8 +26,8 @@ export const Vendors: React.FC = () => {
     const matchesFilter = filter === 'all' || vendor.category === filter;
     const matchesSearch = searchTerm === '' || 
       vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendor.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendor.city.toLowerCase().includes(searchTerm.toLowerCase());
+      vendor.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vendor.city?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -87,22 +90,54 @@ export const Vendors: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editFormData) {
-      setVendors(prev => prev.map(vendor => 
-        vendor.id === editFormData.id ? editFormData : vendor
-      ));
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedVendor(null);
+      const { error } = await supabase
+        .from('vendors')
+        .update({
+          name: editFormData.name,
+          category: editFormData.category,
+          city: editFormData.city,
+          contact_person: editFormData.contactPerson,
+          email: editFormData.email,
+          phone: editFormData.phone,
+          rating: editFormData.rating,
+          completed_jobs: editFormData.completedJobs,
+          status: editFormData.status,
+          price_range: editFormData.priceRange,
+        })
+        .eq('id', editFormData.id);
+
+      if (!error) {
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedVendor(null);
+        refetch(); // reload vendors from Supabase
+      } else {
+        alert('Failed to update vendor: ' + error.message);
+      }
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedVendor) {
-      setVendors(prev => prev.filter(vendor => vendor.id !== selectedVendor.id));
-      setShowDeleteModal(false);
-      setSelectedVendor(null);
+      const { error, data } = await supabase
+        .from('vendors')
+        .delete()
+        .eq('id', selectedVendor.id);
+
+      console.log('Delete response:', { error, data, id: selectedVendor.id });
+
+      if (!error) {
+        setShowDeleteModal(false);
+        setSelectedVendor(null);
+        refetch(); // reload vendors from Supabase
+        if (Array.isArray(data) && (data as any[]).length === 0) {
+          alert('No vendor was deleted. This may be due to row-level security or a missing ID.');
+        }
+      } else {
+        alert('Failed to delete vendor: ' + error.message);
+      }
     }
   };
 
@@ -352,7 +387,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                   <input
                     type="text"
-                    value={editFormData.city}
+                    value={editFormData.city || ''}
                     onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -364,7 +399,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
                   <input
                     type="text"
-                    value={editFormData.contactPerson}
+                    value={editFormData.contactPerson || ''}
                     onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -374,7 +409,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
-                    value={editFormData.email}
+                    value={editFormData.email || ''}
                     onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -386,7 +421,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
-                    value={editFormData.phone}
+                    value={editFormData.phone || ''}
                     onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -399,7 +434,7 @@ export const Vendors: React.FC = () => {
                     min="0"
                     max="5"
                     step="0.1"
-                    value={editFormData.rating}
+                    value={editFormData.rating || ''}
                     onChange={(e) => setEditFormData({...editFormData, rating: parseFloat(e.target.value)})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -411,7 +446,7 @@ export const Vendors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Completed Jobs</label>
                   <input
                     type="number"
-                    value={editFormData.completedJobs}
+                    value={editFormData.completedJobs || ''}
                     onChange={(e) => setEditFormData({...editFormData, completedJobs: parseInt(e.target.value)})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -434,7 +469,7 @@ export const Vendors: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
                 <input
                   type="text"
-                  value={editFormData.priceRange}
+                  value={editFormData.priceRange || ''}
                   onChange={(e) => setEditFormData({...editFormData, priceRange: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., ₹15,000 - ₹50,000"

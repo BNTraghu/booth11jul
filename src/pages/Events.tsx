@@ -7,9 +7,12 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockEvents } from '../data/mockData';
 import { Event } from '../types';
+import { supabase } from '../lib/supabase';
+import { useEvents } from '../hooks/useSupabaseData';
 
 export const Events: React.FC = () => {
-  const [events, setEvents] = useState(mockEvents);
+  const { events, loading, error, refetch } = useEvents();
+  const [localEvents, setLocalEvents] = useState<Event[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,7 +27,7 @@ export const Events: React.FC = () => {
     const matchesSearch = searchTerm === '' || 
       event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.venue.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      event.city.toLowerCase().includes(searchTerm.toLowerCase());
+      event.city?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -55,22 +58,56 @@ export const Events: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editFormData) {
-      setEvents(prev => prev.map(event => 
-        event.id === editFormData.id ? editFormData : event
-      ));
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedEvent(null);
+      const { error } = await supabase
+        .from('events')
+        .update({
+          title: editFormData.title,
+          description: editFormData.description,
+          event_date: editFormData.date,
+          event_time: editFormData.time,
+          venue_id: editFormData.venueId,
+          venue_name: editFormData.venue,
+          city: editFormData.city,
+          max_capacity: editFormData.maxCapacity,
+          plan_type: editFormData.planType,
+          status: editFormData.status,
+          attendees: editFormData.attendees,
+          total_revenue: editFormData.totalRevenue,
+        })
+        .eq('id', editFormData.id);
+
+      if (!error) {
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedEvent(null);
+        refetch(); // reload events from Supabase
+      } else {
+        alert('Failed to update event: ' + error.message);
+      }
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedEvent) {
-      setEvents(prev => prev.filter(event => event.id !== selectedEvent.id));
-      setShowDeleteModal(false);
-      setSelectedEvent(null);
+      const { error, data } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', selectedEvent.id);
+
+      console.log('Delete response:', { error, data, id: selectedEvent.id });
+
+      if (!error) {
+        setShowDeleteModal(false);
+        setSelectedEvent(null);
+        refetch(); // reload events from Supabase
+        if (Array.isArray(data) && (data as any[]).length === 0) {
+          alert('No event was deleted. This may be due to row-level security or a missing ID.');
+        }
+      } else {
+        alert('Failed to delete event: ' + error.message);
+      }
     }
   };
 
@@ -420,7 +457,7 @@ export const Events: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
                 <textarea
-                  value={editFormData.description}
+                  value={editFormData.description || ''}
                   onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -464,7 +501,7 @@ export const Events: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                   <input
                     type="text"
-                    value={editFormData.city}
+                    value={editFormData.city || ''}
                     onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />

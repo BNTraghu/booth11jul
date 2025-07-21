@@ -5,11 +5,14 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { mockVenues } from '../data/mockData';
+// import { mockVenues } from '../data/mockData';
 import { Venue } from '../types';
+import { supabase } from '../lib/supabase';
+import { useVenues } from '../hooks/useSupabaseData';
 
 export const Venues: React.FC = () => {
-  const [venues, setVenues] = useState(mockVenues);
+  const { venues, loading, error, refetch } = useVenues();
+  const [localVenues, setLocalVenues] = useState<Venue[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
@@ -22,8 +25,8 @@ export const Venues: React.FC = () => {
     const matchesFilter = filter === 'all' || venue.status === filter;
     const matchesSearch = searchTerm === '' || 
       venue.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      venue.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      venue.contactPerson.toLowerCase().includes(searchTerm.toLowerCase());
+      venue.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      venue.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -53,22 +56,52 @@ export const Venues: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editFormData) {
-      setVenues(prev => prev.map(venue => 
-        venue.id === editFormData.id ? editFormData : venue
-      ));
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedVenue(null);
+      const { error } = await supabase
+        .from('venues')
+        .update({
+          name: editFormData.name,
+          location: editFormData.location,
+          contact_person: editFormData.contactPerson,
+          email: editFormData.email,
+          phone: editFormData.phone,
+          capacity: editFormData.memberCount,
+          facilities: editFormData.facilities,
+          status: editFormData.status,
+        })
+        .eq('id', editFormData.id);
+
+      if (!error) {
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedVenue(null);
+        refetch(); // reload venues from Supabase
+      } else {
+        alert('Failed to update venue: ' + error.message);
+      }
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedVenue) {
-      setVenues(prev => prev.filter(venue => venue.id !== selectedVenue.id));
-      setShowDeleteModal(false);
-      setSelectedVenue(null);
+      const { error, data } = await supabase
+        .from('venues')
+        .delete()
+        .eq('id', selectedVenue.id);
+
+      console.log('Delete response:', { error, data, id: selectedVenue.id });
+
+      if (!error) {
+        setShowDeleteModal(false);
+        setSelectedVenue(null);
+        refetch(); // reload venues from Supabase
+        if (Array.isArray(data) && (data as any[]).length === 0) {
+          alert('No venue was deleted. This may be due to row-level security or a missing ID.');
+        }
+      } else {
+        alert('Failed to delete venue: ' + error.message);
+      }
     }
   };
 
@@ -429,7 +462,7 @@ export const Venues: React.FC = () => {
               <div>
                 <h4 className="font-medium text-gray-900 mb-3">Joined Date</h4>
                 <div className="text-sm text-gray-600">
-                  {new Date(selectedVenue.joinedDate).toLocaleDateString()}
+                  {new Date(selectedVenue.joinedDate || '').toLocaleDateString()}
                 </div>
               </div>
             </div>
@@ -473,7 +506,7 @@ export const Venues: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
                 <input
                   type="text"
-                  value={editFormData.location}
+                  value={editFormData.location || ''}
                   onChange={(e) => setEditFormData({...editFormData, location: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -484,7 +517,7 @@ export const Venues: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
                   <input
                     type="text"
-                    value={editFormData.contactPerson}
+                    value={editFormData.contactPerson || ''}
                     onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -494,7 +527,7 @@ export const Venues: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
-                    value={editFormData.email}
+                    value={editFormData.email || ''}
                     onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -506,7 +539,7 @@ export const Venues: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
-                    value={editFormData.phone}
+                    value={editFormData.phone || ''}
                     onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />

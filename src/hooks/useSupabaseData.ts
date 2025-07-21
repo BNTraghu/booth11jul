@@ -43,7 +43,7 @@ export function useSupabaseData<T>(
         setError(error.message);
       } else {
         console.log(`Fetched ${result?.length || 0} ${table} records`);
-        setData(result || []);
+        setData(result as T[] || []);
         setError(null);
       }
     } catch (err) {

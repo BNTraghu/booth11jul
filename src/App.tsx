@@ -147,24 +147,17 @@ const AppRoutes: React.FC = () => {
 function App() {
   const { isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-  if (!isLoading && !localStorage.getItem('user')) {
-    return <Navigate to="/login" replace />;
-  }
-
   return (
-    // <AuthProvider>
-      <Router>
-        <SupabaseConnectionStatus />
+    <Router>
+      <SupabaseConnectionStatus />
+      {isLoading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      ) : (
         <AppRoutes />
-      </Router>
-    // </AuthProvider>
+      )}
+    </Router>
   );
 }
 export default () => (
