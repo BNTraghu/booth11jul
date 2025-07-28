@@ -5,7 +5,6 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { mockEvents } from '../data/mockData';
 import { Event } from '../types';
 import { supabase } from '../lib/supabase';
 import { useEvents } from '../hooks/useSupabaseData';

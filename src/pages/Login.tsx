@@ -54,6 +54,12 @@ export const Login: React.FC = () => {
       }
       
       const success = await login(email, password);
+
+      if (success) {
+        window.location.href = '/dashboard';
+        return;
+      }
+
       if (!success) {
         setError('Invalid email or password');
         console.log('Login failed: Invalid credentials');

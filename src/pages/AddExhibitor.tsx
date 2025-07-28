@@ -30,6 +30,7 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface FormData {
   // Company Information
@@ -359,21 +360,66 @@ export const AddExhibitor: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('Creating exhibitor:', formData);
-      
+      const { data, error } = await supabase
+        .from('exhibitors')
+        .insert({
+          company_name: formData.companyName,
+          company_description: formData.companyDescription,
+          established_year: formData.establishedYear,
+          company_size: formData.companySize,
+          website: formData.website,
+          contact_person: formData.contactPerson,
+          designation: formData.designation,
+          email: formData.email,
+          phone: formData.phone,
+          alternate_email: formData.alternateEmail,
+          alternate_phone: formData.alternatePhone,
+          category: formData.category,
+          sub_category: formData.subCategory,
+          business_type: formData.businessType,
+          gst_number: formData.gstNumber,
+          pan_number: formData.panNumber,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          country: formData.country,
+          booth_preference: formData.boothPreference,
+          booth_size: formData.boothSize,
+          special_requirements: formData.specialRequirements,
+          previous_exhibitions: formData.previousExhibitions,
+          expected_visitors: formData.expectedVisitors,
+          products: formData.products,
+          services: formData.services,
+          target_audience: formData.targetAudience,
+          registration_fee: formData.registrationFee,
+          payment_method: formData.paymentMethod,
+          billing_address: formData.billingAddress,
+          social_media_links: formData.socialMediaLinks,
+          documents: formData.documents,
+          status: formData.status,
+          payment_status: formData.paymentStatus,
+          send_confirmation_email: formData.sendConfirmationEmail,
+          allow_marketing_emails: formData.allowMarketingEmails,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      console.log('Exhibitor created successfully:', data);
+
       setSubmitSuccess(true);
-      
-      // Redirect after success
+
       setTimeout(() => {
         navigate('/exhibitors');
       }, 2000);
-      
     } catch (error) {
-      console.error('Error creating exhibitor:', error);
-      setErrors({ submit: 'Failed to create exhibitor. Please try again.' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create exhibitor. Please try again.';
+      setErrors({ submit: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
@@ -395,9 +441,9 @@ export const AddExhibitor: React.FC = () => {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exhibitor Registered Successfully!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exhibitor Added Successfully!</h2>
             <p className="text-gray-600 mb-6">
-              The exhibitor has been registered and {formData.sendConfirmationEmail ? 'a confirmation email has been sent' : 'can now access their booth details'}.
+              The exhibitor "{formData.companyName}" has been added to the system.
             </p>
             <div className="space-y-2">
               <Button onClick={() => navigate('/exhibitors')} className="w-full">

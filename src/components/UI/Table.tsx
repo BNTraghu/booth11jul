@@ -67,15 +67,14 @@ export const TableHead: React.FC<TableHeadProps> = ({ children, className = '' }
   );
 };
 
-interface TableCellProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-export const TableCell: React.FC<TableCellProps> = ({ children, className = '' }) => {
-  return (
-    <td className={`px-3 sm:px-6 py-4 text-sm text-gray-900 ${className}`}>
-      {children}
-    </td>
-  );
-};
+export const TableCell = React.forwardRef<
+  HTMLTableCellElement,
+  React.TdHTMLAttributes<HTMLTableCellElement> & { colSpan?: number }
+>(({ className, ...props }, ref) => (
+  <td
+    ref={ref}
+    className={`p-4 align-middle [&:has([role=checkbox])]:pr-0 ${className || ''}`}
+    {...props}
+  />
+));
+TableCell.displayName = 'TableCell';

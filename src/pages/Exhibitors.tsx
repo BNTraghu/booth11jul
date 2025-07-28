@@ -31,6 +31,8 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { mockExhibitors } from '../data/mockData';
 import { Exhibitor } from '../types';
+import { useExhibitors } from '../hooks/useSupabaseData';
+import { supabase } from '../lib/supabase';
 
 interface ExhibitorFilters {
   status: string;
@@ -47,7 +49,7 @@ interface EmailFormData {
 }
 
 export const Exhibitors: React.FC = () => {
-  const [exhibitors, setExhibitors] = useState(mockExhibitors);
+  const { exhibitors, loading, error, refetch } = useExhibitors();
   const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
   const [selectedExhibitor, setSelectedExhibitor] = useState<Exhibitor | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -75,8 +77,8 @@ export const Exhibitors: React.FC = () => {
     const matchesCity = filters.city === 'all' || exhibitor.city === filters.city;
     const matchesSearch = filters.search === '' || 
       exhibitor.companyName.toLowerCase().includes(filters.search.toLowerCase()) ||
-      exhibitor.contactPerson.toLowerCase().includes(filters.search.toLowerCase()) ||
-      exhibitor.email.toLowerCase().includes(filters.search.toLowerCase());
+      exhibitor.contactPerson?.toLowerCase().includes(filters.search.toLowerCase()) ||
+      exhibitor.email?.toLowerCase().includes(filters.search.toLowerCase());
 
     return matchesStatus && matchesPayment && matchesCategory && matchesCity && matchesSearch;
   });
@@ -171,14 +173,31 @@ export const Exhibitors: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editFormData) {
-      setExhibitors(prev => prev.map(exhibitor => 
-        exhibitor.id === editFormData.id ? editFormData : exhibitor
-      ));
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedExhibitor(null);
+      const { error } = await supabase
+        .from('exhibitors')
+        .update({
+          company_name: editFormData.companyName,
+          contact_person: editFormData.contactPerson,
+          email: editFormData.email,
+          phone: editFormData.phone,
+          category: editFormData.category,
+          city: editFormData.city,
+          booth: editFormData.booth,
+          payment_status: editFormData.paymentStatus,
+          status: editFormData.status,
+        })
+        .eq('id', editFormData.id);
+
+      if (error) {
+        alert('Failed to update exhibitor: ' + error.message);
+      } else {
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedExhibitor(null);
+        refetch();
+      }
     }
   };
 
@@ -193,11 +212,20 @@ export const Exhibitors: React.FC = () => {
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedExhibitor) {
-      setExhibitors(prev => prev.filter(exhibitor => exhibitor.id !== selectedExhibitor.id));
-      setShowDeleteModal(false);
-      setSelectedExhibitor(null);
+      const { error } = await supabase
+        .from('exhibitors')
+        .delete()
+        .eq('id', selectedExhibitor.id);
+
+      if (error) {
+        alert('Failed to delete exhibitor: ' + error.message);
+      } else {
+        setShowDeleteModal(false);
+        setSelectedExhibitor(null);
+        refetch();
+      }
     }
   };
 
@@ -344,7 +372,7 @@ export const Exhibitors: React.FC = () => {
             >
               <option value="all">All Categories</option>
               {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
+                <option key={category || ''} value={category || ''}>{category || ''}</option>
               ))}
             </select>
             <select
@@ -354,7 +382,7 @@ export const Exhibitors: React.FC = () => {
             >
               <option value="all">All Cities</option>
               {cities.map(city => (
-                <option key={city} value={city}>{city}</option>
+                <option key={city || ''} value={city || ''}>{city || ''}</option>
               ))}
             </select>
           </div>
@@ -398,7 +426,7 @@ export const Exhibitors: React.FC = () => {
         <CardHeader>
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">
-              Exhibitors ({filteredExhibitors.length})
+              Exhibitors Overview ({filteredExhibitors.length})
             </h3>
             <div className="flex space-x-2">
               <Button size="sm" variant="outline">
@@ -431,110 +459,124 @@ export const Exhibitors: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredExhibitors.map((exhibitor) => (
-                <TableRow key={exhibitor.id}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      checked={selectedExhibitors.includes(exhibitor.id)}
-                      onChange={() => handleSelectExhibitor(exhibitor.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium text-gray-900 line-clamp-1">{exhibitor.companyName}</div>
-                      <div className="text-sm text-gray-500 flex items-center">
-                        <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{exhibitor.city}</span>
-                      </div>
-                      <div className="text-sm text-gray-500 md:hidden">
-                        {exhibitor.category}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson}</div>
-                      <div className="text-sm text-gray-500 flex items-center truncate">
-                        <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{exhibitor.email}</span>
-                      </div>
-                      <div className="text-sm text-gray-500 flex items-center">
-                        <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span>{exhibitor.phone}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <Badge variant="default">{exhibitor.category}</Badge>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <div className="flex items-center">
-                      <Building className="h-4 w-4 mr-2 text-blue-500" />
-                      <span className="font-medium">{exhibitor.booth}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell">
-                    <div className="flex items-center text-sm text-gray-900">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      {new Date(exhibitor.registrationDate).toLocaleDateString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      {getStatusIcon(exhibitor.status)}
-                      <Badge variant={getStatusVariant(exhibitor.status)} className="ml-2">
-                        <span className="hidden sm:inline">{exhibitor.status.replace('_', ' ')}</span>
-                        <span className="sm:hidden">{exhibitor.status.split('_')[0]}</span>
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <CreditCard className="h-4 w-4 mr-1" />
-                      <Badge variant={getPaymentStatusVariant(exhibitor.paymentStatus)}>
-                        {exhibitor.paymentStatus}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-1">
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => handleView(exhibitor)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => handleEdit(exhibitor)}
-                        className="hidden sm:inline-flex"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => handleEmail(exhibitor)}
-                        className="hidden sm:inline-flex"
-                      >
-                        <Mail className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => handleDelete(exhibitor)}
-                        className="hidden lg:inline-flex"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center">
+                    Loading exhibitors...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-red-500">
+                    Error loading exhibitors: {error}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredExhibitors.map(exhibitor => (
+                  <TableRow key={exhibitor.id}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedExhibitors.includes(exhibitor.id)}
+                        onChange={() => handleSelectExhibitor(exhibitor.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium text-gray-900 line-clamp-1">{exhibitor.companyName}</div>
+                        <div className="text-sm text-gray-500 flex items-center">
+                          <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{exhibitor.city}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 md:hidden">
+                          {exhibitor.category}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson || 'N/A'}</div>
+                        <div className="text-sm text-gray-500 flex items-center truncate">
+                          <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{exhibitor.email || 'N/A'}</span>
+                        </div>
+                        <div className="text-sm text-gray-500 flex items-center">
+                          <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span>{exhibitor.phone || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Badge variant="default">{exhibitor.category}</Badge>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="flex items-center">
+                        <Building className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="font-medium">{exhibitor.booth}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      <div className="flex items-center text-sm text-gray-900">
+                        <Calendar className="h-4 w-4 mr-1" />
+                        {new Date(exhibitor.registrationDate || '').toLocaleDateString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        {getStatusIcon(exhibitor.status)}
+                        <Badge variant={getStatusVariant(exhibitor.status)} className="ml-2">
+                          <span className="hidden sm:inline">{exhibitor.status.replace('_', ' ')}</span>
+                          <span className="sm:hidden">{exhibitor.status.split('_')[0]}</span>
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center">
+                        <CreditCard className="h-4 w-4 mr-1" />
+                        <Badge variant={getPaymentStatusVariant(exhibitor.paymentStatus)}>
+                          {exhibitor.paymentStatus}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-1">
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleView(exhibitor)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => handleEdit(exhibitor)}
+                          className="hidden sm:inline-flex"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => handleEmail(exhibitor)}
+                          className="hidden sm:inline-flex"
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => handleDelete(exhibitor)}
+                          className="hidden lg:inline-flex"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -587,15 +629,15 @@ export const Exhibitors: React.FC = () => {
                   <CardContent className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-700">Contact Person</label>
-                      <p className="text-gray-900">{selectedExhibitor.contactPerson}</p>
+                      <p className="text-gray-900">{selectedExhibitor.contactPerson || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Email</label>
-                      <p className="text-gray-900">{selectedExhibitor.email}</p>
+                      <p className="text-gray-900">{selectedExhibitor.email || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Phone</label>
-                      <p className="text-gray-900">{selectedExhibitor.phone}</p>
+                      <p className="text-gray-900">{selectedExhibitor.phone || 'N/A'}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -619,7 +661,7 @@ export const Exhibitors: React.FC = () => {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Registration Date</label>
-                      <p className="text-gray-900">{new Date(selectedExhibitor.registrationDate).toLocaleDateString()}</p>
+                      <p className="text-gray-900">{new Date(selectedExhibitor.registrationDate || '').toLocaleDateString()}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -680,7 +722,7 @@ export const Exhibitors: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
                 <input
                   type="text"
-                  value={editFormData.companyName}
+                  value={editFormData.companyName || ''}
                   onChange={(e) => setEditFormData({...editFormData, companyName: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -691,7 +733,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
                   <input
                     type="text"
-                    value={editFormData.contactPerson}
+                    value={editFormData.contactPerson || ''}
                     onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -701,7 +743,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
-                    value={editFormData.email}
+                    value={editFormData.email || ''}
                     onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -713,7 +755,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="tel"
-                    value={editFormData.phone}
+                    value={editFormData.phone || ''}
                     onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -723,7 +765,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                   <input
                     type="text"
-                    value={editFormData.category}
+                    value={editFormData.category || ''}
                     onChange={(e) => setEditFormData({...editFormData, category: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -735,7 +777,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                   <input
                     type="text"
-                    value={editFormData.city}
+                    value={editFormData.city || ''}
                     onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -745,7 +787,7 @@ export const Exhibitors: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Booth Number</label>
                   <input
                     type="text"
-                    value={editFormData.booth}
+                    value={editFormData.booth || ''}
                     onChange={(e) => setEditFormData({...editFormData, booth: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -810,9 +852,9 @@ export const Exhibitors: React.FC = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium text-gray-900 mb-2">Recipient</h4>
                 <div className="text-sm text-gray-600">
-                  <div><strong>{selectedExhibitor.contactPerson}</strong></div>
-                  <div>{selectedExhibitor.companyName}</div>
-                  <div>{selectedExhibitor.email}</div>
+                  <div><strong>{selectedExhibitor.contactPerson || 'N/A'}</strong></div>
+                  <div>{selectedExhibitor.companyName || 'N/A'}</div>
+                  <div>{selectedExhibitor.email || 'N/A'}</div>
                 </div>
               </div>
 
@@ -879,8 +921,8 @@ export const Exhibitors: React.FC = () => {
               </div>
               
               <p className="text-gray-700 mb-6">
-                Are you sure you want to delete "<strong>{selectedExhibitor.companyName}</strong>"? 
-                This will permanently remove the exhibitor and all associated data.
+                Are you sure you want to delete "<strong>{selectedExhibitor.companyName || 'N/A'}</strong>"? This
+                will permanently remove the exhibitor and all associated data.
               </p>
 
               <div className="flex justify-end space-x-3">
