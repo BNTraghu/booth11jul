@@ -39,6 +39,7 @@ export interface Event {
   venueId?: string | null; // venue_id from DB
   createdBy?: string | null; // created_by from DB
   totalRevenue: number; // total_revenue from DB
+  eventImageUrl?: string | null; // event_image_url from DB
   created_at: string;
   updated_at: string;
 }

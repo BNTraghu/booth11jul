@@ -90,6 +90,7 @@ export const useEvents = () => {
     venueId: event.venue_id,
     createdBy: event.created_by,
     totalRevenue: event.total_revenue || 0,
+    eventImageUrl: event.event_image_url,
     created_at: event.created_at,
     updated_at: event.updated_at
   }));

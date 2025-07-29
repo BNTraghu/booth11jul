@@ -19,7 +19,10 @@ import {
   CheckCircle,
   Info,
   Building2,
-  User
+  User,
+  Upload,
+  X,
+  Image
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
@@ -57,6 +60,9 @@ interface FormData {
   latitude: number;
   longitude: number;
   formattedAddress: string;
+  // Image Field
+  eventImage: File | null;
+  eventImageUrl: string;
 }
 
 interface FormErrors {
@@ -106,7 +112,10 @@ export const CreateEvent: React.FC = () => {
     // Google Maps Fields
     latitude: 0,
     longitude: 0,
-    formattedAddress: ''
+    formattedAddress: '',
+    // Image Field
+    eventImage: null,
+    eventImageUrl: ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -338,6 +347,11 @@ export const CreateEvent: React.FC = () => {
       newErrors.noOfFlats = 'Number of flats cannot be negative';
     }
 
+    // Image validation
+    if (!formData.eventImage && !formData.eventImageUrl) {
+      newErrors.eventImage = 'Event image is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -372,6 +386,39 @@ export const CreateEvent: React.FC = () => {
     }
   };
 
+  const handleImageUpload = (file: File) => {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setErrors(prev => ({ ...prev, eventImage: 'Please select a valid image file' }));
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, eventImage: 'Image size must be less than 5MB' }));
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      eventImage: file,
+      eventImageUrl: URL.createObjectURL(file)
+    }));
+
+    // Clear error
+    if (errors.eventImage) {
+      setErrors(prev => ({ ...prev, eventImage: '' }));
+    }
+  };
+
+  const removeImage = () => {
+    setFormData(prev => ({
+      ...prev,
+      eventImage: null,
+      eventImageUrl: ''
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -382,6 +429,30 @@ export const CreateEvent: React.FC = () => {
     setIsSubmitting(true);
 
     try {
+      let imageUrl = formData.eventImageUrl;
+
+      // Upload image to Supabase storage if a new image is selected
+      if (formData.eventImage) {
+        const fileExt = formData.eventImage.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `event-images/${fileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('event-images')
+          .upload(filePath, formData.eventImage);
+
+        if (uploadError) {
+          throw new Error(`Image upload failed: ${uploadError.message}`);
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('event-images')
+          .getPublicUrl(filePath);
+
+        imageUrl = urlData.publicUrl;
+      }
+
       // Insert event into Supabase with extended fields
       const { data, error } = await supabase
         .from('events')
@@ -416,7 +487,9 @@ export const CreateEvent: React.FC = () => {
           // Google Maps fields
           latitude: formData.latitude,
           longitude: formData.longitude,
-          formatted_address: formData.formattedAddress
+          formatted_address: formData.formattedAddress,
+          // Image field
+          event_image_url: imageUrl
         })
         .select()
         .single();
@@ -490,7 +563,9 @@ export const CreateEvent: React.FC = () => {
                     noOfFlats: 0,
                     latitude: 0,
                     longitude: 0,
-                    formattedAddress: ''
+                    formattedAddress: '',
+                    eventImage: null,
+                    eventImageUrl: ''
                   });
                 }}
                 className="w-full"
@@ -620,6 +695,64 @@ export const CreateEvent: React.FC = () => {
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="h-4 w-4 mr-1" />
                         {errors.eventTime}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Event Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Event Image *
+                  </label>
+                  <div className="space-y-4">
+                    {formData.eventImageUrl ? (
+                      <div className="relative">
+                        <img
+                          src={formData.eventImageUrl}
+                          alt="Event preview"
+                          className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageUpload(file);
+                          }}
+                          className="hidden"
+                          id="event-image-upload"
+                        />
+                        <label
+                          htmlFor="event-image-upload"
+                          className="cursor-pointer flex flex-col items-center space-y-2"
+                        >
+                          <Upload className="h-8 w-8 text-gray-400" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">
+                              Click to upload event image
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              PNG, JPG, GIF up to 5MB
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+                    {errors.eventImage && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.eventImage}
                       </p>
                     )}
                   </div>
@@ -1060,6 +1193,16 @@ export const CreateEvent: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Event Summary</h3>
               </CardHeader>
               <CardContent>
+                {/* Event Image Preview */}
+                {formData.eventImageUrl && (
+                  <div className="mb-4">
+                    <img
+                      src={formData.eventImageUrl}
+                      alt="Event preview"
+                      className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                    />
+                  </div>
+                )}
                 <div className="space-y-4">
                   <div className="text-center p-4 bg-gray-50 rounded-lg">
                     <div className="text-2xl font-bold text-gray-900">

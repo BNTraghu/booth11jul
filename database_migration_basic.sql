@@ -24,6 +24,9 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS latitude numeric;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS longitude numeric;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS formatted_address text;
 
+-- Add image field to events table
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_image_url text;
+
 -- =====================================================
 -- EXHIBITORS TABLE MIGRATION
 -- =====================================================

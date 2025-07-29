@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Edit, 
@@ -22,7 +22,15 @@ import {
   Send,
   X,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
+  Image,
+  Globe,
+  Tag,
+  Truck,
+  Shield,
+  User,
+  Package
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
@@ -48,6 +56,81 @@ interface EmailFormData {
   sendCopy: boolean;
 }
 
+interface ExtendedExhibitorFormData {
+  id: string;
+  // Company Information
+  companyName: string;
+  companyDescription: string;
+  establishedYear: string;
+  companySize: string;
+  website: string;
+  
+  // Contact Information
+  contactPerson: string;
+  designation: string;
+  email: string;
+  phone: string;
+  alternatePhone: string;
+  alternateEmail: string;
+  
+  // Business Details
+  category: string;
+  subCategory: string;
+  businessType: string;
+  gstNumber: string;
+  panNumber: string;
+  
+  // Location & Address
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  
+  // Exhibition Details
+  boothPreference: string;
+  boothSize: string;
+  specialRequirements: string;
+  previousExhibitions: string;
+  expectedVisitors: string;
+  
+  // Products & Services
+  products: string[];
+  services: string[];
+  targetAudience: string;
+  
+  // Payment & Billing
+  registrationFee: number;
+  paymentMethod: string;
+  billingAddress: string;
+  
+  // Additional Information
+  socialMediaLinks: {
+    linkedin: string;
+    facebook: string;
+    twitter: string;
+    instagram: string;
+  };
+  
+  // Documents
+  documents: {
+    companyProfile: File | null;
+    gstCertificate: File | null;
+    panCard: File | null;
+    productCatalog: File | null;
+  };
+  
+  // Settings
+  status: 'registered' | 'confirmed' | 'checked_in' | 'cancelled';
+  paymentStatus: 'pending' | 'paid' | 'refunded';
+  sendConfirmationEmail: boolean;
+  allowMarketingEmails: boolean;
+  
+  // Image Field
+  companyLogo: File | null;
+  companyLogoUrl: string;
+}
+
 export const Exhibitors: React.FC = () => {
   const { exhibitors, loading, error, refetch } = useExhibitors();
   const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
@@ -56,7 +139,8 @@ export const Exhibitors: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editFormData, setEditFormData] = useState<Exhibitor | null>(null);
+  const [editFormData, setEditFormData] = useState<ExtendedExhibitorFormData | null>(null);
+  const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
   const [emailFormData, setEmailFormData] = useState<EmailFormData>({
     subject: '',
     message: '',
@@ -154,7 +238,81 @@ export const Exhibitors: React.FC = () => {
 
   const handleEdit = (exhibitor: Exhibitor) => {
     setSelectedExhibitor(exhibitor);
-    setEditFormData({ ...exhibitor });
+    // Map Exhibitor to ExtendedExhibitorFormData with default values for missing fields
+    setEditFormData({
+      id: exhibitor.id,
+      // Company Information
+      companyName: exhibitor.companyName,
+      companyDescription: '',
+      establishedYear: '',
+      companySize: '',
+      website: '',
+      
+      // Contact Information
+      contactPerson: exhibitor.contactPerson || '',
+      designation: '',
+      email: exhibitor.email || '',
+      phone: exhibitor.phone || '',
+      alternatePhone: '',
+      alternateEmail: '',
+      
+      // Business Details
+      category: exhibitor.category || '',
+      subCategory: '',
+      businessType: '',
+      gstNumber: '',
+      panNumber: '',
+      
+      // Location & Address
+      address: '',
+      city: exhibitor.city || '',
+      state: '',
+      pincode: '',
+      country: 'India',
+      
+      // Exhibition Details
+      boothPreference: '',
+      boothSize: '',
+      specialRequirements: '',
+      previousExhibitions: '',
+      expectedVisitors: '',
+      
+      // Products & Services
+      products: [],
+      services: [],
+      targetAudience: '',
+      
+      // Payment & Billing
+      registrationFee: 15000,
+      paymentMethod: 'online',
+      billingAddress: '',
+      
+      // Additional Information
+      socialMediaLinks: {
+        linkedin: '',
+        facebook: '',
+        twitter: '',
+        instagram: ''
+      },
+      
+      // Documents
+      documents: {
+        companyProfile: null,
+        gstCertificate: null,
+        panCard: null,
+        productCatalog: null
+      },
+      
+      // Settings
+      status: exhibitor.status,
+      paymentStatus: exhibitor.paymentStatus,
+      sendConfirmationEmail: true,
+      allowMarketingEmails: false,
+      
+      // Image Field
+      companyLogo: null,
+      companyLogoUrl: ''
+    });
     setShowEditModal(true);
   };
 
@@ -175,18 +333,92 @@ export const Exhibitors: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (editFormData) {
+      let logoUrl = editFormData.companyLogoUrl;
+
+      // Upload image to Supabase storage if a new image is selected
+      if (editFormData.companyLogo) {
+        const fileExt = editFormData.companyLogo.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `exhibitor-logos/${fileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('exhibitor-logos')
+          .upload(filePath, editFormData.companyLogo);
+
+        if (uploadError) {
+          alert(`Image upload failed: ${uploadError.message}`);
+          return;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('exhibitor-logos')
+          .getPublicUrl(filePath);
+
+        logoUrl = urlData.publicUrl;
+      }
+
       const { error } = await supabase
         .from('exhibitors')
         .update({
+          // Company Information
           company_name: editFormData.companyName,
+          company_description: editFormData.companyDescription,
+          established_year: editFormData.establishedYear,
+          company_size: editFormData.companySize,
+          website: editFormData.website,
+          
+          // Contact Information
           contact_person: editFormData.contactPerson,
+          designation: editFormData.designation,
           email: editFormData.email,
           phone: editFormData.phone,
+          alternate_email: editFormData.alternateEmail,
+          alternate_phone: editFormData.alternatePhone,
+          
+          // Business Details
           category: editFormData.category,
+          sub_category: editFormData.subCategory,
+          business_type: editFormData.businessType,
+          gst_number: editFormData.gstNumber,
+          pan_number: editFormData.panNumber,
+          
+          // Location & Address
+          address: editFormData.address,
           city: editFormData.city,
-          booth: editFormData.booth,
-          payment_status: editFormData.paymentStatus,
+          state: editFormData.state,
+          pincode: editFormData.pincode,
+          country: editFormData.country,
+          
+          // Exhibition Details
+          booth_preference: editFormData.boothPreference,
+          booth_size: editFormData.boothSize,
+          special_requirements: editFormData.specialRequirements,
+          previous_exhibitions: editFormData.previousExhibitions,
+          expected_visitors: editFormData.expectedVisitors,
+          
+          // Products & Services
+          products: editFormData.products,
+          services: editFormData.services,
+          target_audience: editFormData.targetAudience,
+          
+          // Payment & Billing
+          registration_fee: editFormData.registrationFee,
+          payment_method: editFormData.paymentMethod,
+          billing_address: editFormData.billingAddress,
+          
+          // Additional Information
+          social_media_links: editFormData.socialMediaLinks,
+          documents: editFormData.documents,
+          
+          // Settings
           status: editFormData.status,
+          payment_status: editFormData.paymentStatus,
+          send_confirmation_email: editFormData.sendConfirmationEmail,
+          allow_marketing_emails: editFormData.allowMarketingEmails,
+          
+          // Image field
+          company_logo_url: logoUrl
         })
         .eq('id', editFormData.id);
 
@@ -236,7 +468,45 @@ export const Exhibitors: React.FC = () => {
     setShowDeleteModal(false);
     setSelectedExhibitor(null);
     setEditFormData(null);
+    setEditErrors({});
     setEmailFormData({ subject: '', message: '', sendCopy: false });
+  };
+
+  const handleImageUpload = (file: File) => {
+    if (!editFormData) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setEditErrors(prev => ({ ...prev, companyLogo: 'Please select a valid image file' }));
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setEditErrors(prev => ({ ...prev, companyLogo: 'Image size must be less than 5MB' }));
+      return;
+    }
+
+    setEditFormData(prev => prev ? ({
+      ...prev,
+      companyLogo: file,
+      companyLogoUrl: URL.createObjectURL(file)
+    }) : null);
+
+    // Clear error
+    if (editErrors.companyLogo) {
+      setEditErrors(prev => ({ ...prev, companyLogo: '' }));
+    }
+  };
+
+  const removeImage = () => {
+    if (!editFormData) return;
+    
+    setEditFormData(prev => prev ? ({
+      ...prev,
+      companyLogo: null,
+      companyLogoUrl: ''
+    }) : null);
   };
 
   return (
@@ -784,11 +1054,11 @@ export const Exhibitors: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Booth Number</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Booth Preference</label>
                   <input
                     type="text"
-                    value={editFormData.booth || ''}
-                    onChange={(e) => setEditFormData({...editFormData, booth: e.target.value})}
+                    value={editFormData.boothPreference || ''}
+                    onChange={(e) => setEditFormData({...editFormData, boothPreference: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
