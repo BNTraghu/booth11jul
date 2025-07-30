@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -10,8 +10,46 @@ import { Venue } from '../types';
 import { supabase } from '../lib/supabase';
 import { useVenues } from '../hooks/useSupabaseData';
 
+interface ExtendedVenueFormData {
+  id: string;
+  name: string;
+  location: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  memberCount: number;
+  facilities: string[];
+  amenities: string[];
+  status: 'active' | 'inactive' | 'pending';
+  // Extended fields
+  addressLine1?: string;
+  addressLandmark?: string;
+  addressStandard?: string;
+  areaSqFt?: number;
+  kindOfSpace?: string;
+  isCovered?: boolean;
+  pricingPerDay?: number;
+  facilityAreaSqFt?: number;
+  noOfStalls?: number;
+  facilityCovered?: boolean;
+  noOfFlats?: number;
+  // Google Maps fields
+  latitude?: number;
+  longitude?: number;
+  formattedAddress?: string;
+  // Custom Contact Information
+  customContacts?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    role: string;
+  }>;
+}
+
 export const Venues: React.FC = () => {
   const { venues, loading, error, refetch } = useVenues();
+  
   const [localVenues, setLocalVenues] = useState<Venue[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,8 +94,94 @@ export const Venues: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const checkForDuplicates = async (excludeId?: string): Promise<{ hasDuplicates: boolean; message: string }> => {
+    if (!editFormData) return { hasDuplicates: false, message: '' };
+
+    try {
+      // Check for duplicate venue names
+      let nameQuery = supabase
+        .from('venues')
+        .select('id, name')
+        .ilike('name', editFormData.name.trim());
+
+      if (excludeId) {
+        nameQuery = nameQuery.neq('id', excludeId);
+      }
+
+      const { data: nameDuplicates, error: nameError } = await nameQuery;
+
+      if (nameError) throw nameError;
+
+      if (nameDuplicates && nameDuplicates.length > 0) {
+        return {
+          hasDuplicates: true,
+          message: `A venue with the name "${editFormData.name}" already exists. Please choose a different name.`
+        };
+      }
+
+      // Check for duplicate addresses
+      let addressQuery = supabase
+        .from('venues')
+        .select('id, name, address_line1')
+        .ilike('address_line1', editFormData.addressLine1?.trim() || '');
+
+      if (excludeId) {
+        addressQuery = addressQuery.neq('id', excludeId);
+      }
+
+      const { data: addressDuplicates, error: addressError } = await addressQuery;
+
+      if (addressError) throw addressError;
+
+      if (addressDuplicates && addressDuplicates.length > 0) {
+        return {
+          hasDuplicates: true,
+          message: `A venue with the address "${editFormData.addressLine1}" already exists (${addressDuplicates[0].name}). Please verify the address.`
+        };
+      }
+
+      return { hasDuplicates: false, message: '' };
+    } catch (error) {
+      console.error('Error checking for duplicates:', error);
+      return { hasDuplicates: false, message: '' };
+    }
+  };
+
   const handleSaveEdit = async () => {
     if (editFormData) {
+      // Basic validation
+      const errors: { [key: string]: string } = {};
+      
+      if (!editFormData.name.trim()) {
+        errors.name = 'Venue name is required';
+      } else if (editFormData.name.trim().length < 3) {
+        errors.name = 'Venue name must be at least 3 characters';
+      }
+
+      if (!editFormData.location?.trim()) {
+        errors.location = 'Location is required';
+      }
+
+      if (!editFormData.contactPerson?.trim()) {
+        errors.contactPerson = 'Contact person is required';
+      }
+
+      if (editFormData.memberCount <= 0) {
+        errors.memberCount = 'Capacity must be greater than 0';
+      }
+
+      if (Object.keys(errors).length > 0) {
+        alert('Please fix the following errors:\n' + Object.values(errors).join('\n'));
+        return;
+      }
+
+      // Check for duplicates
+      const duplicateCheck = await checkForDuplicates(editFormData.id);
+      if (duplicateCheck.hasDuplicates) {
+        alert(duplicateCheck.message);
+        return;
+      }
+
       const { error } = await supabase
         .from('venues')
         .update({
@@ -114,6 +238,44 @@ export const Venues: React.FC = () => {
     setEditFormData(null);
   };
 
+  // Custom Contact Management Functions
+  const addCustomContact = () => {
+    if (!editFormData) return;
+    
+    const newContact = {
+      id: Date.now().toString(),
+      name: '',
+      email: '',
+      phone: '',
+      role: ''
+    };
+    
+    setEditFormData(prev => ({
+      ...prev!,
+      customContacts: [...(prev?.customContacts || []), newContact]
+    }));
+  };
+
+  const updateCustomContact = (id: string, field: string, value: string) => {
+    if (!editFormData) return;
+    
+    setEditFormData(prev => ({
+      ...prev!,
+      customContacts: (prev?.customContacts || []).map(contact =>
+        contact.id === id ? { ...contact, [field]: value } : contact
+      )
+    }));
+  };
+
+  const removeCustomContact = (id: string) => {
+    if (!editFormData) return;
+    
+    setEditFormData(prev => ({
+      ...prev!,
+      customContacts: (prev?.customContacts || []).filter(contact => contact.id !== id)
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
@@ -151,7 +313,7 @@ export const Venues: React.FC = () => {
                 <Calendar className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Events</p>
+                <p className="text-sm font-medium text-gray-600">Upcoming Events</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {venues.reduce((sum, v) => sum + v.activeEvents, 0)}
                 </p>
@@ -243,67 +405,111 @@ export const Venues: React.FC = () => {
 
       {/* Venues Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredVenues.map((venue) => (
-          <Card key={venue.id} className="hover:shadow-md transition-shadow duration-200">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">{venue.name}</h3>
-                <Badge variant={getStatusVariant(venue.status)}>
-                  {venue.status}
-                </Badge>
-              </div>
-              
-              <div className="space-y-3 mb-4">
-                <div className="flex items-center text-sm text-gray-600">
-                  <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span className="truncate">{venue.location}</span>
+        {filteredVenues.length > 0 ? (
+          filteredVenues.map((venue) => (
+            <Card key={venue.id} className="hover:shadow-md transition-shadow duration-200">
+              <CardContent className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">{venue.name}</h3>
+                  <Badge variant={getStatusVariant(venue.status)}>
+                    {venue.status}
+                  </Badge>
                 </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span>{venue.memberCount.toLocaleString()} capacity</span>
+                
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">{venue.location}</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>{venue.memberCount.toLocaleString()} capacity</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>{venue.activeEvents} Upcoming events</span>
+                  </div>
                 </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span>{venue.activeEvents} active events</span>
-                </div>
-              </div>
 
-              <div className="mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Facilities:</p>
-                <div className="flex flex-wrap gap-1">
-                  {venue.facilities.slice(0, 3).map((facility, index) => (
-                    <Badge key={index} variant="default" className="text-xs">
-                      {facility}
-                    </Badge>
-                  ))}
-                  {venue.facilities.length > 3 && (
-                    <Badge variant="default" className="text-xs">
-                      +{venue.facilities.length - 3} more
-                    </Badge>
-                  )}
+                <div className="mb-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Facilities:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {venue.facilities.slice(0, 3).map((facility, index) => (
+                      <Badge key={index} variant="default" className="text-xs">
+                        {facility}
+                      </Badge>
+                    ))}
+                    {venue.facilities.length > 3 && (
+                      <Badge variant="default" className="text-xs">
+                        +{venue.facilities.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              </div>
-              
-              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                <div className="text-sm">
-                  <span className="font-medium text-gray-900">₹{venue.totalRevenue.toLocaleString()}</span>
-                  <span className="text-gray-500 ml-1 hidden sm:inline">revenue</span>
+                
+                <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-900">₹{venue.totalRevenue.toLocaleString()}</span>
+                    <span className="text-gray-500 ml-1 hidden sm:inline">revenue</span>
+                  </div>
+                  <div className="flex space-x-1">
+                    <Button size="sm" variant="ghost" onClick={() => handleView(venue)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleEdit(venue)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(venue)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex space-x-1">
-                  <Button size="sm" variant="ghost" onClick={() => handleView(venue)}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleEdit(venue)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(venue)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="col-span-full">
+            <Card className="bg-gray-50 border-gray-200">
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Building2 className="h-8 w-8 text-gray-400" />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {loading ? 'Loading venues...' : 'No venues found'}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {loading 
+                    ? 'Please wait while we load your venues...'
+                    : searchTerm 
+                      ? `No venues match your search for "${searchTerm}"`
+                      : filter !== 'all'
+                        ? `No venues with status "${filter}" found`
+                        : 'No venues have been added yet.'
+                  }
+                </p>
+                {!loading && (
+                  <div className="space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setSearchTerm('');
+                        setFilter('all');
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                    <Link to="/venues/add">
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add First Venue
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Venues Table */}

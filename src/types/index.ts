@@ -42,6 +42,13 @@ export interface Event {
   createdBy?: string | null; // created_by from DB
   totalRevenue: number; // total_revenue from DB
   eventImageUrl?: string | null; // event_image_url from DB
+  // Pricing & Availability
+  pricePerHour?: number | null; // price_per_hour from DB
+  availableHours?: string | null; // available_hours from DB
+  parkingSpaces?: number | null; // parking_spaces from DB
+  cateringAllowed?: boolean | null; // catering_allowed from DB
+  alcoholAllowed?: boolean | null; // alcohol_allowed from DB
+  smokingAllowed?: boolean | null; // smoking_allowed from DB
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +67,36 @@ export interface Venue {
   totalRevenue: number; // total_revenue from DB
   status: 'active' | 'inactive' | 'pending';
   joinedDate?: string | null; // joined_date from DB
+  // Extended fields
+  addressLine1?: string | null; // address_line1 from DB
+  addressLandmark?: string | null; // address_landmark from DB
+  addressStandard?: string | null; // address_standard from DB
+  areaSqFt?: number | null; // area_sq_ft from DB
+  kindOfSpace?: string | null; // kind_of_space from DB
+  isCovered?: boolean | null; // is_covered from DB
+  pricingPerDay?: number | null; // pricing_per_day from DB
+  facilityAreaSqFt?: number | null; // facility_area_sq_ft from DB
+  noOfStalls?: number | null; // no_of_stalls from DB
+  facilityCovered?: boolean | null; // facility_covered from DB
+  noOfFlats?: number | null; // no_of_flats from DB
+  availableHours?: string | null; // available_hours from DB
+  parkingSpaces?: number | null; // parking_spaces from DB
+  cateringAllowed?: boolean | null; // catering_allowed from DB
+  alcoholAllowed?: boolean | null; // alcohol_allowed from DB
+  smokingAllowed?: boolean | null; // smoking_allowed from DB
+  // Google Maps fields
+  latitude?: number | null;
+  longitude?: number | null;
+  formattedAddress?: string | null; // formatted_address from DB
+  description?: string | null;
+  // Custom Contact Information
+  customContacts?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    role: string;
+  }> | null; // custom_contacts from DB
   created_at: string;
   updated_at: string;
 }

@@ -19,5 +19,7 @@ export default defineConfig(({ mode }) => {
       ),
     },
     plugins: [react()],
+    // Ensure environment variables are properly exposed
+    envPrefix: 'VITE_',
   };
 });

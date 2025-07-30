@@ -15,7 +15,8 @@ import {
   User,
   Upload,
   X,
-  Image
+  Image,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
@@ -44,6 +45,13 @@ interface FormData {
   // Venue Facilities & Amenities
   venueFacilities: string[];
   venueAmenities: string[];
+  // Pricing & Availability
+  pricePerHour: number;
+  availableHours: string;
+  parkingSpaces: number;
+  cateringAllowed: boolean;
+  alcoholAllowed: boolean;
+  smokingAllowed: boolean;
 }
 
 interface FormErrors {
@@ -84,7 +92,14 @@ export const CreateEvent: React.FC = () => {
     eventImageUrl: '',
     // Venue Facilities & Amenities
     venueFacilities: [],
-    venueAmenities: []
+    venueAmenities: [],
+    // Pricing & Availability
+    pricePerHour: 0,
+    availableHours: '',
+    parkingSpaces: 0,
+    cateringAllowed: false,
+    alcoholAllowed: false,
+    smokingAllowed: false
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -160,35 +175,59 @@ export const CreateEvent: React.FC = () => {
       newErrors.eventImage = 'Event image is required';
     }
 
+    // Pricing validation
+    if (formData.pricePerHour < 0) {
+      newErrors.pricePerHour = 'Price per hour cannot be negative';
+    }
+
+    if (formData.parkingSpaces < 0) {
+      newErrors.parkingSpaces = 'Parking spaces cannot be negative';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleInputChange = (field: keyof FormData, value: any) => {
+    
     setFormData(prev => ({ ...prev, [field]: value }));
     
-    // Clear error when user starts typing
+    // Clear error for the specific field only
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
 
     // Auto-populate venue name and city when venue is selected
     if (field === 'venueId' && value) {
+      
       const selectedVenue = venues.find(v => v.id === value);
+      
       if (selectedVenue) {
-        setFormData(prev => ({
-          ...prev,
+        
+        const updatedData = {
           venueName: selectedVenue.name,
           city: selectedVenue.location?.split(',').pop()?.trim() || '',
           maxCapacity: selectedVenue.memberCount || 100,
           venueFacilities: selectedVenue.facilities || [],
           venueAmenities: selectedVenue.amenities || []
+        };
+        
+        
+        setFormData(prev => ({
+          ...prev,
+          ...updatedData
         }));
+        
       }
     }
   };
 
   const handleImageUpload = (file: File) => {
+    
     // Validate file type
     if (!file.type.startsWith('image/')) {
       setErrors(prev => ({ ...prev, eventImage: 'Please select a valid image file' }));
@@ -201,16 +240,20 @@ export const CreateEvent: React.FC = () => {
       return;
     }
 
+    
+    const imageUrl = URL.createObjectURL(file);
+    
     setFormData(prev => ({
       ...prev,
       eventImage: file,
-      eventImageUrl: URL.createObjectURL(file)
+      eventImageUrl: imageUrl
     }));
 
     // Clear error
     if (errors.eventImage) {
       setErrors(prev => ({ ...prev, eventImage: '' }));
     }
+    
   };
 
   const removeImage = () => {
@@ -224,10 +267,12 @@ export const CreateEvent: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    
     if (!validateForm()) {
       return;
     }
 
+    
     setIsSubmitting(true);
 
     try {
@@ -235,10 +280,12 @@ export const CreateEvent: React.FC = () => {
 
       // Upload image to Supabase storage if a new image is selected
       if (formData.eventImage) {
+        
         const fileExt = formData.eventImage.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `event-images/${fileName}`;
 
+        
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('event-images')
           .upload(filePath, formData.eventImage);
@@ -247,37 +294,49 @@ export const CreateEvent: React.FC = () => {
           throw new Error(`Image upload failed: ${uploadError.message}`);
         }
 
-        // Get public URL
+        
         const { data: urlData } = supabase.storage
           .from('event-images')
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
+      } else {
+        
       }
 
-      // Insert event into Supabase with extended fields
+      
+      const insertData = {
+        title: formData.title,
+        description: formData.description,
+        event_date: formData.eventDate,
+        event_end_date: formData.eventEndDate,
+        event_time: formData.eventTime,
+        event_end_time: formData.eventEndTime,
+        venue_id: formData.venueId,
+        venue_name: formData.venueName,
+        city: formData.city,
+        max_capacity: formData.maxCapacity,
+        plan_type: formData.planType,
+        status: formData.status,
+        attendees: formData.attendees,
+        total_revenue: formData.totalRevenue,
+        created_by: user?.id,
+        vendor_ids: [],
+        // Image field
+        event_image_url: imageUrl,
+        // Pricing & Availability
+        price_per_hour: formData.pricePerHour,
+        available_hours: formData.availableHours,
+        parking_spaces: formData.parkingSpaces,
+        catering_allowed: formData.cateringAllowed,
+        alcohol_allowed: formData.alcoholAllowed,
+        smoking_allowed: formData.smokingAllowed
+      };
+
+      
       const { data, error } = await supabase
         .from('events')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          event_date: formData.eventDate,
-          event_end_date: formData.eventEndDate,
-          event_time: formData.eventTime,
-          event_end_time: formData.eventEndTime,
-          venue_id: formData.venueId,
-          venue_name: formData.venueName,
-          city: formData.city,
-          max_capacity: formData.maxCapacity,
-          plan_type: formData.planType,
-          status: formData.status,
-          attendees: formData.attendees,
-          total_revenue: formData.totalRevenue,
-          created_by: user?.id,
-          vendor_ids: [],
-          // Image field
-          event_image_url: imageUrl
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -285,7 +344,6 @@ export const CreateEvent: React.FC = () => {
         throw new Error(error.message);
       }
       
-      console.log('Event created successfully:', data);
       
       setSubmitSuccess(true);
       
@@ -295,7 +353,6 @@ export const CreateEvent: React.FC = () => {
       }, 2000);
       
     } catch (error) {
-      console.error('Error creating event:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create event. Please try again.';
       setErrors({ submit: errorMessage });
     } finally {
@@ -341,7 +398,14 @@ export const CreateEvent: React.FC = () => {
                     eventImage: null,
                     eventImageUrl: '',
                     venueFacilities: [],
-                    venueAmenities: []
+                    venueAmenities: [],
+                    // Pricing & Availability
+                    pricePerHour: 0,
+                    availableHours: '',
+                    parkingSpaces: 0,
+                    cateringAllowed: false,
+                    alcoholAllowed: false,
+                    smokingAllowed: false
                   });
                 }}
                 className="w-full"
@@ -781,6 +845,117 @@ export const CreateEvent: React.FC = () => {
                         </div>
                       </label>
                     ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pricing & Availability */}
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2" />
+                  Pricing & Availability
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Price Per Hour
+                    </label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="number"
+                        value={formData.pricePerHour}
+                        onChange={(e) => handleInputChange('pricePerHour', Number(e.target.value))}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          errors.pricePerHour ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        placeholder="Enter price per hour"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    {errors.pricePerHour && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.pricePerHour}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Available Hours
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.availableHours}
+                      onChange={(e) => handleInputChange('availableHours', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., 9:00 AM - 11:00 PM"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Parking Spaces
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.parkingSpaces}
+                      onChange={(e) => handleInputChange('parkingSpaces', Number(e.target.value))}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.parkingSpaces ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Number of parking spaces"
+                      min="0"
+                    />
+                    {errors.parkingSpaces && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.parkingSpaces}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="hidden">
+                  <label className="text-sm font-medium text-gray-700 mb-3 block">
+                    Event Policies
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.cateringAllowed}
+                        onChange={(e) => handleInputChange('cateringAllowed', e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Catering Allowed</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.alcoholAllowed}
+                        onChange={(e) => handleInputChange('alcoholAllowed', e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Alcohol Allowed</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.smokingAllowed}
+                        onChange={(e) => handleInputChange('smokingAllowed', e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Smoking Allowed</span>
+                    </label>
                   </div>
                 </div>
               </CardContent>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -28,11 +28,19 @@ interface ExtendedEventFormData {
   // Image Field
   eventImage: File | null;
   eventImageUrl: string;
+  // Pricing & Availability
+  pricePerHour: number;
+  availableHours: string;
+  parkingSpaces: number;
+  cateringAllowed: boolean;
+  alcoholAllowed: boolean;
+  smokingAllowed: boolean;
 }
 
 export const Events: React.FC = () => {
   const { events, loading, refetch } = useEvents();
   const { venues } = useVenues();
+  
   // const [localEvents, setLocalEvents] = useState<Event[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -83,14 +91,21 @@ export const Events: React.FC = () => {
       venueId: event.venueId || '',
       venueName: event.venue,
       city: event.city || '',
-      maxCapacity: event.maxCapacity || 100,
+      maxCapacity: event.maxCapacity,
       planType: event.planType || 'Plan A',
       status: event.status,
       attendees: event.attendees,
       totalRevenue: event.totalRevenue,
       // Image Field
       eventImage: null,
-      eventImageUrl: event.eventImageUrl || ''
+      eventImageUrl: event.eventImageUrl || '',
+      // Pricing & Availability
+      pricePerHour: event.pricePerHour || 0,
+      availableHours: event.availableHours || '',
+      parkingSpaces: event.parkingSpaces || 0,
+      cateringAllowed: event.cateringAllowed || false,
+      alcoholAllowed: event.alcoholAllowed || false,
+      smokingAllowed: event.smokingAllowed || false,
     });
     setShowEditModal(true);
   };
@@ -100,8 +115,92 @@ export const Events: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const validateEditForm = (): boolean => {
+    if (!editFormData) return false;
+    
+    const errors: { [key: string]: string } = {};
+    
+    // Title validation
+    if (!editFormData.title.trim()) {
+      errors.title = 'Event title is required';
+    } else if (editFormData.title.trim().length < 3) {
+      errors.title = 'Event title must be at least 3 characters';
+    }
+
+    // Description validation
+    if (!editFormData.description.trim()) {
+      errors.description = 'Event description is required';
+    } else if (editFormData.description.trim().length < 10) {
+      errors.description = 'Description must be at least 10 characters';
+    }
+
+    // Date validation
+    if (!editFormData.eventDate) {
+      errors.eventDate = 'Event start date is required';
+    } else {
+      const eventDate = new Date(editFormData.eventDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (eventDate < today) {
+        errors.eventDate = 'Event start date cannot be in the past';
+      }
+    }
+
+    // End date validation
+    if (!editFormData.eventEndDate) {
+      errors.eventEndDate = 'Event end date is required';
+    } else if (editFormData.eventDate && editFormData.eventEndDate) {
+      const startDate = new Date(editFormData.eventDate);
+      const endDate = new Date(editFormData.eventEndDate);
+      
+      if (endDate < startDate) {
+        errors.eventEndDate = 'Event end date cannot be before start date';
+      }
+    }
+
+    // Time validation
+    if (!editFormData.eventTime) {
+      errors.eventTime = 'Event start time is required';
+    }
+
+    if (!editFormData.eventEndTime) {
+      errors.eventEndTime = 'Event end time is required';
+    }
+
+    // Venue validation
+    if (!editFormData.venueId) {
+      errors.venueId = 'Please select a venue';
+    }
+
+    // City validation
+    if (!editFormData.city.trim()) {
+      errors.city = 'City is required';
+    }
+
+    // Capacity validation
+    if (editFormData.maxCapacity < 10) {
+      errors.maxCapacity = 'Maximum capacity must be at least 10';
+    }
+
+    // Image validation
+    if (!editFormData.eventImage && !editFormData.eventImageUrl) {
+      errors.eventImage = 'Event image is required';
+    }
+
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSaveEdit = async () => {
-    if (editFormData) {
+    if (!editFormData) return;
+
+    // Validate form before saving
+    if (!validateEditForm()) {
+      return;
+    }
+
+    try {
       let imageUrl = editFormData.eventImageUrl;
 
       // Upload image to Supabase storage if a new image is selected
@@ -115,8 +214,7 @@ export const Events: React.FC = () => {
           .upload(filePath, editFormData.eventImage);
 
         if (uploadError) {
-          alert(`Image upload failed: ${uploadError.message}`);
-          return;
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
 
         // Get public URL
@@ -127,6 +225,7 @@ export const Events: React.FC = () => {
         imageUrl = urlData.publicUrl;
       }
 
+      // Update event in Supabase
       const { error } = await supabase
         .from('events')
         .update({
@@ -145,18 +244,30 @@ export const Events: React.FC = () => {
           attendees: editFormData.attendees,
           total_revenue: editFormData.totalRevenue,
           // Image field
-          event_image_url: imageUrl
+          event_image_url: imageUrl,
+          // Pricing & Availability
+          price_per_hour: editFormData.pricePerHour,
+          available_hours: editFormData.availableHours,
+          parking_spaces: editFormData.parkingSpaces,
+          catering_allowed: editFormData.cateringAllowed,
+          alcohol_allowed: editFormData.alcoholAllowed,
+          smoking_allowed: editFormData.smokingAllowed
         })
         .eq('id', editFormData.id);
 
-      if (!error) {
-        setShowEditModal(false);
-        setEditFormData(null);
-        setSelectedEvent(null);
-        refetch(); // reload events from Supabase
-      } else {
-        alert('Failed to update event: ' + error.message);
+      if (error) {
+        throw new Error(error.message);
       }
+
+      setShowEditModal(false);
+      setEditFormData(null);
+      setSelectedEvent(null);
+      refetch(); // reload events from Supabase
+      
+    } catch (error) {
+      console.error('Error updating event:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update event. Please try again.';
+      setEditErrors({ submit: errorMessage });
     }
   };
 
@@ -736,6 +847,90 @@ export const Events: React.FC = () => {
                         placeholder="Total revenue"
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pricing & Availability */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2" />
+                  Pricing & Availability
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Price Per Hour</label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="number"
+                        value={editFormData.pricePerHour}
+                        onChange={(e) => setEditFormData({...editFormData, pricePerHour: Number(e.target.value)})}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Enter price per hour"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Available Hours</label>
+                    <input
+                      type="text"
+                      value={editFormData.availableHours}
+                      onChange={(e) => setEditFormData({...editFormData, availableHours: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., 9:00 AM - 11:00 PM"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Parking Spaces</label>
+                    <input
+                      type="number"
+                      value={editFormData.parkingSpaces}
+                      onChange={(e) => setEditFormData({...editFormData, parkingSpaces: Number(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Number of parking spaces"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="hidden">
+                  <label className="text-sm font-medium text-gray-700 mb-3 block">Event Policies</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editFormData.cateringAllowed}
+                        onChange={(e) => setEditFormData({...editFormData, cateringAllowed: e.target.checked})}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Catering Allowed</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editFormData.alcoholAllowed}
+                        onChange={(e) => setEditFormData({...editFormData, alcoholAllowed: e.target.checked})}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Alcohol Allowed</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={editFormData.smokingAllowed}
+                        onChange={(e) => setEditFormData({...editFormData, smokingAllowed: e.target.checked})}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Smoking Allowed</span>
+                    </label>
                   </div>
                 </div>
               </div>

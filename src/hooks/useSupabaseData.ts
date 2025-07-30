@@ -42,7 +42,6 @@ export function useSupabaseData<T>(
         console.error(`Error fetching ${table}:`, error);
         setError(error.message);
       } else {
-        console.log(`Fetched ${result?.length || 0} ${table} records`);
         setData(result as T[] || []);
         setError(null);
       }
@@ -74,28 +73,39 @@ export const useEvents = () => {
   `, [], { order: { column: 'created_at', ascending: false }, limit: 50 });
   
   // Transform data to match our Event interface
-  const events: Event[] = data.map((event: any) => ({
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    date: event.event_date,
-    eventEndDate: event.event_end_date,
-    time: event.event_time,
-    eventEndTime: event.event_end_time,
-    venue: event.venue_name || event.venue?.name || '',
-    city: event.city,
-    status: event.status,
-    attendees: event.attendees || 0,
-    maxCapacity: event.max_capacity || 0,
-    planType: event.plan_type,
-    vendors: event.vendor_ids || [],
-    venueId: event.venue_id,
-    createdBy: event.created_by,
-    totalRevenue: event.total_revenue || 0,
-    eventImageUrl: event.event_image_url,
-    created_at: event.created_at,
-    updated_at: event.updated_at
-  }));
+  const events: Event[] = data.map((event: any) => {
+    const transformedEvent = {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      date: event.event_date,
+      eventEndDate: event.event_end_date,
+      time: event.event_time,
+      eventEndTime: event.event_end_time,
+      venue: event.venue_name || event.venue?.name || '',
+      city: event.city,
+      status: event.status,
+      attendees: event.attendees || 0,
+      maxCapacity: event.max_capacity || 0,
+      planType: event.plan_type,
+      vendors: event.vendor_ids || [],
+      venueId: event.venue_id,
+      createdBy: event.created_by,
+      totalRevenue: event.total_revenue || 0,
+      eventImageUrl: event.event_image_url,
+      // Pricing & Availability
+      pricePerHour: event.price_per_hour,
+      availableHours: event.available_hours,
+      parkingSpaces: event.parking_spaces,
+      cateringAllowed: event.catering_allowed,
+      alcoholAllowed: event.alcohol_allowed,
+      smokingAllowed: event.smoking_allowed,
+      created_at: event.created_at,
+      updated_at: event.updated_at
+    };
+    
+    return transformedEvent;
+  });
 
   return { events, loading, error, refetch };
 };
@@ -105,23 +115,52 @@ export const useVenues = () => {
     { order: { column: 'name', ascending: true } });
   
   // Transform data to match our Venue interface
-  const venues: Venue[] = data.map((venue: any) => ({
-    id: venue.id,
-    name: venue.name,
-    location: venue.location,
-    contactPerson: venue.contact_person,
-    email: venue.email,
-    phone: venue.phone,
-    memberCount: venue.capacity || 0,
-    facilities: venue.facilities || [],
-    amenities: venue.amenities || [],
-    activeEvents: venue.active_events || 0,
-    totalRevenue: venue.total_revenue || 0,
-    status: venue.status,
-    joinedDate: venue.joined_date,
-    created_at: venue.created_at,
-    updated_at: venue.updated_at
-  }));
+  const venues: Venue[] = data.map((venue: any) => {
+    const transformedVenue = {
+      id: venue.id,
+      name: venue.name,
+      location: venue.location,
+      contactPerson: venue.contact_person,
+      email: venue.email,
+      phone: venue.phone,
+      memberCount: venue.capacity || 0,
+      facilities: venue.facilities || [],
+      amenities: venue.amenities || [],
+      activeEvents: venue.active_events || 0,
+      totalRevenue: venue.total_revenue || 0,
+      status: venue.status,
+      joinedDate: venue.joined_date,
+      // Extended fields
+      addressLine1: venue.address_line1,
+      addressLandmark: venue.address_landmark,
+      addressStandard: venue.address_standard,
+      areaSqFt: venue.area_sq_ft,
+      kindOfSpace: venue.kind_of_space,
+      isCovered: venue.is_covered,
+      pricingPerDay: venue.pricing_per_day,
+      facilityAreaSqFt: venue.facility_area_sq_ft,
+      noOfStalls: venue.no_of_stalls,
+      facilityCovered: venue.facility_covered,
+      noOfFlats: venue.no_of_flats,
+      availableHours: venue.available_hours,
+      parkingSpaces: venue.parking_spaces,
+      cateringAllowed: venue.catering_allowed,
+      alcoholAllowed: venue.alcohol_allowed,
+      smokingAllowed: venue.smoking_allowed,
+      // Google Maps fields
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+      formattedAddress: venue.formatted_address,
+      description: venue.description,
+      // Custom Contact Information
+      customContacts: venue.custom_contacts || [],
+      // Timestamps
+      created_at: venue.created_at,
+      updated_at: venue.updated_at
+    };
+    
+    return transformedVenue;
+  });
 
   return { venues, loading, error, refetch };
 };
