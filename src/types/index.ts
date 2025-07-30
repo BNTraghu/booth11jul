@@ -28,7 +28,9 @@ export interface Event {
   title: string;
   description?: string | null;
   date: string; // event_date from DB
+  eventEndDate?: string | null; // event_end_date from DB
   time: string; // event_time from DB
+  eventEndTime?: string | null; // event_end_time from DB
   venue: string; // venue_name from DB
   city?: string | null;
   status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
@@ -53,6 +55,7 @@ export interface Venue {
   phone?: string | null;
   memberCount: number; // capacity from DB
   facilities: string[];
+  amenities: string[];
   activeEvents: number; // active_events from DB
   totalRevenue: number; // total_revenue from DB
   status: 'active' | 'inactive' | 'pending';

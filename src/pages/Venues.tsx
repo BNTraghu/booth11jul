@@ -68,6 +68,7 @@ export const Venues: React.FC = () => {
           phone: editFormData.phone,
           capacity: editFormData.memberCount,
           facilities: editFormData.facilities,
+          amenities: editFormData.amenities,
           status: editFormData.status,
         })
         .eq('id', editFormData.id);
@@ -460,6 +461,17 @@ export const Venues: React.FC = () => {
               </div>
 
               <div>
+                <h4 className="font-medium text-gray-900 mb-3">Amenities</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedVenue.amenities.map((amenity, index) => (
+                    <Badge key={index} variant="default" className="text-sm">
+                      {amenity}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <h4 className="font-medium text-gray-900 mb-3">Joined Date</h4>
                 <div className="text-sm text-gray-600">
                   {new Date(selectedVenue.joinedDate || '').toLocaleDateString()}
@@ -599,6 +611,17 @@ export const Venues: React.FC = () => {
                   onChange={(e) => setEditFormData({...editFormData, facilities: e.target.value.split(', ').map(f => f.trim())})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Auditorium, Community Hall, Garden Area"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amenities (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editFormData.amenities.join(', ')}
+                  onChange={(e) => setEditFormData({...editFormData, amenities: e.target.value.split(', ').map(f => f.trim())})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Wi-Fi, Power Outlets, Lighting"
                 />
               </div>
             </div>

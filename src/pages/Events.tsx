@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
@@ -13,8 +13,10 @@ interface ExtendedEventFormData {
   id: string;
   title: string;
   description: string;
-  date: string;
-  time: string;
+  eventDate: string;
+  eventEndDate: string;
+  eventTime: string;
+  eventEndTime: string;
   venueId: string;
   venueName: string;
   city: string;
@@ -23,23 +25,6 @@ interface ExtendedEventFormData {
   status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
   attendees: number;
   totalRevenue: number;
-  // Extended Fields
-  addressLine1: string;
-  addressLandmark: string;
-  addressStandard: string;
-  areaSqFt: number;
-  kindOfSpace: string;
-  isCovered: boolean;
-  pricingPerDay: number;
-  facilityAreaSqFt: number;
-  noOfStalls: number;
-  facilityCovered: boolean;
-  amenities: string;
-  noOfFlats: number;
-  // Google Maps Fields
-  latitude: number;
-  longitude: number;
-  formattedAddress: string;
   // Image Field
   eventImage: File | null;
   eventImageUrl: string;
@@ -58,10 +43,6 @@ export const Events: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<ExtendedEventFormData | null>(null);
   const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
-  const [isMapUpdating, setIsMapUpdating] = useState(false);
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
 
   const filteredEvents = events.filter(event => {
     const matchesFilter = filter === 'all' || event.status === filter;
@@ -95,33 +76,18 @@ export const Events: React.FC = () => {
       id: event.id,
       title: event.title,
       description: event.description || '',
-      date: event.date,
-      time: event.time,
+      eventDate: event.date,
+      eventEndDate: event.eventEndDate || '',
+      eventTime: event.time,
+      eventEndTime: event.eventEndTime || '',
       venueId: event.venueId || '',
       venueName: event.venue,
       city: event.city || '',
-      maxCapacity: event.maxCapacity,
+      maxCapacity: event.maxCapacity || 100,
       planType: event.planType || 'Plan A',
       status: event.status,
       attendees: event.attendees,
       totalRevenue: event.totalRevenue,
-      // Extended Fields - set defaults for existing events
-      addressLine1: '',
-      addressLandmark: '',
-      addressStandard: '',
-      areaSqFt: 0,
-      kindOfSpace: '',
-      isCovered: false,
-      pricingPerDay: 0,
-      facilityAreaSqFt: 0,
-      noOfStalls: 0,
-      facilityCovered: false,
-      amenities: '',
-      noOfFlats: 0,
-      // Google Maps Fields
-      latitude: 0,
-      longitude: 0,
-      formattedAddress: '',
       // Image Field
       eventImage: null,
       eventImageUrl: event.eventImageUrl || ''
@@ -166,8 +132,10 @@ export const Events: React.FC = () => {
         .update({
           title: editFormData.title,
           description: editFormData.description,
-          event_date: editFormData.date,
-          event_time: editFormData.time,
+          event_date: editFormData.eventDate,
+          event_end_date: editFormData.eventEndDate,
+          event_time: editFormData.eventTime,
+          event_end_time: editFormData.eventEndTime,
           venue_id: editFormData.venueId,
           venue_name: editFormData.venueName,
           city: editFormData.city,
@@ -176,23 +144,6 @@ export const Events: React.FC = () => {
           status: editFormData.status,
           attendees: editFormData.attendees,
           total_revenue: editFormData.totalRevenue,
-          // Extended fields
-          address_line1: editFormData.addressLine1,
-          address_landmark: editFormData.addressLandmark,
-          address_standard: editFormData.addressStandard,
-          area_sq_ft: editFormData.areaSqFt,
-          kind_of_space: editFormData.kindOfSpace,
-          is_covered: editFormData.isCovered,
-          pricing_per_day: editFormData.pricingPerDay,
-          facility_area_sq_ft: editFormData.facilityAreaSqFt,
-          no_of_stalls: editFormData.noOfStalls,
-          facility_covered: editFormData.facilityCovered,
-          amenities: editFormData.amenities,
-          no_of_flats: editFormData.noOfFlats,
-          // Google Maps fields
-          latitude: editFormData.latitude,
-          longitude: editFormData.longitude,
-          formatted_address: editFormData.formattedAddress,
           // Image field
           event_image_url: imageUrl
         })
@@ -656,8 +607,8 @@ export const Events: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
                     <input
                       type="date"
-                      value={editFormData.date}
-                      onChange={(e) => setEditFormData({...editFormData, date: e.target.value})}
+                      value={editFormData.eventDate}
+                      onChange={(e) => setEditFormData({...editFormData, eventDate: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -668,8 +619,8 @@ export const Events: React.FC = () => {
                       <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       <input
                         type="time"
-                        value={editFormData.time}
-                        onChange={(e) => setEditFormData({...editFormData, time: e.target.value})}
+                        value={editFormData.eventTime}
+                        onChange={(e) => setEditFormData({...editFormData, eventTime: e.target.value})}
                         className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -715,33 +666,76 @@ export const Events: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Max Capacity *</label>
-                    <div className="relative">
-                      <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                {/* Event Configuration */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Users className="h-5 w-5 mr-2" />
+                    Event Configuration
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Maximum Capacity</label>
                       <input
                         type="number"
                         value={editFormData.maxCapacity}
                         onChange={(e) => setEditFormData({...editFormData, maxCapacity: parseInt(e.target.value) || 0})}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Maximum attendees"
+                        min="10"
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                    <select
-                      value={editFormData.status}
-                      onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
-                      <option value="ongoing">Ongoing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event Status</label>
+                      <select
+                        value={editFormData.status}
+                        onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="ongoing">Ongoing</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Plan Type</label>
+                      <select
+                        value={editFormData.planType}
+                        onChange={(e) => setEditFormData({...editFormData, planType: e.target.value as any})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="Plan A">Plan A</option>
+                        <option value="Plan B">Plan B</option>
+                        <option value="Plan C">Plan C</option>
+                        <option value="Custom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Attendees</label>
+                      <input
+                        type="number"
+                        value={editFormData.attendees}
+                        onChange={(e) => setEditFormData({...editFormData, attendees: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Number of attendees"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Total Revenue</label>
+                      <input
+                        type="number"
+                        value={editFormData.totalRevenue}
+                        onChange={(e) => setEditFormData({...editFormData, totalRevenue: parseFloat(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Total revenue"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -805,150 +799,6 @@ export const Events: React.FC = () => {
                         {editErrors.eventImage}
                       </p>
                     )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Extended Event Details */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <MapPin className="h-5 w-5 mr-2" />
-                  Extended Event Details
-                </h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1</label>
-                  <input
-                    type="text"
-                    value={editFormData.addressLine1}
-                    onChange={(e) => setEditFormData({...editFormData, addressLine1: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Flat/Lane/Building..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Landmark</label>
-                  <input
-                    type="text"
-                    value={editFormData.addressLandmark}
-                    onChange={(e) => setEditFormData({...editFormData, addressLandmark: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Near hospital/mall etc."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Standard Address Format</label>
-                  <input
-                    type="text"
-                    value={editFormData.addressStandard}
-                    onChange={(e) => setEditFormData({...editFormData, addressStandard: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="123, Street, City, PIN"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Area (sq ft)</label>
-                    <input
-                      type="number"
-                      value={editFormData.areaSqFt}
-                      onChange={(e) => setEditFormData({...editFormData, areaSqFt: Number(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter area in sq ft"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Kind of Space</label>
-                    <input
-                      type="text"
-                      value={editFormData.kindOfSpace}
-                      onChange={(e) => setEditFormData({...editFormData, kindOfSpace: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Community Hall, Parking etc."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={editFormData.isCovered}
-                        onChange={(e) => setEditFormData({...editFormData, isCovered: e.target.checked})}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">Covered Space</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Per Day</label>
-                    <input
-                      type="number"
-                      value={editFormData.pricingPerDay}
-                      onChange={(e) => setEditFormData({...editFormData, pricingPerDay: Number(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter pricing per day"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Facility Area (sq ft)</label>
-                    <input
-                      type="number"
-                      value={editFormData.facilityAreaSqFt}
-                      onChange={(e) => setEditFormData({...editFormData, facilityAreaSqFt: Number(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter facility area"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">No. of Stalls</label>
-                    <input
-                      type="number"
-                      value={editFormData.noOfStalls}
-                      onChange={(e) => setEditFormData({...editFormData, noOfStalls: Number(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter number of stalls"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={editFormData.facilityCovered}
-                        onChange={(e) => setEditFormData({...editFormData, facilityCovered: e.target.checked})}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">Facility Covered</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Amenities</label>
-                    <input
-                      type="text"
-                      value={editFormData.amenities}
-                      onChange={(e) => setEditFormData({...editFormData, amenities: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter available amenities"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">No. of Flats</label>
-                    <input
-                      type="number"
-                      value={editFormData.noOfFlats}
-                      onChange={(e) => setEditFormData({...editFormData, noOfFlats: Number(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter number of flats"
-                    />
                   </div>
                 </div>
               </div>
