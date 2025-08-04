@@ -45,6 +45,13 @@ interface FormData {
   // Venue Facilities & Amenities
   venueFacilities: string[];
   venueAmenities: string[];
+  // Selected Facilities & Amenities for Event
+  selectedFacilities: string[];
+  selectedAmenities: string[];
+  // Stalls Configuration
+  noOfStalls: number;
+  stallSize: string;
+  stallCategory: string;
   // Pricing & Availability
   pricePerHour: number;
   availableHours: string;
@@ -93,6 +100,13 @@ export const CreateEvent: React.FC = () => {
     // Venue Facilities & Amenities
     venueFacilities: [],
     venueAmenities: [],
+    // Selected Facilities & Amenities for Event
+    selectedFacilities: [],
+    selectedAmenities: [],
+    // Stalls Configuration
+    noOfStalls: 0,
+    stallSize: '',
+    stallCategory: '',
     // Pricing & Availability
     pricePerHour: 0,
     availableHours: '',
@@ -213,7 +227,8 @@ export const CreateEvent: React.FC = () => {
           city: selectedVenue.location?.split(',').pop()?.trim() || '',
           maxCapacity: selectedVenue.memberCount || 100,
           venueFacilities: selectedVenue.facilities || [],
-          venueAmenities: selectedVenue.amenities || []
+          venueAmenities: selectedVenue.amenities || [],
+          noOfStalls: selectedVenue.noOfStalls || 0
         };
         
         
@@ -264,6 +279,24 @@ export const CreateEvent: React.FC = () => {
     }));
   };
 
+  const handleFacilityToggle = (facility: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedFacilities: prev.selectedFacilities.includes(facility)
+        ? prev.selectedFacilities.filter(f => f !== facility)
+        : [...prev.selectedFacilities, facility]
+    }));
+  };
+
+  const handleAmenityToggle = (amenity: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedAmenities: prev.selectedAmenities.includes(amenity)
+        ? prev.selectedAmenities.filter(a => a !== amenity)
+        : [...prev.selectedAmenities, amenity]
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -272,7 +305,7 @@ export const CreateEvent: React.FC = () => {
       return;
     }
 
-    
+
     setIsSubmitting(true);
 
     try {
@@ -306,21 +339,21 @@ export const CreateEvent: React.FC = () => {
 
       
       const insertData = {
-        title: formData.title,
-        description: formData.description,
-        event_date: formData.eventDate,
+          title: formData.title,
+          description: formData.description,
+          event_date: formData.eventDate,
         event_end_date: formData.eventEndDate,
-        event_time: formData.eventTime,
+          event_time: formData.eventTime,
         event_end_time: formData.eventEndTime,
-        venue_id: formData.venueId,
-        venue_name: formData.venueName,
-        city: formData.city,
-        max_capacity: formData.maxCapacity,
-        plan_type: formData.planType,
-        status: formData.status,
-        attendees: formData.attendees,
-        total_revenue: formData.totalRevenue,
-        created_by: user?.id,
+          venue_id: formData.venueId,
+          venue_name: formData.venueName,
+          city: formData.city,
+          max_capacity: formData.maxCapacity,
+          plan_type: formData.planType,
+          status: formData.status,
+          attendees: formData.attendees,
+          total_revenue: formData.totalRevenue,
+          created_by: user?.id,
         vendor_ids: [],
         // Image field
         event_image_url: imageUrl,
@@ -346,6 +379,7 @@ export const CreateEvent: React.FC = () => {
       
       
       setSubmitSuccess(true);
+      showNotification('Event created successfully!', 'success');
       
       // Redirect after success
       setTimeout(() => {
@@ -355,9 +389,51 @@ export const CreateEvent: React.FC = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create event. Please try again.';
       setErrors({ submit: errorMessage });
+      showNotification(errorMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
   if (submitSuccess) {
@@ -399,6 +475,13 @@ export const CreateEvent: React.FC = () => {
                     eventImageUrl: '',
                     venueFacilities: [],
                     venueAmenities: [],
+                    // Selected Facilities & Amenities for Event
+                    selectedFacilities: [],
+                    selectedAmenities: [],
+                    // Stalls Configuration
+                    noOfStalls: 0,
+                    stallSize: '',
+                    stallCategory: '',
                     // Pricing & Availability
                     pricePerHour: 0,
                     availableHours: '',
@@ -721,45 +804,57 @@ export const CreateEvent: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Venue Facilities & Amenities Display */}
+                {/* Venue Facilities & Amenities Selection */}
                 {(formData.venueFacilities.length > 0 || formData.venueAmenities.length > 0) && (
                   <div className="mt-6 space-y-6">
-                    {/* Facilities Section */}
+                    {/* Facilities Selection */}
                     {formData.venueFacilities.length > 0 && (
                       <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center">
                           <Building2 className="h-4 w-4 mr-2" />
-                          Venue Facilities ({formData.venueFacilities.length})
+                          Select Facilities for Event ({formData.selectedFacilities.length} selected)
                         </h4>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                           {formData.venueFacilities.map((facility) => (
-                            <span key={facility} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                              {facility}
-                            </span>
+                            <label key={facility} className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={formData.selectedFacilities.includes(facility)}
+                                onChange={() => handleFacilityToggle(facility)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700">{facility}</span>
+                            </label>
                           ))}
                         </div>
                         <p className="text-xs text-blue-600 mt-2">
-                          Physical spaces and infrastructure available at this venue
+                          Select the facilities you want to use for this event
                         </p>
                       </div>
                     )}
                     
-                    {/* Amenities Section */}
+                    {/* Amenities Selection */}
                     {formData.venueAmenities.length > 0 && (
                       <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                         <h4 className="text-sm font-semibold text-green-800 mb-3 flex items-center">
                           <CheckCircle className="h-4 w-4 mr-2" />
-                          Venue Amenities ({formData.venueAmenities.length})
+                          Select Amenities for Event ({formData.selectedAmenities.length} selected)
                         </h4>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                           {formData.venueAmenities.map((amenity) => (
-                            <span key={amenity} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-                              {amenity}
-                            </span>
+                            <label key={amenity} className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={formData.selectedAmenities.includes(amenity)}
+                                onChange={() => handleAmenityToggle(amenity)}
+                                className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                              />
+                              <span className="text-sm text-gray-700">{amenity}</span>
+                            </label>
                           ))}
                         </div>
                         <p className="text-xs text-green-600 mt-2">
-                          Services and conveniences provided by this venue
+                          Select the amenities you want to use for this event
                         </p>
                       </div>
                     )}
@@ -845,6 +940,75 @@ export const CreateEvent: React.FC = () => {
                         </div>
                       </label>
                     ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Stalls Configuration */}
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Building2 className="h-5 w-5 mr-2" />
+                  Stalls Configuration
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Number of Stalls
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.noOfStalls}
+                      onChange={(e) => handleInputChange('noOfStalls', parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Enter number of stalls"
+                      min="0"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formData.venueName ? `Available at ${formData.venueName}: ${formData.noOfStalls}` : 'Select a venue first'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stall Size
+                    </label>
+                    <select
+                      value={formData.stallSize}
+                      onChange={(e) => handleInputChange('stallSize', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select stall size</option>
+                      <option value="Small (6x6 ft)">Small (6x6 ft)</option>
+                      <option value="Medium (8x8 ft)">Medium (8x8 ft)</option>
+                      <option value="Large (10x10 ft)">Large (10x10 ft)</option>
+                      <option value="Extra Large (12x12 ft)">Extra Large (12x12 ft)</option>
+                      <option value="Custom">Custom</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stall Category
+                    </label>
+                    <select
+                      value={formData.stallCategory}
+                      onChange={(e) => handleInputChange('stallCategory', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select category</option>
+                      <option value="Food & Beverage">Food & Beverage</option>
+                      <option value="Arts & Crafts">Arts & Crafts</option>
+                      <option value="Technology">Technology</option>
+                      <option value="Fashion & Accessories">Fashion & Accessories</option>
+                      <option value="Health & Wellness">Health & Wellness</option>
+                      <option value="Education">Education</option>
+                      <option value="Entertainment">Entertainment</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
                 </div>
               </CardContent>

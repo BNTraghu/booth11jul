@@ -78,9 +78,11 @@ export const Events: React.FC = () => {
   };
 
   const handleEdit = (event: Event) => {
+    console.log('🔍 handleEdit called with event:', event);
     setSelectedEvent(event);
+    
     // Map Event to ExtendedEventFormData with default values for missing fields
-    setEditFormData({
+    const editData = {
       id: event.id,
       title: event.title,
       description: event.description || '',
@@ -106,7 +108,12 @@ export const Events: React.FC = () => {
       cateringAllowed: event.cateringAllowed || false,
       alcoholAllowed: event.alcoholAllowed || false,
       smokingAllowed: event.smokingAllowed || false,
-    });
+    };
+    
+    console.log('📝 Setting editFormData:', editData);
+    console.log('📸 Current eventImageUrl:', event.eventImageUrl);
+    
+    setEditFormData(editData);
     setShowEditModal(true);
   };
 
@@ -117,6 +124,8 @@ export const Events: React.FC = () => {
 
   const validateEditForm = (): boolean => {
     if (!editFormData) return false;
+    
+    console.log('🔍 Starting validateEditForm with editFormData:', editFormData);
     
     const errors: { [key: string]: string } = {};
     
@@ -183,28 +192,32 @@ export const Events: React.FC = () => {
       errors.maxCapacity = 'Maximum capacity must be at least 10';
     }
 
-    // Image validation
+    // Image validation - Make image optional for updates
+    // Only require image if both current image and new image are missing
     if (!editFormData.eventImage && !editFormData.eventImageUrl) {
-      errors.eventImage = 'Event image is required';
+      // Don't require image for updates - it's optional
+      // errors.eventImage = 'Event image is required';
     }
 
+    console.log('❌ Validation errors found:', errors);
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleSaveEdit = async () => {
-    if (!editFormData) return;
+    if (editFormData) {
+      console.log('🔍 handleSaveEdit called with data:', editFormData);
+      
+      if (!validateEditForm()) {
+        console.log('❌ Form validation failed');
+        return;
+      }
 
-    // Validate form before saving
-    if (!validateEditForm()) {
-      return;
-    }
-
-    try {
       let imageUrl = editFormData.eventImageUrl;
 
       // Upload image to Supabase storage if a new image is selected
       if (editFormData.eventImage) {
+        console.log('📤 Uploading new image...');
         const fileExt = editFormData.eventImage.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `event-images/${fileName}`;
@@ -214,7 +227,9 @@ export const Events: React.FC = () => {
           .upload(filePath, editFormData.eventImage);
 
         if (uploadError) {
-          throw new Error(`Image upload failed: ${uploadError.message}`);
+          console.error('❌ Image upload failed:', uploadError);
+          showNotification(`Image upload failed: ${uploadError.message}`, 'error');
+          return;
         }
 
         // Get public URL
@@ -223,9 +238,9 @@ export const Events: React.FC = () => {
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
+        console.log('✅ Image uploaded successfully:', imageUrl);
       }
 
-      // Update event in Supabase
       const { error } = await supabase
         .from('events')
         .update({
@@ -256,39 +271,33 @@ export const Events: React.FC = () => {
         .eq('id', editFormData.id);
 
       if (error) {
-        throw new Error(error.message);
+        console.error('❌ Update failed:', error);
+        showNotification('Failed to update event: ' + error.message, 'error');
+      } else {
+        console.log('✅ Update successful');
+        showNotification('Event updated successfully!', 'success');
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedEvent(null);
+        refetch();
       }
-
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedEvent(null);
-      refetch(); // reload events from Supabase
-      
-    } catch (error) {
-      console.error('Error updating event:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update event. Please try again.';
-      setEditErrors({ submit: errorMessage });
     }
   };
 
   const handleConfirmDelete = async () => {
     if (selectedEvent) {
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('events')
         .delete()
         .eq('id', selectedEvent.id);
 
-      console.log('Delete response:', { error, data, id: selectedEvent.id });
-
-      if (!error) {
+      if (error) {
+        showNotification('Failed to delete event: ' + error.message, 'error');
+      } else {
+        showNotification('Event deleted successfully!', 'success');
         setShowDeleteModal(false);
         setSelectedEvent(null);
-        refetch(); // reload events from Supabase
-        if (Array.isArray(data) && (data as any[]).length === 0) {
-          alert('No event was deleted. This may be due to row-level security or a missing ID.');
-        }
-      } else {
-        alert('Failed to delete event: ' + error.message);
+        refetch();
       }
     }
   };
@@ -303,25 +312,39 @@ export const Events: React.FC = () => {
   };
 
   const handleImageUpload = (file: File) => {
-    if (!editFormData) return;
+    console.log('📸 handleImageUpload called with file:', file);
+    if (!editFormData) {
+      console.log('❌ No editFormData available');
+      return;
+    }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
+      console.log('❌ Invalid file type:', file.type);
       setEditErrors(prev => ({ ...prev, eventImage: 'Please select a valid image file' }));
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
+      console.log('❌ File too large:', file.size);
       setEditErrors(prev => ({ ...prev, eventImage: 'Image size must be less than 5MB' }));
       return;
     }
 
-    setEditFormData(prev => prev ? ({
-      ...prev,
-      eventImage: file,
-      eventImageUrl: URL.createObjectURL(file)
-    }) : null);
+    console.log('✅ File validation passed, updating editFormData');
+    const objectUrl = URL.createObjectURL(file);
+    console.log('🔗 Created object URL:', objectUrl);
+
+    setEditFormData(prev => {
+      const newData = prev ? {
+        ...prev,
+        eventImage: file,
+        eventImageUrl: objectUrl
+      } : null;
+      console.log('📝 Updated editFormData:', newData);
+      return newData;
+    });
 
     // Clear error
     if (editErrors.eventImage) {
@@ -337,6 +360,47 @@ export const Events: React.FC = () => {
       eventImage: null,
       eventImageUrl: ''
     }) : null);
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
   return (
@@ -699,8 +763,16 @@ export const Events: React.FC = () => {
                     type="text"
                     value={editFormData.title}
                     onChange={(e) => setEditFormData({...editFormData, title: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      editErrors.title ? 'border-red-300' : 'border-gray-300'
+                    }`}
                   />
+                  {editErrors.title && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      {editErrors.title}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -709,32 +781,98 @@ export const Events: React.FC = () => {
                     value={editFormData.description || ''}
                     onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      editErrors.description ? 'border-red-300' : 'border-gray-300'
+                    }`}
                   />
+                  {editErrors.description && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <AlertTriangle className="h-4 w-4 mr-1" />
+                      {editErrors.description}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Event Start Date *</label>
                     <input
                       type="date"
                       value={editFormData.eventDate}
                       onChange={(e) => setEditFormData({...editFormData, eventDate: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        editErrors.eventDate ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     />
+                    {editErrors.eventDate && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        {editErrors.eventDate}
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Event End Date *</label>
+                    <input
+                      type="date"
+                      value={editFormData.eventEndDate}
+                      onChange={(e) => setEditFormData({...editFormData, eventEndDate: e.target.value})}
+                      min={editFormData.eventDate || new Date().toISOString().split('T')[0]}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        editErrors.eventEndDate ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {editErrors.eventEndDate && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        {editErrors.eventEndDate}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Event Start Time *</label>
                     <div className="relative">
                       <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       <input
                         type="time"
                         value={editFormData.eventTime}
                         onChange={(e) => setEditFormData({...editFormData, eventTime: e.target.value})}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          editErrors.eventTime ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       />
                     </div>
+                    {editErrors.eventTime && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        {editErrors.eventTime}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Event End Time *</label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="time"
+                        value={editFormData.eventEndTime}
+                        onChange={(e) => setEditFormData({...editFormData, eventEndTime: e.target.value})}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          editErrors.eventEndTime ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    {editErrors.eventEndTime && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        {editErrors.eventEndTime}
+                      </p>
+                    )}
                   </div>
                 </div>
 

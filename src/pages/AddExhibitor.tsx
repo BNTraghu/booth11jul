@@ -355,54 +355,73 @@ export const AddExhibitor: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
+    if (!validateStep(currentStep)) {
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
+      const insertData = {
+        // Company Information
+        company_name: formData.companyName,
+        company_description: formData.companyDescription,
+        established_year: formData.establishedYear,
+        company_size: formData.companySize,
+        website: formData.website,
+        
+        // Contact Information
+        contact_person: formData.contactPerson,
+        designation: formData.designation,
+        email: formData.email,
+        phone: formData.phone,
+        alternate_phone: formData.alternatePhone,
+        alternate_email: formData.alternateEmail,
+        
+        // Business Details
+        category: formData.category,
+        sub_category: formData.subCategory,
+        business_type: formData.businessType,
+        gst_number: formData.gstNumber,
+        pan_number: formData.panNumber,
+        
+        // Location & Address
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        country: formData.country,
+        
+        // Exhibition Details
+        booth_preference: formData.boothPreference,
+        booth_size: formData.boothSize,
+        special_requirements: formData.specialRequirements,
+        previous_exhibitions: formData.previousExhibitions,
+        expected_visitors: formData.expectedVisitors,
+        
+        // Products & Services
+        products: formData.products,
+        services: formData.services,
+        target_audience: formData.targetAudience,
+        
+        // Payment & Billing
+        registration_fee: formData.registrationFee,
+        payment_method: formData.paymentMethod,
+        billing_address: formData.billingAddress,
+        
+        // Additional Information
+        social_media_links: formData.socialMediaLinks,
+        
+        // Settings
+        status: formData.status,
+        payment_status: formData.paymentStatus,
+        send_confirmation_email: formData.sendConfirmationEmail,
+        allow_marketing_emails: formData.allowMarketingEmails
+      };
+
       const { data, error } = await supabase
         .from('exhibitors')
-        .insert({
-          company_name: formData.companyName,
-          company_description: formData.companyDescription,
-          established_year: formData.establishedYear,
-          company_size: formData.companySize,
-          website: formData.website,
-          contact_person: formData.contactPerson,
-          designation: formData.designation,
-          email: formData.email,
-          phone: formData.phone,
-          alternate_email: formData.alternateEmail,
-          alternate_phone: formData.alternatePhone,
-          category: formData.category,
-          sub_category: formData.subCategory,
-          business_type: formData.businessType,
-          gst_number: formData.gstNumber,
-          pan_number: formData.panNumber,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          pincode: formData.pincode,
-          country: formData.country,
-          booth_preference: formData.boothPreference,
-          booth_size: formData.boothSize,
-          special_requirements: formData.specialRequirements,
-          previous_exhibitions: formData.previousExhibitions,
-          expected_visitors: formData.expectedVisitors,
-          products: formData.products,
-          services: formData.services,
-          target_audience: formData.targetAudience,
-          registration_fee: formData.registrationFee,
-          payment_method: formData.paymentMethod,
-          billing_address: formData.billingAddress,
-          social_media_links: formData.socialMediaLinks,
-          documents: formData.documents,
-          status: formData.status,
-          payment_status: formData.paymentStatus,
-          send_confirmation_email: formData.sendConfirmationEmail,
-          allow_marketing_emails: formData.allowMarketingEmails,
-          created_at: new Date().toISOString(),
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -410,19 +429,62 @@ export const AddExhibitor: React.FC = () => {
         throw new Error(error.message);
       }
 
-      console.log('Exhibitor created successfully:', data);
-
+      showNotification('Exhibitor registered successfully!', 'success');
       setSubmitSuccess(true);
-
+      
+      // Redirect after success
       setTimeout(() => {
         navigate('/exhibitors');
       }, 2000);
+      
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create exhibitor. Please try again.';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to register exhibitor. Please try again.';
       setErrors({ submit: errorMessage });
+      showNotification(errorMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
   const steps = [

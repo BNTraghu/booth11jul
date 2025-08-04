@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -20,31 +20,38 @@ interface ExtendedVenueFormData {
   memberCount: number;
   facilities: string[];
   amenities: string[];
+  description: string;
   status: 'active' | 'inactive' | 'pending';
-  // Extended fields
-  addressLine1?: string;
-  addressLandmark?: string;
-  addressStandard?: string;
-  areaSqFt?: number;
-  kindOfSpace?: string;
-  isCovered?: boolean;
-  pricingPerDay?: number;
-  facilityAreaSqFt?: number;
-  noOfStalls?: number;
-  facilityCovered?: boolean;
-  noOfFlats?: number;
+  // Extended Fields
+  addressLine1: string;
+  addressLandmark: string;
+  addressStandard: string;
+  areaSqFt: number;
+  kindOfSpace: string;
+  isCovered: boolean;
+  pricingPerDay: number;
+  facilityAreaSqFt: number;
+  noOfStalls: number;
+  facilityCovered: boolean;
+  noOfFlats: number;
   // Google Maps fields
-  latitude?: number;
-  longitude?: number;
-  formattedAddress?: string;
+  latitude: number;
+  longitude: number;
+  formattedAddress: string;
   // Custom Contact Information
-  customContacts?: Array<{
+  customContacts: Array<{
     id: string;
     name: string;
     email: string;
     phone: string;
     role: string;
   }>;
+  // Additional Settings (matching AddVenue)
+  availableHours: string;
+  parkingSpaces: number;
+  cateringAllowed: boolean;
+  alcoholAllowed: boolean;
+  smokingAllowed: boolean;
 }
 
 export const Venues: React.FC = () => {
@@ -57,7 +64,8 @@ export const Venues: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editFormData, setEditFormData] = useState<Venue | null>(null);
+  const [editFormData, setEditFormData] = useState<ExtendedVenueFormData | null>(null);
+  const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
 
   const filteredVenues = venues.filter(venue => {
     const matchesFilter = filter === 'all' || venue.status === filter;
@@ -85,7 +93,44 @@ export const Venues: React.FC = () => {
 
   const handleEdit = (venue: Venue) => {
     setSelectedVenue(venue);
-    setEditFormData({ ...venue });
+    // Map Venue to ExtendedVenueFormData with existing values
+    setEditFormData({
+      id: venue.id,
+      name: venue.name || '',
+      location: venue.location || '',
+      contactPerson: venue.contactPerson || '',
+      email: venue.email || '',
+      phone: venue.phone || '',
+      memberCount: venue.memberCount || 0,
+      facilities: venue.facilities || [],
+      amenities: venue.amenities || [],
+      description: venue.description || '',
+      status: venue.status || 'active',
+      // Extended Fields
+      addressLine1: venue.addressLine1 || '',
+      addressLandmark: venue.addressLandmark || '',
+      addressStandard: venue.addressStandard || '',
+      areaSqFt: venue.areaSqFt || 0,
+      kindOfSpace: venue.kindOfSpace || '',
+      isCovered: venue.isCovered || false,
+      pricingPerDay: venue.pricingPerDay || 0,
+      facilityAreaSqFt: venue.facilityAreaSqFt || 0,
+      noOfStalls: venue.noOfStalls || 0,
+      facilityCovered: venue.facilityCovered || false,
+      noOfFlats: venue.noOfFlats || 0,
+      // Google Maps fields
+      latitude: venue.latitude || 0,
+      longitude: venue.longitude || 0,
+      formattedAddress: venue.formattedAddress || '',
+      // Custom Contact Information
+      customContacts: venue.customContacts || [],
+      // Additional Settings (matching AddVenue)
+      availableHours: venue.availableHours || '',
+      parkingSpaces: venue.parkingSpaces || 0,
+      cateringAllowed: venue.cateringAllowed || false,
+      alcoholAllowed: venue.alcoholAllowed || false,
+      smokingAllowed: venue.smokingAllowed || false
+    });
     setShowEditModal(true);
   };
 
@@ -147,87 +192,196 @@ export const Venues: React.FC = () => {
     }
   };
 
+  const validateEditForm = (): boolean => {
+    if (!editFormData) return false;
+    
+    const errors: {[key: string]: string} = {};
+    
+    // Basic validation
+    if (!editFormData.name.trim()) {
+      errors.name = 'Venue name is required';
+    }
+    if (!editFormData.location.trim()) {
+      errors.location = 'Location is required';
+    }
+    if (!editFormData.contactPerson.trim()) {
+      errors.contactPerson = 'Contact person is required';
+    }
+    if (!editFormData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(editFormData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    if (!editFormData.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    }
+    if ((editFormData.memberCount || 0) <= 0) {
+      errors.memberCount = 'Capacity must be greater than 0';
+    }
+    
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSaveEdit = async () => {
     if (editFormData) {
-      // Basic validation
-      const errors: { [key: string]: string } = {};
+      console.log('Starting venue update with data:', editFormData);
       
-      if (!editFormData.name.trim()) {
-        errors.name = 'Venue name is required';
-      } else if (editFormData.name.trim().length < 3) {
-        errors.name = 'Venue name must be at least 3 characters';
-      }
-
-      if (!editFormData.location?.trim()) {
-        errors.location = 'Location is required';
-      }
-
-      if (!editFormData.contactPerson?.trim()) {
-        errors.contactPerson = 'Contact person is required';
-      }
-
-      if (editFormData.memberCount <= 0) {
-        errors.memberCount = 'Capacity must be greater than 0';
-      }
-
-      if (Object.keys(errors).length > 0) {
-        alert('Please fix the following errors:\n' + Object.values(errors).join('\n'));
+      // Validate the final form
+      if (!validateEditForm()) {
+        showNotification('Please fix the validation errors before saving.', 'error');
         return;
       }
-
+      
       // Check for duplicates
       const duplicateCheck = await checkForDuplicates(editFormData.id);
       if (duplicateCheck.hasDuplicates) {
-        alert(duplicateCheck.message);
+        showNotification(duplicateCheck.message, 'error');
         return;
       }
 
-      const { error } = await supabase
-        .from('venues')
-        .update({
-          name: editFormData.name,
-          location: editFormData.location,
-          contact_person: editFormData.contactPerson,
-          email: editFormData.email,
-          phone: editFormData.phone,
-          capacity: editFormData.memberCount,
-          facilities: editFormData.facilities,
-          amenities: editFormData.amenities,
-          status: editFormData.status,
-        })
-        .eq('id', editFormData.id);
+      const updateData = {
+        // Basic Information
+        name: editFormData.name,
+        location: editFormData.location,
+        description: editFormData.description,
+        status: editFormData.status,
+        
+        // Contact Information
+        contact_person: editFormData.contactPerson,
+        email: editFormData.email,
+        phone: editFormData.phone,
+        
+        // Capacity & Facilities
+        capacity: editFormData.memberCount,
+        facilities: editFormData.facilities,
+        amenities: editFormData.amenities,
+        
+        // Extended Fields
+        address_line1: editFormData.addressLine1,
+        address_landmark: editFormData.addressLandmark,
+        address_standard: editFormData.addressStandard,
+        area_sq_ft: editFormData.areaSqFt,
+        kind_of_space: editFormData.kindOfSpace,
+        is_covered: editFormData.isCovered,
+        pricing_per_day: editFormData.pricingPerDay,
+        facility_area_sq_ft: editFormData.facilityAreaSqFt,
+        no_of_stalls: editFormData.noOfStalls,
+        facility_covered: editFormData.facilityCovered,
+        no_of_flats: editFormData.noOfFlats,
+        
+        // Google Maps fields
+        latitude: editFormData.latitude,
+        longitude: editFormData.longitude,
+        formatted_address: editFormData.formattedAddress,
+        
+        // Custom Contact Information
+        custom_contacts: editFormData.customContacts,
+        
+        // Additional Settings
+        available_hours: editFormData.availableHours,
+        parking_spaces: editFormData.parkingSpaces,
+        catering_allowed: editFormData.cateringAllowed,
+        alcohol_allowed: editFormData.alcoholAllowed,
+        smoking_allowed: editFormData.smokingAllowed
+      };
+      
+      console.log('Update data being sent:', updateData);
+      console.log('Updating venue ID:', editFormData.id);
 
-      if (!error) {
-        setShowEditModal(false);
-        setEditFormData(null);
-        setSelectedVenue(null);
-        refetch(); // reload venues from Supabase
-      } else {
-        alert('Failed to update venue: ' + error.message);
+      try {
+        const { data, error } = await supabase
+          .from('venues')
+          .update(updateData)
+          .eq('id', editFormData.id)
+          .select();
+
+        if (error) {
+          console.error('Supabase update error:', error);
+          showNotification('Failed to update venue: ' + error.message, 'error');
+        } else {
+          console.log('Update successful - returned data:', data);
+          console.log('Number of rows updated:', data?.length || 0);
+          console.log('Updated venue data:', data?.[0]);
+          
+          showNotification('Venue updated successfully!', 'success');
+          setShowEditModal(false);
+          setEditFormData(null);
+          setSelectedVenue(null);
+          
+          // Force a refetch with a small delay to ensure database has updated
+          setTimeout(() => {
+            console.log('Refetching venue data...');
+            refetch();
+          }, 500);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        showNotification('Unexpected error occurred: ' + err, 'error');
       }
+    } else {
+      console.error('No editFormData available');
+      showNotification('No data to update', 'error');
     }
   };
 
   const handleConfirmDelete = async () => {
     if (selectedVenue) {
-      const { error, data } = await supabase
+      const { error } = await supabase
         .from('venues')
         .delete()
         .eq('id', selectedVenue.id);
 
-      console.log('Delete response:', { error, data, id: selectedVenue.id });
-
-      if (!error) {
+      if (error) {
+        showNotification('Failed to delete venue: ' + error.message, 'error');
+      } else {
+        showNotification('Venue deleted successfully!', 'success');
         setShowDeleteModal(false);
         setSelectedVenue(null);
-        refetch(); // reload venues from Supabase
-        if (Array.isArray(data) && (data as any[]).length === 0) {
-          alert('No venue was deleted. This may be due to row-level security or a missing ID.');
-        }
-      } else {
-        alert('Failed to delete venue: ' + error.message);
+        refetch();
       }
     }
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
   const closeModals = () => {
@@ -236,6 +390,7 @@ export const Venues: React.FC = () => {
     setShowDeleteModal(false);
     setSelectedVenue(null);
     setEditFormData(null);
+    setEditErrors({});
   };
 
   // Custom Contact Management Functions
@@ -702,142 +857,409 @@ export const Venues: React.FC = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Edit Venue</h2>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Edit Venue</h2>
+                  <p className="text-gray-600">Update venue information</p>
+                </div>
                 <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
                   <X className="h-6 w-6" />
                 </button>
               </div>
             </div>
-            
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Venue Name</label>
-                <input
-                  type="text"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                <input
-                  type="text"
-                  value={editFormData.location || ''}
-                  onChange={(e) => setEditFormData({...editFormData, location: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+            <div className="p-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-6">
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Main Form */}
+                  <div className="space-y-6">
+                    {/* Basic Information */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <Building2 className="h-5 w-5 mr-2" />
+                          Basic Information
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Venue Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.name}
+                            onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.name ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter venue name"
+                          />
+                          {editErrors.name && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.name}
+                            </p>
+                          )}
+                        </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person</label>
-                  <input
-                    type="text"
-                    value={editFormData.contactPerson || ''}
-                    onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Address Line 1 *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.addressLine1}
+                            onChange={(e) => setEditFormData({...editFormData, addressLine1: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.addressLine1 ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Flat/Lane/Building..."
+                          />
+                          {editErrors.addressLine1 && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.addressLine1}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Location *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.location}
+                            onChange={(e) => setEditFormData({...editFormData, location: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.location ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="City, State, Country"
+                          />
+                          {editErrors.location && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.location}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Description
+                          </label>
+                          <textarea
+                            value={editFormData.description}
+                            onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
+                            rows={4}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Describe the venue..."
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Contact Information */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <User className="h-5 w-5 mr-2" />
+                          Contact Information
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Contact Person *
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.contactPerson}
+                              onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.contactPerson ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                              placeholder="Enter contact person name"
+                            />
+                            {editErrors.contactPerson && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.contactPerson}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Email *
+                            </label>
+                            <input
+                              type="email"
+                              value={editFormData.email}
+                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.email ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                              placeholder="Enter email address"
+                            />
+                            {editErrors.email && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.email}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Phone *
+                            </label>
+                            <input
+                              type="tel"
+                              value={editFormData.phone}
+                              onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.phone ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                              placeholder="Enter phone number"
+                            />
+                            {editErrors.phone && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.phone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Maximum Capacity *
+                          </label>
+                          <input
+                            type="number"
+                            value={editFormData.memberCount}
+                            onChange={(e) => setEditFormData({...editFormData, memberCount: parseInt(e.target.value) || 0})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.memberCount ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter maximum capacity"
+                            min="1"
+                          />
+                          {editErrors.memberCount && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.memberCount}
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Facilities & Amenities */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <Building2 className="h-5 w-5 mr-2" />
+                          Facilities & Amenities
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Facilities (comma-separated)
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.facilities.join(', ')}
+                            onChange={(e) => setEditFormData({...editFormData, facilities: e.target.value.split(', ').map(f => f.trim()).filter(f => f)})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Auditorium, Community Hall, Garden Area"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Amenities (comma-separated)
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.amenities.join(', ')}
+                            onChange={(e) => setEditFormData({...editFormData, amenities: e.target.value.split(', ').map(f => f.trim()).filter(f => f)})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Wi-Fi, Power Outlets, Lighting"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Extended Details */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <MapPin className="h-5 w-5 mr-2" />
+                          Extended Details
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Landmark
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.addressLandmark}
+                              onChange={(e) => setEditFormData({...editFormData, addressLandmark: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Nearby landmark"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Area (sq ft)
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.areaSqFt}
+                              onChange={(e) => setEditFormData({...editFormData, areaSqFt: parseInt(e.target.value) || 0})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Total area"
+                              min="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Kind of Space
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.kindOfSpace}
+                              onChange={(e) => setEditFormData({...editFormData, kindOfSpace: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="e.g., Indoor, Outdoor, Mixed"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Pricing Per Day
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.pricingPerDay}
+                              onChange={(e) => setEditFormData({...editFormData, pricingPerDay: parseInt(e.target.value) || 0})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Daily rate"
+                              min="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Number of Stalls
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.noOfStalls}
+                              onChange={(e) => setEditFormData({...editFormData, noOfStalls: parseInt(e.target.value) || 0})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Available stalls"
+                              min="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Available Hours
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.availableHours}
+                              onChange={(e) => setEditFormData({...editFormData, availableHours: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="e.g., 9:00 AM - 11:00 PM"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.isCovered}
+                              onChange={(e) => setEditFormData({...editFormData, isCovered: e.target.checked})}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Covered Space</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.facilityCovered}
+                              onChange={(e) => setEditFormData({...editFormData, facilityCovered: e.target.checked})}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Facility Covered</span>
+                          </label>
+
+                          {/* <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.cateringAllowed}
+                              onChange={(e) => setEditFormData({...editFormData, cateringAllowed: e.target.checked})}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Catering Allowed</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.alcoholAllowed}
+                              onChange={(e) => setEditFormData({...editFormData, alcoholAllowed: e.target.checked})}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Alcohol Allowed</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.smokingAllowed}
+                              onChange={(e) => setEditFormData({...editFormData, smokingAllowed: e.target.checked})}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Smoking Allowed</span>
+                          </label> */}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={editFormData.email || ''}
-                    onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={editFormData.phone || ''}
-                    onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Capacity</label>
-                  <input
-                    type="number"
-                    value={editFormData.memberCount}
-                    onChange={(e) => setEditFormData({...editFormData, memberCount: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Active Events</label>
-                  <input
-                    type="number"
-                    value={editFormData.activeEvents}
-                    onChange={(e) => setEditFormData({...editFormData, activeEvents: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={editFormData.status}
-                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                <div className="space-y-3">
+                  <Button
+                    type="submit"
+                    className="w-full flex items-center justify-center space-x-2"
                   >
-                    <option value="active">Active</option>
-                    <option value="pending">Pending</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                    <Save className="h-4 w-4" />
+                    <span>Save Changes</span>
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeModals}
+                    className="w-full"
+                  >
+                    Cancel
+                  </Button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Total Revenue</label>
-                <input
-                  type="number"
-                  value={editFormData.totalRevenue}
-                  onChange={(e) => setEditFormData({...editFormData, totalRevenue: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Facilities (comma-separated)</label>
-                <input
-                  type="text"
-                  value={editFormData.facilities.join(', ')}
-                  onChange={(e) => setEditFormData({...editFormData, facilities: e.target.value.split(', ').map(f => f.trim())})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Auditorium, Community Hall, Garden Area"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Amenities (comma-separated)</label>
-                <input
-                  type="text"
-                  value={editFormData.amenities.join(', ')}
-                  onChange={(e) => setEditFormData({...editFormData, amenities: e.target.value.split(', ').map(f => f.trim())})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Wi-Fi, Power Outlets, Lighting"
-                />
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
-              <Button variant="outline" onClick={closeModals}>Cancel</Button>
-              <Button onClick={handleSaveEdit}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </Button>
+              </form>
             </div>
           </div>
         </div>

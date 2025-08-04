@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, UserPlus, Mail, Phone, Search, Filter, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Mail, Phone, Search, Filter, Eye, User as UserIcon, MapPin } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -54,7 +54,6 @@ const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; chi
 const ViewUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () => void }> = ({ user, isOpen, onClose }) => {
   if (!user) return null;
 
-
   function getRoleVariant(role: string): "default" | "error" | "success" | "warning" | "info" | undefined {
     switch (role) {
       case 'super_admin':
@@ -74,78 +73,110 @@ const ViewUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="User Details">
-      <div className="space-y-6">
-        <div className="flex items-center space-x-4">
-          <div className="h-16 w-16 rounded-full bg-gray-300 flex items-center justify-center">
-            <span className="text-lg font-medium text-gray-700">
-              {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-            </span>
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{user.name}</h3>
-            <p className="text-sm text-gray-500">{user.email}</p>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">User Details</h2>
+              <p className="text-gray-600">User information</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X className="h-6 w-6" />
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <Badge variant={getRoleVariant(user.role)}>
-                {user.role.replace('_', ' ').toUpperCase()}
-              </Badge>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <Badge variant={user.status === 'active' ? 'success' : 'error'}>
-                {user.status.toUpperCase()}
-              </Badge>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              {user.phone || 'N/A'}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              {user.city || 'N/A'}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Last Login</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              {user.last_login ? (
-                <div>
-                  <div>{new Date(user.last_login).toLocaleDateString()}</div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(user.last_login).toLocaleTimeString()}
-                  </div>
+        <div className="p-6">
+          <div className="space-y-6">
+            {/* User Header */}
+            <div className="flex items-center space-x-4">
+              <div className="h-16 w-16 rounded-full bg-gray-300 flex items-center justify-center">
+                <span className="text-lg font-medium text-gray-700">
+                  {user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{user.name}</h3>
+                <p className="text-sm text-gray-500">{user.email}</p>
+                <div className="flex items-center space-x-2 mt-1">
+                  <Badge variant={getRoleVariant(user.role)}>
+                    {user.role.replace('_', ' ').toUpperCase()}
+                  </Badge>
+                  <Badge variant={user.status === 'active' ? 'success' : 'error'}>
+                    {user.status.toUpperCase()}
+                  </Badge>
                 </div>
-              ) : (
-                'Never'
-              )}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+            {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <div className="p-3 bg-gray-50 rounded-lg">{user.name}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <div className="p-3 bg-gray-50 rounded-lg">{user.email}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <div className="p-3 bg-gray-50 rounded-lg">{user.phone || 'N/A'}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                <div className="p-3 bg-gray-50 rounded-lg">{user.city || 'N/A'}</div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <Badge variant={getRoleVariant(user.role)}>
+                    {user.role.replace('_', ' ').toUpperCase()}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <Badge variant={user.status === 'active' ? 'success' : 'error'}>
+                    {user.status.toUpperCase()}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Login</label>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  {user.last_login ? (
+                    <div>
+                      <div>{new Date(user.last_login).toLocaleDateString()}</div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(user.last_login).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  ) : (
+                    'Never'
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 };
 
@@ -157,23 +188,38 @@ const EditUserModal: React.FC<{
   onSave: (formData: User) => void;
   setFormData: (user: User | null) => void;
 }> = ({ user, isOpen, onClose, onSave, setFormData }) => {
-  if (!user) return null;
+  if (!user || !isOpen) return null;
+  
   const [errors, setErrors] = useState<FormErrors>({});
   const { hasRole } = useAuth();
 
   const validateForm = (formData: User): boolean => {
     const newErrors: FormErrors = {};
+    
+    // Basic validation
     if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     if (!formData.phone || !formData.phone.trim()) newErrors.phone = 'Phone number is required';
     if (!formData.role) newErrors.role = 'Role is required';
     if (formData.role !== 'super_admin' && !formData.city) newErrors.city = 'City is required for this role';
+    
+    // Email format validation
+    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    
+    // Phone format validation
+    if (formData.phone && !/^[\+]?[1-9][\d]{0,15}$/.test(formData.phone.replace(/\s/g, ''))) {
+      newErrors.phone = 'Please enter a valid phone number';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleChange = (field: keyof User, value: string) => {
-    setFormData({ ...user, [field]: value });
+  const handleChange = (field: keyof User, value: any) => {
+    const updatedUser = { ...user, [field]: value };
+    setFormData(updatedUser);
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
@@ -195,93 +241,149 @@ const EditUserModal: React.FC<{
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit User">
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-          <input
-            type="text"
-            value={user.name}
-            onChange={e => handleChange('name', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          {errors.name && <div className="text-red-500 text-xs mt-1">{errors.name}</div>}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Edit User</h2>
+              <p className="text-gray-600">Update user information</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X className="h-6 w-6" />
+            </button>
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            value={user.email}
-            onChange={e => handleChange('email', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          {errors.email && <div className="text-red-500 text-xs mt-1">{errors.email}</div>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-          <input
-            type="tel"
-            value={user.phone || ''}
-            onChange={e => handleChange('phone', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          {errors.phone && <div className="text-red-500 text-xs mt-1">{errors.phone}</div>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-          <select
-            value={user.role}
-            onChange={e => handleChange('role', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="super_admin">Super Admin</option>
-            <option value="admin">Admin</option>
-            <option value="support_tech">Support Tech</option>
-            <option value="sales_marketing">Sales & Marketing</option>
-            <option value="accounting">Accounting</option>
-            <option value="logistics">Logistics</option>
-          </select>
-          {errors.role && <div className="text-red-500 text-xs mt-1">{errors.role}</div>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-          <input
-            type="text"
-            value={user.city || ''}
-            onChange={e => handleChange('city', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          {errors.city && <div className="text-red-500 text-xs mt-1">{errors.city}</div>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            value={user.status}
-            onChange={e => handleChange('status', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-        </div>
-        <div className="flex space-x-3 pt-4">
-          <Button
-            onClick={handleSave}
-            className="flex-1 flex items-center justify-center space-x-2"
-          >
-            <Save className="h-4 w-4" />
-            <span>Save Changes</span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
+
+        <div className="p-6">
+          <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={user.name}
+                  onChange={e => handleChange('name', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.name ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter full name"
+                />
+                {errors.name && <div className="text-red-500 text-xs mt-1">{errors.name}</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={user.email}
+                  onChange={e => handleChange('email', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.email ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter email address"
+                />
+                {errors.email && <div className="text-red-500 text-xs mt-1">{errors.email}</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone *
+                </label>
+                <input
+                  type="tel"
+                  value={user.phone || ''}
+                  onChange={e => handleChange('phone', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.phone ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter phone number"
+                />
+                {errors.phone && <div className="text-red-500 text-xs mt-1">{errors.phone}</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Role *
+                </label>
+                <select
+                  value={user.role}
+                  onChange={e => handleChange('role', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.role ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="super_admin">Super Admin</option>
+                  <option value="admin">Admin</option>
+                  <option value="support_tech">Support Tech</option>
+                  <option value="sales_marketing">Sales & Marketing</option>
+                  <option value="legal">Legal</option>
+                  <option value="logistics">Logistics</option>
+                  <option value="accounting">Accounting</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="society">Society</option>
+                  <option value="exhibitor">Exhibitor</option>
+                </select>
+                {errors.role && <div className="text-red-500 text-xs mt-1">{errors.role}</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  City *
+                </label>
+                <input
+                  type="text"
+                  value={user.city || ''}
+                  onChange={e => handleChange('city', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.city ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter city"
+                />
+                {errors.city && <div className="text-red-500 text-xs mt-1">{errors.city}</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Status *
+                </label>
+                <select
+                  value={user.status}
+                  onChange={e => handleChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Bottom Action Buttons */}
+            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+              
+              <Button
+                type="submit"
+                className="flex items-center space-x-2"
+              >
+                <Save className="h-4 w-4" />
+                <span>Save Changes</span>
+              </Button>
+            </div>
+          </form>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 };
 
@@ -414,54 +516,183 @@ export const Users: React.FC = () => {
 
   // 2. When editing, set editFormData and open modal
   const handleUpdate = (user: User) => {
-    setEditFormData({ ...user });
-    setEditModal({ isOpen: true, user });
+    // Only open modal if it's not already open or if it's a different user
+    if (!editModal.isOpen || editModal.user?.id !== user.id) {
+      setEditFormData(user);
+      setEditModal({ isOpen: true, user });
+    }
   };
 
   // 3. Update user in Supabase in Users page
   const handleSaveEdit = async (formData: User) => {
-    const { error } = await supabase
-      .from('users')
-      .update({
+    try {
+      console.log('formData:', formData);
+      
+      // Get the authenticated user from Supabase
+      const { data: session, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.session?.user) {
+        console.error('Session error:', sessionError || 'User not authenticated');
+        showNotification('You must be logged in to update user data', 'error');
+        return;
+      }
+
+      const authenticatedUser = session.session.user;
+      console.log('Authenticated user:', authenticatedUser);
+
+      // First, check if the authenticated user exists in our users table
+      const { data: currentUser, error: userError } = await supabase
+        .from('users')
+        .select('id, role, email')
+        .eq('email', authenticatedUser.email) // Use email instead of ID
+        .maybeSingle();
+
+      if (userError) {
+        console.error('Error fetching current user:', userError);
+        showNotification('Error fetching user data: ' + userError.message, 'error');
+        return;
+      }
+
+      if (!currentUser) {
+        console.error('Current user not found in database');
+        showNotification('User not found in database. Please contact administrator.', 'error');
+        return;
+      }
+
+      console.log('Current user from database:', currentUser);
+
+      // Check permissions
+      if (currentUser.role !== 'super_admin' && formData.id !== currentUser.id) {
+        showNotification('You can only update your own profile', 'error');
+        return;
+      }
+
+      // For super_admin, also verify the target user exists
+      if (currentUser.role === 'super_admin' && formData.id !== currentUser.id) {
+        const { data: targetUser, error: targetError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', formData.id)
+          .maybeSingle();
+
+        if (targetError) {
+          console.error('Error fetching target user:', targetError);
+          showNotification('Error fetching target user: ' + targetError.message, 'error');
+          return;
+        }
+
+        if (!targetUser) {
+          console.error('Target user not found');
+          showNotification('User to be updated not found in database', 'error');
+          return;
+        }
+      }
+
+      // Prepare update data
+      const updateData = {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
         role: formData.role,
         city: formData.city,
-        status: formData.status,
-      })
-      .eq('id', formData.id);
+        status: formData.status
+      };
 
-    if (!error) {
-      setEditModal({ isOpen: false, user: null });
-      setEditFormData(null);
-      refetch();
-    } else {
-      alert('Failed to update user: ' + error.message);
+      console.log('Updating user with data:', updateData);
+
+      // Perform the update
+      const { error } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', formData.id);
+
+      if (error) {
+        console.error('Supabase update error:', error);
+        showNotification('Failed to update user: ' + error.message, 'error');
+      } else {
+        showNotification('User updated successfully!', 'success');
+        
+        // Close modal and clear form data
+        setEditModal({ isOpen: false, user: null });
+        setEditFormData(null);
+        
+        // Refresh data
+        setTimeout(() => {
+          refetch();
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update user';
+      showNotification(errorMessage, 'error');
     }
   };
+  
 
   const handleDelete = (user: User) => {
     setDeleteModal({ isOpen: true, user });
   };
 
   const handleConfirmDelete = async (userId: any) => {
-    // Delete user from Supabase
-    const { error, data } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
+    try {
+      // Delete user from Supabase
+      const { error, data } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
 
-    if (!error) {
-      setDeleteModal({ isOpen: false, user: null });
-      refetch(); // reload users from Supabase
-      if (Array.isArray(data) && (data as any[]).length === 0) {
-        alert('No user was deleted. This may be due to row-level security or a missing ID.');
+      if (error) {
+        showNotification('Failed to delete user: ' + error.message, 'error');
+      } else {
+        showNotification('User deleted successfully!', 'success');
+        setDeleteModal({ isOpen: false, user: null });
+        refetch(); // reload users from Supabase
       }
-    } else {
-      setDeleteModal({ isOpen: false, user: null });
-      alert('Failed to delete user: ' + error.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
+      showNotification(errorMessage, 'error');
     }
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
 
@@ -760,7 +991,10 @@ export const Users: React.FC = () => {
       <EditUserModal
         user={editFormData}
         isOpen={editModal.isOpen}
-        onClose={() => { setEditModal({ isOpen: false, user: null }); setEditFormData(null); }}
+        onClose={() => { 
+          setEditModal({ isOpen: false, user: null }); 
+          setEditFormData(null); 
+        }}
         onSave={handleSaveEdit}
         setFormData={setEditFormData}
       />

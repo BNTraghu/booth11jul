@@ -28,6 +28,7 @@ interface FormData {
   name: string;
   location: string;
   contactPerson: string;
+  contactRole: string;
   email: string;
   phone: string;
   memberCount: number;
@@ -107,6 +108,7 @@ export const AddVenue: React.FC = () => {
     name: '',
     location: '',
     contactPerson: '',
+    contactRole: '',
     email: '',
     phone: '',
     memberCount: 0,
@@ -488,6 +490,14 @@ export const AddVenue: React.FC = () => {
       console.log('✅ Contact person validation passed');
     }
 
+    // Contact role validation
+    if (!formData.contactRole.trim()) {
+      newErrors.contactRole = 'Contact role is required';
+      console.log('❌ Contact role validation failed: empty');
+    } else {
+      console.log('✅ Contact role validation passed');
+    }
+
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
@@ -734,8 +744,7 @@ export const AddVenue: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('🚀 Starting venue submission...');
-    console.log('📋 Form data:', formData);
+    console.log('🔍 Starting form submission...');
     
     if (!validateForm()) {
       console.log('❌ Form validation failed');
@@ -746,22 +755,19 @@ export const AddVenue: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Check for duplicates before submitting
-      console.log('🔍 Checking for duplicates...');
+      // Check for duplicates
       const duplicateCheck = await checkForDuplicates();
       if (duplicateCheck.hasDuplicates) {
-        console.log('❌ Duplicate found:', duplicateCheck.message);
-        setErrors({ submit: duplicateCheck.message });
+        showNotification(duplicateCheck.message, 'error');
         setIsSubmitting(false);
         return;
       }
 
-      console.log('✅ No duplicates found');
-      
       const insertData = {
         name: formData.name,
         location: formData.location,
         contact_person: formData.contactPerson,
+        contact_role: formData.contactRole,
         email: formData.email,
         phone: formData.phone,
         capacity: formData.memberCount,
@@ -769,9 +775,7 @@ export const AddVenue: React.FC = () => {
         amenities: formData.amenities,
         description: formData.description,
         status: formData.status,
-        total_revenue: 0,
-        active_events: 0,
-        // Extended fields
+        // Extended Fields
         address_line1: formData.addressLine1,
         address_landmark: formData.addressLandmark,
         address_standard: formData.addressStandard,
@@ -783,23 +787,16 @@ export const AddVenue: React.FC = () => {
         no_of_stalls: formData.noOfStalls,
         facility_covered: formData.facilityCovered,
         no_of_flats: formData.noOfFlats,
-        // Google Maps fields
+        // Google Maps Fields
         latitude: formData.latitude,
         longitude: formData.longitude,
         formatted_address: formData.formattedAddress,
-        // Additional fields
-        available_hours: '9:00 AM - 11:00 PM', // Default available hours
-        parking_spaces: 0, // Default parking spaces
-        catering_allowed: false, // Default catering allowed
-        alcohol_allowed: false, // Default alcohol allowed
-        smoking_allowed: false, // Default smoking allowed
         // Custom Contact Information
         custom_contacts: formData.customContacts
       };
 
-      console.log('📤 Inserting data into Supabase:', insertData);
+      console.log('📝 Insert data:', insertData);
 
-      // Insert venue into Supabase
       const { data, error } = await supabase
         .from('venues')
         .insert(insertData)
@@ -807,11 +804,12 @@ export const AddVenue: React.FC = () => {
         .single();
 
       if (error) {
-        console.error('❌ Supabase insert error:', error);
+        console.error('❌ Database error:', error);
         throw new Error(error.message);
       }
-      
+
       console.log('✅ Venue created successfully:', data);
+      showNotification('Venue created successfully!', 'success');
       setSubmitSuccess(true);
       
       // Redirect after success
@@ -823,9 +821,51 @@ export const AddVenue: React.FC = () => {
       console.error('❌ Error creating venue:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create venue. Please try again.';
       setErrors({ submit: errorMessage });
+      showNotification(errorMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Notification function
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
+      type === 'success' ? 'bg-green-500 text-white' :
+      type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+    
+    notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+      notification.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          if (notification.parentElement) {
+            notification.remove();
+          }
+        }, 300);
+      }
+    }, 5000);
   };
 
   if (submitSuccess) {
@@ -848,36 +888,37 @@ export const AddVenue: React.FC = () => {
                 variant="outline" 
                 onClick={() => {
                   setSubmitSuccess(false);
-                  setFormData({
-                    name: '',
-                    location: '',
-                    contactPerson: '',
-                    email: '',
-                    phone: '',
-                    memberCount: 0,
-                    facilities: [],
-                    amenities: [],
-                    description: '',
-                    status: 'active',
-                    // Extended Fields
-                    addressLine1: '',
-                    addressLandmark: '',
-                    addressStandard: '',
-                    areaSqFt: 0,
-                    kindOfSpace: '',
-                    isCovered: false,
-                    pricingPerDay: 0,
-                    facilityAreaSqFt: 0,
-                    noOfStalls: 0,
-                    facilityCovered: false,
-                    noOfFlats: 0,
-                    // Google Maps Fields
-                    latitude: 0,
-                    longitude: 0,
-                    formattedAddress: '',
-                    // Custom Contact Information
-                    customContacts: []
-                  });
+                          setFormData({
+          name: '',
+          location: '',
+          contactPerson: '',
+          contactRole: '',
+          email: '',
+          phone: '',
+          memberCount: 0,
+          facilities: [],
+          amenities: [],
+          description: '',
+          status: 'active',
+          // Extended Fields
+          addressLine1: '',
+          addressLandmark: '',
+          addressStandard: '',
+          areaSqFt: 0,
+          kindOfSpace: '',
+          isCovered: false,
+          pricingPerDay: 0,
+          facilityAreaSqFt: 0,
+          noOfStalls: 0,
+          facilityCovered: false,
+          noOfFlats: 0,
+          // Google Maps Fields
+          latitude: 0,
+          longitude: 0,
+          formattedAddress: '',
+          // Custom Contact Information
+          customContacts: []
+        });
                 }}
                 className="w-full"
               >
@@ -1273,25 +1314,48 @@ export const AddVenue: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Contact Person *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.contactPerson}
-                    onChange={(e) => handleInputChange('contactPerson', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.contactPerson ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter contact person name"
-                  />
-                  {errors.contactPerson && (
-                    <p className="mt-1 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="h-4 w-4 mr-1" />
-                      {errors.contactPerson}
-                    </p>
-                  )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contact Person *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.contactPerson}
+                      onChange={(e) => handleInputChange('contactPerson', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.contactPerson ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter contact person name"
+                    />
+                    {errors.contactPerson && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.contactPerson}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Role *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.contactRole}
+                      onChange={(e) => handleInputChange('contactRole', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.contactRole ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Manager, Coordinator, etc."
+                    />
+                    {errors.contactRole && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.contactRole}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

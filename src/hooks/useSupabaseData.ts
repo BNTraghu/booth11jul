@@ -62,8 +62,42 @@ export function useSupabaseData<T>(
 
 // Specific hooks for each entity
 export const useUsers = () => {
-  const { data, loading, error, refetch } = useSupabaseData<User>('users');
-  return { users: data, loading, error, refetch };
+  const { data, loading, error, refetch } = useSupabaseData<any>('users');
+  
+  // Transform data to match our enhanced User interface
+  const users: User[] = data.map((user: any) => {
+    const transformedUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      city: user.city,
+      phone: user.phone,
+      status: user.status,
+      // Additional fields
+      firstName: user.first_name,
+      lastName: user.last_name,
+      address: user.address,
+      state: user.state,
+      pincode: user.pincode,
+      country: user.country,
+      dateOfBirth: user.date_of_birth,
+      gender: user.gender,
+      department: user.department,
+      designation: user.designation,
+      employeeId: user.employee_id,
+      joiningDate: user.joining_date,
+      emergencyContact: user.emergency_contact,
+      preferences: user.preferences,
+      last_login: user.last_login,
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    };
+    
+    return transformedUser;
+  });
+
+  return { users, loading, error, refetch };
 };
 
 export const useEvents = () => {
@@ -196,16 +230,71 @@ export const useExhibitors = () => {
   // Transform data to match our Exhibitor interface
   const exhibitors: Exhibitor[] = data.map((exhibitor: any) => ({
     id: exhibitor.id,
+    // Company Information
     companyName: exhibitor.company_name,
+    companyDescription: exhibitor.company_description,
+    establishedYear: exhibitor.established_year,
+    companySize: exhibitor.company_size,
+    website: exhibitor.website,
+    
+    // Contact Information
     contactPerson: exhibitor.contact_person,
+    designation: exhibitor.designation,
     email: exhibitor.email,
     phone: exhibitor.phone,
+    alternatePhone: exhibitor.alternate_phone,
+    alternateEmail: exhibitor.alternate_email,
+    
+    // Business Details
     category: exhibitor.category,
+    subCategory: exhibitor.sub_category,
+    businessType: exhibitor.business_type,
+    gstNumber: exhibitor.gst_number,
+    panNumber: exhibitor.pan_number,
+    
+    // Location & Address
+    address: exhibitor.address,
     city: exhibitor.city,
-    booth: exhibitor.booth,
-    registrationDate: exhibitor.registration_date,
+    state: exhibitor.state,
+    pincode: exhibitor.pincode,
+    country: exhibitor.country,
+    
+    // Exhibition Details
+    boothPreference: exhibitor.booth_preference,
+    boothSize: exhibitor.booth_size,
+    specialRequirements: exhibitor.special_requirements,
+    previousExhibitions: exhibitor.previous_exhibitions,
+    expectedVisitors: exhibitor.expected_visitors,
+    
+    // Products & Services
+    products: exhibitor.products || [],
+    services: exhibitor.services || [],
+    targetAudience: exhibitor.target_audience,
+    
+    // Payment & Billing
+    registrationFee: exhibitor.registration_fee,
+    paymentMethod: exhibitor.payment_method,
+    billingAddress: exhibitor.billing_address,
+    
+    // Additional Information
+    socialMediaLinks: exhibitor.social_media_links || {
+      linkedin: '',
+      facebook: '',
+      twitter: '',
+      instagram: ''
+    },
+    
+    // Settings
     status: exhibitor.status,
     paymentStatus: exhibitor.payment_status,
+    sendConfirmationEmail: exhibitor.send_confirmation_email,
+    allowMarketingEmails: exhibitor.allow_marketing_emails,
+    
+    // Legacy fields
+    booth: exhibitor.booth,
+    registrationDate: exhibitor.registration_date,
+    
+    // Timestamps
     created_at: exhibitor.created_at,
     updated_at: exhibitor.updated_at
   }));
