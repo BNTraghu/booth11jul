@@ -38,6 +38,57 @@ interface CalendarEvent {
   event_type?: string;
 }
 
+// Add this new component for hover tooltip
+const EventTooltip: React.FC<{
+  event: CalendarEvent;
+  isVisible: boolean;
+  position: { x: number; y: number };
+}> = ({ event, isVisible, position }) => {
+  if (!isVisible) return null;
+
+  return (
+    <div 
+      className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-4 max-w-xs"
+      style={{
+        left: position.x + 10,
+        top: position.y - 10,
+        transform: 'translateY(-100%)'
+      }}
+    >
+      <div className="space-y-2">
+        <h4 className="font-semibold text-gray-900 text-sm">{event.title}</h4>
+        <div className="space-y-1 text-xs text-gray-600">
+          <div className="flex items-center">
+            <CalendarIcon className="h-3 w-3 mr-2" />
+            <span>{format(new Date(event.date), 'MMM d, yyyy')}</span>
+          </div>
+          {event.time && (
+            <div className="flex items-center">
+              <Clock className="h-3 w-3 mr-2" />
+              <span>{event.time}</span>
+            </div>
+          )}
+          <div className="flex items-center">
+            <MapPin className="h-3 w-3 mr-2" />
+            <span className="truncate">{event.venue}</span>
+          </div>
+          {event.description && (
+            <div className="pt-1 border-t border-gray-100">
+              <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+          <Badge variant={event.status === 'published' ? 'success' : 'info'} className="text-xs">
+            {event.status}
+          </Badge>
+          <span className="text-xs text-gray-500">{event.attendees} attendees</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Event Modal Component
 const EventModal: React.FC<{
   isOpen: boolean;
@@ -246,6 +297,8 @@ export const Calendar: React.FC = () => {
     mode: 'create' | 'edit';
   }>({ isOpen: false, event: null, mode: 'create' });
   const { user } = useAuth();
+  const [hoveredEvent, setHoveredEvent] = useState<CalendarEvent | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   function getEventColor(status: string): string {
     switch (status) {
@@ -257,54 +310,81 @@ export const Calendar: React.FC = () => {
     }
   }
 
-  // Fetch events from Supabase
+  // Enhanced fetchEvents function to better handle events data
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      console.log('Fetching events from Supabase...'); // Debug log
+      console.log('Fetching events from Supabase...');
       
-      // First, let's check what columns exist in your events table
+      // Now fetch with the correct column names based on the actual table structure
       const { data, error } = await supabase
         .from('events')
-        .select('*')
-        .order('date', { ascending: true }); // Changed from 'start_date' to 'date'
+        .select(`
+          id,
+          title,
+          event_date,
+          event_time,
+          venue_name,
+          status,
+          attendees,
+          description,
+          created_at,
+          updated_at
+        `)
+        .order('event_date', { ascending: true });
 
-      console.log('Supabase response:', { data, error }); // Debug log
+      console.log('Supabase response:', { data, error });
 
       if (error) {
         console.error('Error fetching events:', error);
         return;
       }
 
-      console.log('Raw events data:', data); // Debug log
+      console.log('Raw events data:', data);
 
-      // Convert Supabase data to CalendarEvent format
       const calendarEvents: CalendarEvent[] = (data || []).map(event => {
-        // Handle different possible date field names
-        const eventDate = event.date || event.start_date || event.event_date;
-        const eventTime = event.time || event.start_time || event.event_time;
-        const eventVenue = event.venue || event.location || event.place;
+        // Use the correct date field name
+        let eventDate = event.event_date;
+        
+        // If date is still null/undefined, try created_at as fallback
+        if (!eventDate && event.created_at) {
+          eventDate = event.created_at;
+        }
+        
+        // Ensure we have a valid date string
+        if (!eventDate) {
+          console.warn('No valid date found for event:', event);
+          eventDate = new Date().toISOString().split('T')[0]; // Use today as fallback
+        }
+        
+        const eventTime = event.event_time;
+        const eventVenue = event.venue_name;
         const eventStatus = event.status || 'draft';
-        const eventAttendees = event.attendees || event.expected_attendees || 0;
+        const eventAttendees = event.attendees || 0;
+        const eventTitle = event.title || 'Untitled Event';
 
-        console.log('Processing event:', event); // Debug log
-        console.log('Event date field:', eventDate); // Debug log
+        console.log('Processing event:', { 
+          originalEvent: event, 
+          eventDate, 
+          eventTitle,
+          parsedDate: new Date(eventDate)
+        });
 
         return {
           id: event.id,
-          title: event.title || event.name || event.event_title,
+          title: eventTitle,
           date: eventDate,
           time: eventTime || '',
-          venue: eventVenue,
+          venue: eventVenue || 'TBD',
           status: eventStatus,
           attendees: eventAttendees,
           color: getEventColor(eventStatus),
-          description: event.description,
-          event_type: event.event_type || 'exhibition'
+          description: event.description || '',
+          event_type: 'exhibition' // Default since event_type doesn't exist in your table
         };
       });
 
-      console.log('Processed calendar events:', calendarEvents); // Debug log
+      console.log('Processed calendar events:', calendarEvents);
       setEvents(calendarEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -397,6 +477,16 @@ export const Calendar: React.FC = () => {
     }
   };
 
+  // Handle event hover
+  const handleEventHover = (event: CalendarEvent, e: React.MouseEvent) => {
+    setHoveredEvent(event);
+    setTooltipPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleEventLeave = () => {
+    setHoveredEvent(null);
+  };
+
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -407,12 +497,34 @@ export const Calendar: React.FC = () => {
 
   const getEventsForDate = (date: Date) => {
     const eventsForDate = events.filter(event => {
-      const eventDate = new Date(event.date);
-      const isSame = isSameDay(eventDate, date);
-      console.log(`Checking event: ${event.title}, date: ${event.date}, isSame: ${isSame}`); // Debug log
-      return isSame;
+      // Handle different date formats and ensure proper comparison
+      let eventDate: Date;
+      
+      try {
+        // Try to parse the event date
+        if (typeof event.date === 'string') {
+          eventDate = new Date(event.date);
+        } else {
+          console.log('Invalid date format for event:', event);
+          return false;
+        }
+        
+        // Check if the date is valid
+        if (isNaN(eventDate.getTime())) {
+          console.log('Invalid date for event:', event);
+          return false;
+        }
+        
+        const isSame = isSameDay(eventDate, date);
+        console.log(`Checking event: ${event.title}, event date: ${eventDate.toISOString()}, calendar date: ${date.toISOString()}, isSame: ${isSame}`);
+        return isSame;
+      } catch (error) {
+        console.error('Error processing event date:', event, error);
+        return false;
+      }
     });
-    console.log(`Events for ${date.toDateString()}:`, eventsForDate); // Debug log
+    
+    console.log(`Events for ${date.toDateString()}:`, eventsForDate);
     return eventsForDate;
   };
 
@@ -552,19 +664,26 @@ export const Calendar: React.FC = () => {
                         {format(date, 'd')}
                       </div>
                       <div className="space-y-1">
-                        {events.slice(0, 2).map((event) => (
+                        {events.slice(0, 3).map((event) => (
                           <div
                             key={event.id}
-                            className={`text-xs p-1 rounded text-white truncate ${event.color}`}
+                            className={`text-xs p-1 rounded text-white truncate ${event.color} cursor-pointer hover:opacity-80 transition-opacity`}
                             title={event.title}
+                            onMouseEnter={(e) => handleEventHover(event, e)}
+                            onMouseLeave={handleEventLeave}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEvent(event);
+                              setShowEventModal(true);
+                            }}
                           >
                             <span className="hidden sm:inline">{event.title}</span>
                             <span className="sm:hidden">•</span>
                           </div>
                         ))}
-                        {events.length > 2 && (
+                        {events.length > 3 && (
                           <div className="text-xs text-gray-500">
-                            +{events.length - 2} more
+                            +{events.length - 3} more
                           </div>
                         )}
                       </div>
@@ -585,7 +704,16 @@ export const Calendar: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {upcomingEvents.map((event) => (
-                <div key={event.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 cursor-pointer">
+                <div 
+                  key={event.id} 
+                  className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200 cursor-pointer"
+                  onMouseEnter={(e) => handleEventHover(event, e)}
+                  onMouseLeave={handleEventLeave}
+                  onClick={() => {
+                    setSelectedEvent(event);
+                    setShowEventModal(true);
+                  }}
+                >
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-gray-900 text-sm truncate">{event.title}</h4>
@@ -593,10 +721,12 @@ export const Calendar: React.FC = () => {
                         <CalendarIcon className="h-3 w-3 mr-1 flex-shrink-0" />
                         <span>{format(new Date(event.date), 'MMM d')}</span>
                       </div>
-                      <div className="flex items-center text-xs text-gray-600 mt-1">
-                        <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span>{event.time}</span>
-                      </div>
+                      {event.time && (
+                        <div className="flex items-center text-xs text-gray-600 mt-1">
+                          <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span>{event.time}</span>
+                        </div>
+                      )}
                       <div className="flex items-center text-xs text-gray-600 mt-1">
                         <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
                         <span className="truncate">{event.venue}</span>
@@ -675,6 +805,13 @@ export const Calendar: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      {/* Event Tooltip */}
+      <EventTooltip
+        event={hoveredEvent!}
+        isVisible={!!hoveredEvent}
+        position={tooltipPosition}
+      />
 
       {/* Event Detail Modal */}
       {showEventModal && selectedEvent && (
