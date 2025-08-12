@@ -6,7 +6,6 @@ import {
   Building, 
   User, 
   Mail, 
-  Phone, 
   MapPin, 
   Calendar,
   CreditCard,
@@ -26,6 +25,7 @@ import {
   Truck,
   Shield
 } from 'lucide-react';
+import { PhoneInput } from '../components/UI/PhoneInput';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
@@ -259,6 +259,8 @@ export const AddExhibitor: React.FC = () => {
         if (!formData.email.trim()) newErrors.email = 'Email is required';
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
         if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
+        else if (formData.phone.length !== 10) newErrors.phone = 'Phone number must be exactly 10 digits';
+        else if (!/^[0-9]{10}$/.test(formData.phone)) newErrors.phone = 'Phone number must contain only digits';
         if (!formData.designation.trim()) newErrors.designation = 'Designation is required';
         break;
 
@@ -874,43 +876,24 @@ export const AddExhibitor: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Primary Phone *
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.phone ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="+91-9876543210"
-                      />
-                    </div>
-                    {errors.phone && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.phone}
-                      </p>
-                    )}
+                    <PhoneInput
+                      label="Primary Phone"
+                      value={formData.phone}
+                      onChange={(value) => handleInputChange('phone', value)}
+                      required={true}
+                      error={errors.phone}
+                      name="phone"
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Alternate Phone
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="tel"
-                        value={formData.alternatePhone}
-                        onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="+91-9876543211"
-                      />
-                    </div>
+                    <PhoneInput
+                      label="Alternate Phone"
+                      value={formData.alternatePhone}
+                      onChange={(value) => handleInputChange('alternatePhone', value)}
+                      required={false}
+                      name="alternatePhone"
+                    />
                   </div>
                 </div>
 

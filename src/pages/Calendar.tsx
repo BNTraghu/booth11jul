@@ -272,7 +272,7 @@ const EventModal: React.FC<{
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" className="flex items-center space-x-2">
+            <Button type="submit" className="flex items-center justify-center space-x-2">
               <Save className="h-4 w-4" />
               <span>{mode === 'create' ? 'Create Event' : 'Update Event'}</span>
             </Button>
@@ -864,21 +864,21 @@ export const Calendar: React.FC = () => {
               <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-6 border-t border-gray-200">
                 <Button 
                   variant="outline" 
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto flex items-center space-x-2"
                   onClick={() => {
                     setEventModal({ isOpen: true, event: selectedEvent, mode: 'edit' });
                     setShowEventModal(false);
                   }}
                 >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Event
+                  <Edit className="h-4 w-4" />
+                  <span>Edit Event</span>
                 </Button>
                 <Button 
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto flex items-center space-x-2"
                   onClick={() => handleDeleteEvent(selectedEvent.id)}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Event
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete Event</span>
                 </Button>
               </div>
             </div>

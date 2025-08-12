@@ -1859,9 +1859,9 @@ export const Exhibitors: React.FC = () => {
                       <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
                     </Button>
                   ) : (
-                    <Button onClick={handleSaveEdit}>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
+                    <Button onClick={handleSaveEdit} className="flex items-center space-x-2">
+                      <Save className="h-4 w-4" />
+                      <span>Save Changes</span>
                     </Button>
                   )}
                 </div>
@@ -1932,9 +1932,9 @@ export const Exhibitors: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Cancel</Button>
-              <Button onClick={handleSendEmail}>
-                <Send className="h-4 w-4 mr-2" />
-                Send Email
+              <Button onClick={handleSendEmail} className="flex items-center space-x-2">
+                <Send className="h-4 w-4" />
+                <span>Send Email</span>
               </Button>
             </div>
           </div>

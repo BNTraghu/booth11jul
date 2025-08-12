@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, UserPlus, Mail, Phone, Search, Filter, Eye, User as UserIcon, MapPin } from 'lucide-react';
+import { Plus, Edit, Trash2, UserPlus, Mail, Search, Filter, Eye, User as UserIcon, MapPin } from 'lucide-react';
+import { PhoneInput } from '../components/UI/PhoneInput';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -209,8 +210,10 @@ const EditUserModal: React.FC<{
     }
     
     // Phone format validation
-    if (formData.phone && !/^[\+]?[1-9][\d]{0,15}$/.test(formData.phone.replace(/\s/g, ''))) {
-      newErrors.phone = 'Please enter a valid phone number';
+    if (formData.phone && formData.phone.length !== 10) {
+      newErrors.phone = 'Phone number must be exactly 10 digits';
+    } else if (formData.phone && !/^[0-9]{10}$/.test(formData.phone)) {
+      newErrors.phone = 'Phone number must contain only digits';
     }
     
     setErrors(newErrors);
@@ -291,19 +294,14 @@ const EditUserModal: React.FC<{
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone *
-                </label>
-                <input
-                  type="tel"
+                <PhoneInput
+                  label="Phone"
                   value={user.phone || ''}
-                  onChange={e => handleChange('phone', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.phone ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter phone number"
+                  onChange={(value) => handleChange('phone', value)}
+                  required={true}
+                  error={errors.phone}
+                  name="phone"
                 />
-                {errors.phone && <div className="text-red-500 text-xs mt-1">{errors.phone}</div>}
               </div>
 
               <div>
@@ -321,12 +319,8 @@ const EditUserModal: React.FC<{
                   <option value="admin">Admin</option>
                   <option value="support_tech">Support Tech</option>
                   <option value="sales_marketing">Sales & Marketing</option>
-                  <option value="legal">Legal</option>
                   <option value="logistics">Logistics</option>
                   <option value="accounting">Accounting</option>
-                  <option value="vendor">Vendor</option>
-                  <option value="society">Society</option>
-                  <option value="exhibitor">Exhibitor</option>
                 </select>
                 {errors.role && <div className="text-red-500 text-xs mt-1">{errors.role}</div>}
               </div>
@@ -873,12 +867,12 @@ export const Users: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900">
               System Users ({filteredUsers.length})
             </h3>
-            <div className="flex space-x-2">
+            {/* <div className="flex space-x-2">
               <Button size="sm" variant="outline">
                 <Filter className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Advanced Filter</span>
               </Button>
-            </div>
+            </div> */}
           </div>
         </CardHeader>
         <CardContent>
@@ -941,7 +935,7 @@ export const Users: React.FC = () => {
                   <TableCell className="hidden md:table-cell">{user.city || 'N/A'}</TableCell>
                   <TableCell className="hidden lg:table-cell">
                     <div className="text-sm flex items-center">
-                      <Phone className="h-3 w-3 mr-1" />
+                      <span className="text-gray-500 mr-1">📞</span>
                       {user.phone || 'N/A'}
                     </div>
                   </TableCell>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -992,7 +992,7 @@ export const Events: React.FC = () => {
               {/* Pricing & Availability */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <DollarSign className="h-5 w-5 mr-2" />
+                  <IndianRupee className="h-5 w-5 mr-2" />
                   Pricing & Availability
                 </h3>
                 
@@ -1000,7 +1000,7 @@ export const Events: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Price Per Hour</label>
                     <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <IndianRupee className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         value={editFormData.pricePerHour}
@@ -1139,9 +1139,9 @@ export const Events: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Cancel</Button>
-              <Button onClick={handleSaveEdit}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
+              <Button onClick={handleSaveEdit} className="flex items-center space-x-2">
+                <Save className="h-4 w-4" />
+                <span>Save Changes</span>
               </Button>
             </div>
           </div>
@@ -1170,9 +1170,9 @@ export const Events: React.FC = () => {
 
               <div className="flex justify-end space-x-3">
                 <Button variant="outline" onClick={closeModals}>Cancel</Button>
-                <Button variant="danger" onClick={handleConfirmDelete}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Event
+                <Button variant="danger" onClick={handleConfirmDelete} className="flex items-center space-x-2">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete Event</span>
                 </Button>
               </div>
             </div>

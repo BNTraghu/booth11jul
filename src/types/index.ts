@@ -39,12 +39,12 @@ export type UserRole =
   | 'admin'
   | 'support_tech'
   | 'sales_marketing'
-  | 'legal'
+  // | 'legal'
   | 'logistics'
   | 'accounting'
-  | 'vendor'
-  | 'society'
-  | 'exhibitor';
+  // | 'vendor'
+  // | 'society'
+  // | 'exhibitor';
 
 export interface Event {
   id: string;

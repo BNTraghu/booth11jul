@@ -572,9 +572,9 @@ export const Societies: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Cancel</Button>
-              <Button onClick={handleSaveEdit}>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
+              <Button onClick={handleSaveEdit} className="flex items-center space-x-2">
+                <Save className="h-4 w-4" />
+                <span>Save Changes</span>
               </Button>
             </div>
           </div>
@@ -603,9 +603,9 @@ export const Societies: React.FC = () => {
 
               <div className="flex justify-end space-x-3">
                 <Button variant="outline" onClick={closeModals}>Cancel</Button>
-                <Button variant="danger" onClick={handleConfirmDelete}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Society
+                <Button variant="danger" onClick={handleConfirmDelete} className="flex items-center space-x-2">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Delete Society</span>
                 </Button>
               </div>
             </div>

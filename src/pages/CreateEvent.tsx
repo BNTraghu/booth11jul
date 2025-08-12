@@ -16,7 +16,8 @@ import {
   Upload,
   X,
   Image,
-  DollarSign
+  DollarSign,
+  IndianRupeeIcon
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
@@ -1018,7 +1019,7 @@ export const CreateEvent: React.FC = () => {
             <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <DollarSign className="h-5 w-5 mr-2" />
+                  <IndianRupeeIcon className="h-5 w-5 mr-2" />
                   Pricing & Availability
                 </h3>
               </CardHeader>
@@ -1029,7 +1030,7 @@ export const CreateEvent: React.FC = () => {
                       Price Per Hour
                     </label>
                     <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <IndianRupeeIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                       <input
                         type="number"
                         value={formData.pricePerHour}

@@ -767,7 +767,7 @@ export const AddVenue: React.FC = () => {
         name: formData.name,
         location: formData.location,
         contact_person: formData.contactPerson,
-        contact_role: formData.contactRole,
+        // contact_role: formData.contactRole, // Commented out until column is added to database
         email: formData.email,
         phone: formData.phone,
         capacity: formData.memberCount,
@@ -775,27 +775,29 @@ export const AddVenue: React.FC = () => {
         amenities: formData.amenities,
         description: formData.description,
         status: formData.status,
-        // Extended Fields
-        address_line1: formData.addressLine1,
-        address_landmark: formData.addressLandmark,
-        address_standard: formData.addressStandard,
-        area_sq_ft: formData.areaSqFt,
-        kind_of_space: formData.kindOfSpace,
-        is_covered: formData.isCovered,
-        pricing_per_day: formData.pricingPerDay,
-        facility_area_sq_ft: formData.facilityAreaSqFt,
-        no_of_stalls: formData.noOfStalls,
-        facility_covered: formData.facilityCovered,
-        no_of_flats: formData.noOfFlats,
-        // Google Maps Fields
-        latitude: formData.latitude,
-        longitude: formData.longitude,
-        formatted_address: formData.formattedAddress,
-        // Custom Contact Information
-        custom_contacts: formData.customContacts
+        // Extended Fields - Commented out until columns are added to database
+        // address_line1: formData.addressLine1,
+        // address_landmark: formData.addressLandmark,
+        // address_standard: formData.addressStandard,
+        // area_sq_ft: formData.areaSqFt,
+        // kind_of_space: formData.kindOfSpace,
+        // is_covered: formData.isCovered,
+        // pricing_per_day: formData.pricingPerDay,
+        // facility_area_sq_ft: formData.facilityAreaSqFt,
+        // no_of_stalls: formData.noOfStalls,
+        // facility_covered: formData.facilityCovered,
+        // no_of_flats: formData.noOfFlats,
+        // Google Maps Fields - Commented out until columns are added to database
+        // latitude: formData.latitude,
+        // longitude: formData.longitude,
+        // formatted_address: formData.formattedAddress,
+        // Custom Contact Information - Commented out until column is added to database
+        // custom_contacts: formData.customContacts
       };
 
       console.log('📝 Insert data:', insertData);
+      console.log('⚠️  Note: Some form fields are commented out until database columns are added');
+      console.log('📋 Missing columns: contact_role, address_line1, address_landmark, address_standard, area_sq_ft, kind_of_space, is_covered, pricing_per_day, facility_area_sq_ft, no_of_stalls, facility_covered, no_of_flats, latitude, longitude, formatted_address, custom_contacts');
 
       const { data, error } = await supabase
         .from('venues')
