@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -24,6 +24,10 @@ interface ExtendedVenueFormData {
   status: 'active' | 'inactive' | 'pending';
   // Extended Fields
   addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  pincode: string;
   addressLandmark: string;
   addressStandard: string;
   areaSqFt: number;
@@ -38,6 +42,9 @@ interface ExtendedVenueFormData {
   latitude: number;
   longitude: number;
   formattedAddress: string;
+  // Files
+  photos: Array<{ name: string; url: string; type: string; size: number }>;
+  documents: Array<{ name: string; url: string; type: string; size: number }>;
   // Custom Contact Information
   customContacts: Array<{
     id: string;
@@ -108,6 +115,10 @@ export const Venues: React.FC = () => {
       status: venue.status || 'active',
       // Extended Fields
       addressLine1: venue.addressLine1 || '',
+      addressLine2: (venue as any).address_line2 || (venue as any).addressLine2 || '',
+      city: (venue as any).city || '',
+      state: (venue as any).state || '',
+      pincode: (venue as any).pincode || '',
       addressLandmark: venue.addressLandmark || '',
       addressStandard: venue.addressStandard || '',
       areaSqFt: venue.areaSqFt || 0,
@@ -122,6 +133,9 @@ export const Venues: React.FC = () => {
       latitude: venue.latitude || 0,
       longitude: venue.longitude || 0,
       formattedAddress: venue.formattedAddress || '',
+      // Files
+      photos: (venue as any).photos || [],
+      documents: (venue as any).documents || [],
       // Custom Contact Information
       customContacts: venue.customContacts || [],
       // Additional Settings (matching AddVenue)
@@ -201,27 +215,95 @@ export const Venues: React.FC = () => {
     if (!editFormData.name.trim()) {
       errors.name = 'Venue name is required';
     }
-    if (!editFormData.location.trim()) {
-      errors.location = 'Location is required';
-    }
+    // if (!editFormData.location.trim()) {
+    //   errors.location = 'Location is required';
+    // }
     if (!editFormData.contactPerson.trim()) {
       errors.contactPerson = 'Contact person is required';
     }
-    if (!editFormData.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(editFormData.email)) {
+    // if (!editFormData.email.trim()) {
+    //   errors.email = 'Email is required';
+    // } else
+     if (!/\S+@\S+\.\S+/.test(editFormData.email)) {
       errors.email = 'Please enter a valid email address';
     }
     if (!editFormData.phone.trim()) {
       errors.phone = 'Phone number is required';
     }
-    if ((editFormData.memberCount || 0) <= 0) {
-      errors.memberCount = 'Capacity must be greater than 0';
+    // if ((editFormData.memberCount || 0) <= 0) {
+    //   errors.memberCount = 'Capacity must be greater than 0';
+    // }
+    if (!editFormData.addressLine1.trim()) {
+      errors.addressLine1 = 'Address line 1 is required';
+    }
+    if (!editFormData.city.trim()) {
+      errors.city = 'City is required';
+    }
+    if (!editFormData.state.trim()) {
+      errors.state = 'State is required';
+    }
+    if (!editFormData.pincode) {
+      errors.pincode = 'Pincode is required';
+    } else if (!/^[0-9]{6}$/.test(editFormData.pincode)) {
+      errors.pincode = 'Pincode must be 6 digits';
     }
     
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   };
+
+  // Helper: compress image without noticeable quality loss
+  async function compressImage(file: File, maxSizePx: number = 1600, quality: number = 0.85): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (!reader.result) {
+          resolve(file);
+          return;
+        }
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+          const scale = Math.min(1, maxSizePx / Math.max(width, height));
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                resolve(file);
+                return;
+              }
+              const output = new File([blob], file.name.replace(/\.(png|jpg|jpeg)$/i, '.jpg'), { type: 'image/jpeg' });
+              resolve(output);
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  }
+ 
+  // Helper: upload a file to a storage bucket and return public URL
+  async function uploadToBucket(bucket: string, path: string, file: File): Promise<{ url: string }>{
+    const { data: up, error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(up.path);
+    return { url: pub.publicUrl };
+  }
 
   const handleSaveEdit = async () => {
     if (editFormData) {
@@ -237,6 +319,48 @@ export const Venues: React.FC = () => {
       const duplicateCheck = await checkForDuplicates(editFormData.id);
       if (duplicateCheck.hasDuplicates) {
         showNotification(duplicateCheck.message, 'error');
+        return;
+      }
+
+      // Prepare photos/documents: upload new files (marked by _file), keep existing URLs
+      let finalPhotos: Array<{ name: string; url: string; type: string; size: number }> = [];
+      let finalDocuments: Array<{ name: string; url: string; type: string; size: number }> = [];
+
+      try {
+        // Existing photos (with http(s) URL)
+        const existingPhotos = (editFormData.photos as any[] || []).filter(p => p && typeof p.url === 'string' && /^https?:\/\//.test(p.url));
+        finalPhotos.push(...existingPhotos.map(p => ({ name: p.name, url: p.url, type: p.type, size: p.size })));
+
+        // New photos to upload
+        const newPhotoFiles = (editFormData.photos as any[] || []).filter(p => p && p._file instanceof File).map(p => p._file as File);
+        for (const raw of newPhotoFiles) {
+          const optimized = await compressImage(raw, 1600, 0.85);
+          const safeName = optimized.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const path = `${editFormData.id}/${Date.now()}_${safeName}`;
+          const { url } = await uploadToBucket('venue-photos', path, optimized);
+          finalPhotos.push({ name: optimized.name, url, type: optimized.type, size: optimized.size });
+        }
+
+        // Existing documents (with http(s) URL)
+        const existingDocs = (editFormData.documents as any[] || []).filter(d => d && typeof d.url === 'string' && /^https?:\/\//.test(d.url));
+        finalDocuments.push(...existingDocs.map(d => ({ name: d.name, url: d.url, type: d.type, size: d.size })));
+
+        // New documents to upload (pdf or image)
+        const newDocEntries = (editFormData.documents as any[] || []).filter(d => d && d._file instanceof File);
+        for (const d of newDocEntries) {
+          const file = d._file as File;
+          let toUpload = file;
+          if (/image\//i.test(file.type)) {
+            toUpload = await compressImage(file, 1600, 0.85);
+          }
+          const safeName = toUpload.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const path = `${editFormData.id}/${Date.now()}_${safeName}`;
+          const { url } = await uploadToBucket('venue-documents', path, toUpload);
+          finalDocuments.push({ name: d.name || toUpload.name, url, type: toUpload.type, size: toUpload.size });
+        }
+      } catch (uploadErr: any) {
+        console.error('Upload error:', uploadErr);
+        showNotification('Failed to upload files: ' + (uploadErr?.message || uploadErr), 'error');
         return;
       }
 
@@ -259,6 +383,10 @@ export const Venues: React.FC = () => {
         
         // Extended Fields
         address_line1: editFormData.addressLine1,
+        address_line2: editFormData.addressLine2 || null,
+        city: editFormData.city || null,
+        state: editFormData.state || null,
+        pincode: editFormData.pincode || null,
         address_landmark: editFormData.addressLandmark,
         address_standard: editFormData.addressStandard,
         area_sq_ft: editFormData.areaSqFt,
@@ -273,17 +401,21 @@ export const Venues: React.FC = () => {
         // Google Maps fields
         latitude: editFormData.latitude,
         longitude: editFormData.longitude,
-        formatted_address: editFormData.formattedAddress,
-        
-        // Custom Contact Information
-        custom_contacts: editFormData.customContacts,
-        
-        // Additional Settings
-        available_hours: editFormData.availableHours,
-        parking_spaces: editFormData.parkingSpaces,
-        catering_allowed: editFormData.cateringAllowed,
-        alcohol_allowed: editFormData.alcoholAllowed,
-        smoking_allowed: editFormData.smokingAllowed
+                 formatted_address: editFormData.formattedAddress,
+         
+         // Files (final arrays with public URLs)
+         photos: finalPhotos,
+         documents: finalDocuments,
+         
+         // Custom Contact Information
+         custom_contacts: editFormData.customContacts,
+         
+         // Additional Settings
+         available_hours: editFormData.availableHours,
+         parking_spaces: editFormData.parkingSpaces,
+         catering_allowed: editFormData.cateringAllowed,
+         alcohol_allowed: editFormData.alcoholAllowed,
+         smoking_allowed: editFormData.smokingAllowed
       };
       
       console.log('Update data being sent:', updateData);
@@ -559,7 +691,7 @@ export const Venues: React.FC = () => {
       </div>
 
       {/* Venues Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredVenues.length > 0 ? (
           filteredVenues.map((venue) => (
             <Card key={venue.id} className="hover:shadow-md transition-shadow duration-200">
@@ -574,7 +706,7 @@ export const Venues: React.FC = () => {
                 <div className="space-y-3 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="truncate">{venue.location}</span>
+                    <span className="truncate">{venue.location?venue.location: venue.addressLine1 + ' ' + venue.addressLine2 + ' ' + venue.city + ' ' + venue.state + ' ' + venue.pincode}</span>
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Users className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -665,7 +797,7 @@ export const Venues: React.FC = () => {
             </Card>
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* Venues Table */}
       <Card>
@@ -925,6 +1057,90 @@ export const Venues: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Address Line 2
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.addressLine2}
+                            onChange={(e) => setEditFormData({...editFormData, addressLine2: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.addressLine2 ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Apartment, Suite, Floor"
+                          />
+                          {editErrors.addressLine2 && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.addressLine2}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            City *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.city}
+                            onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.city ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter city"
+                          />
+                          {editErrors.city && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.city}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            State *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.state}
+                            onChange={(e) => setEditFormData({...editFormData, state: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.state ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter state"
+                          />
+                          {editErrors.state && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.state}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Pincode *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.pincode}
+                            onChange={(e) => setEditFormData({...editFormData, pincode: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.pincode ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter pincode"
+                          />
+                          {editErrors.pincode && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.pincode}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
                             Location *
                           </label>
                           <input
@@ -942,7 +1158,7 @@ export const Venues: React.FC = () => {
                               {editErrors.location}
                             </p>
                           )}
-                        </div>
+                        </div> */}
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1033,7 +1249,7 @@ export const Venues: React.FC = () => {
                           </div>
                         </div>
 
-                        <div>
+                        {/* <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Maximum Capacity *
                           </label>
@@ -1053,7 +1269,7 @@ export const Venues: React.FC = () => {
                               {editErrors.memberCount}
                             </p>
                           )}
-                        </div>
+                        </div> */}
                       </CardContent>
                     </Card>
 
@@ -1095,13 +1311,13 @@ export const Venues: React.FC = () => {
                     </Card>
 
                     {/* Extended Details */}
-                    <Card>
-                      <CardHeader>
+                    {/*<Card>
+                       <CardHeader>
                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                           <MapPin className="h-5 w-5 mr-2" />
                           Extended Details
                         </h3>
-                      </CardHeader>
+                      </CardHeader> 
                       <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
@@ -1117,7 +1333,7 @@ export const Venues: React.FC = () => {
                             />
                           </div>
 
-                          <div>
+                          {/* <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Area (sq ft)
                             </label>
@@ -1170,7 +1386,7 @@ export const Venues: React.FC = () => {
                               placeholder="Available stalls"
                               min="0"
                             />
-                          </div>
+                          </div> 
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1235,10 +1451,118 @@ export const Venues: React.FC = () => {
                               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
                             <span className="text-sm text-gray-700">Smoking Allowed</span>
-                          </label> */}
+                          </label> 
                         </div>
                       </CardContent>
-                    </Card>
+                    </Card>*/}
+                     {/* Photos & Documents */}
+                     <Card>
+                       <CardHeader>
+                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                                                       <ImageIcon className="h-5 w-5 mr-2" />
+                           Photos & Documents
+                         </h3>
+                       </CardHeader>
+                       <CardContent className="space-y-6">
+                         {/* Photos uploader */}
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-2">Venue Photos</label>
+                           <div
+                             className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
+                             onDragOver={(e) => e.preventDefault()}
+                             onDrop={(e) => {
+                               e.preventDefault();
+                               const files = Array.from(e.dataTransfer.files).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
+                               if (files.length) {
+                                 setEditFormData({
+                                   ...editFormData,
+                                   photos: [
+                                     ...editFormData.photos,
+                                     ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
+                                   ] as any
+                                 });
+                               }
+                             }}
+                           >
+                             Drag & drop images here or
+                             <label className="text-blue-600 ml-1 underline cursor-pointer">
+                               browse
+                               <input type="file" accept="image/jpeg,image/jpg,image/png" multiple className="hidden" onChange={(e) => {
+                                 const files = Array.from(e.target.files || []).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
+                                 if (files.length) {
+                                   setEditFormData({
+                                     ...editFormData,
+                                     photos: [
+                                       ...editFormData.photos,
+                                       ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
+                                     ] as any
+                                   });
+                                 }
+                               }} />
+                             </label>
+                           </div>
+                           {editFormData.photos && editFormData.photos.length > 0 && (
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                               {editFormData.photos.map((p: any, idx: number) => (
+                                 <div key={idx} className="border rounded p-2 text-xs relative">
+                                   <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
+                                   <div className="truncate mt-1">{p.name}</div>
+                                   <div className="text-gray-500">{(p.size/1024/1024).toFixed(2)} MB</div>
+                                   <button type="button" onClick={() => setEditFormData({ ...editFormData, photos: editFormData.photos.filter((_, i) => i !== idx) })} className="absolute top-1 right-1 bg-white/80 rounded px-1 text-xs">✕</button>
+                                 </div>
+                               ))}
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Documents uploader */}
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-2">Venue Documents</label>
+                           <div className="space-y-2">
+                             <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={() => setEditFormData({ ...editFormData, documents: [ ...editFormData.documents, { name: '', url: '', type: '', size: 0, _file: null } as any ] })}>
+                               <Plus className="h-4 w-4" />
+                               <span>Add Document</span>
+                             </Button>
+                             {editFormData.documents && editFormData.documents.length > 0 && (
+                               <div className="space-y-2 text-sm">
+                                 {editFormData.documents.map((d: any, idx: number) => (
+                                   <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center border rounded p-2">
+                                     <input
+                                       type="text"
+                                       value={d.name}
+                                       onChange={(e) => {
+                                         const docs = [...editFormData.documents] as any[];
+                                         docs[idx] = { ...docs[idx], name: e.target.value };
+                                         setEditFormData({ ...editFormData, documents: docs as any });
+                                       }}
+                                       placeholder="Document name"
+                                       className="w-full px-3 py-2 border rounded-lg"
+                                     />
+                                     <input
+                                       type="file"
+                                       onChange={(e) => {
+                                         const f = e.target.files?.[0];
+                                         if (!f) return;
+                                         const allowed = f.type === 'application/pdf' || /image\/(jpeg|jpg|png)/i.test(f.type);
+                                         const valid = f.size <= 10 * 1024 * 1024;
+                                         if (!allowed || !valid) return;
+                                         const docs = [...editFormData.documents] as any[];
+                                         docs[idx] = { ...docs[idx], url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f };
+                                         setEditFormData({ ...editFormData, documents: docs as any });
+                                       }}
+                                     />
+                                     <div className="flex items-center justify-between">
+                                       <span className="text-gray-600">{d.size ? `${(d.size/1024/1024).toFixed(2)} MB` : 'No file selected'}</span>
+                                       <button type="button" onClick={() => setEditFormData({ ...editFormData, documents: editFormData.documents.filter((_, i) => i !== idx) })} className="text-red-600">Remove</button>
+                                     </div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         </div>
+                       </CardContent>
+                     </Card>
                   </div>
                 </div>
                 <div className="space-y-3">

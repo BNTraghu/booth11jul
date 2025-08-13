@@ -38,6 +38,10 @@ interface FormData {
   status: 'active' | 'inactive' | 'pending';
   // Extended Fields
   addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  pincode: string;
   addressLandmark: string;
   addressStandard: string;
   areaSqFt: number;
@@ -70,29 +74,29 @@ const defaultFacilities = [
   'Auditorium',
   'Community Hall',
   'Garden Area',
-  'Parking',
-  'Sound System',
-  'Projector',
-  'Air Conditioning',
-  'Kitchen',
-  'Restrooms',
-  'Stage',
-  'Dance Floor',
+  'Parking',  
+  // 'Projector',  
+  // 'Kitchen',
+  // 'Restrooms',
+  // 'Stage',
+  // 'Dance Floor',
   'Outdoor Space'
 ];
 
 const defaultAmenities = [
-  'Wi-Fi',
-  'Power Outlets',
-  'Lighting',
-  'Heating',
-  'Cooling',
+  // 'Wi-Fi',
+  // 'Power Outlets',
+  // 'Lighting',
+  // 'Heating',
+  // 'Cooling',
   'Security',
   'Catering Kitchen',
-  'Storage Space',
-  'Loading Dock',
-  'Accessibility',
-  'First Aid',
+  'Sound System',
+  'Air Conditioning',
+  // 'Storage Space',
+  // 'Loading Dock',
+  // 'Accessibility',
+  // 'First Aid',
   'Fire Safety'
 ];
 
@@ -118,6 +122,10 @@ export const AddVenue: React.FC = () => {
     status: 'active',
     // Extended Fields
     addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    pincode: '',
     addressLandmark: '',
     addressStandard: '',
     areaSqFt: 0,
@@ -142,6 +150,96 @@ export const AddVenue: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+
+  // Handlers for file uploads
+  const [photoFiles, setPhotoFiles] = useState<Array<{ file: File; previewUrl: string }>>([]);
+  const [documentFiles, setDocumentFiles] = useState<Array<{ id: string; name: string; file: File | null; size?: number; type?: string }>>([]);
+  const [fileErrors, setFileErrors] = useState<{ photos?: string; documents?: string }>({});
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+
+  const validateAndAddPhotos = (files: FileList | null) => {
+    if (!files) return;
+    let error = '';
+    const newItems: Array<{ file: File; previewUrl: string }> = [];
+    Array.from(files).forEach((f) => {
+      const isValidType = /image\/(jpeg|jpg|png)/i.test(f.type);
+      const isValidSize = f.size <= 5 * 1024 * 1024;
+      if (!isValidType) error = 'Only JPG, JPEG, PNG images are allowed';
+      else if (!isValidSize) error = 'Each image must be 5 MB or less';
+      else newItems.push({ file: f, previewUrl: URL.createObjectURL(f) });
+    });
+    setFileErrors(prev => ({ ...prev, photos: error }));
+    if (newItems.length) setPhotoFiles(prev => [...prev, ...newItems]);
+  };
+
+  const removePhotoAt = (index: number) => {
+    setPhotoFiles(prev => {
+      const copy = [...prev];
+      const item = copy[index];
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      copy.splice(index, 1);
+      return copy;
+    });
+  };
+
+  const addDocumentRow = () => {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setDocumentFiles(prev => [...prev, { id, name: '', file: null }]);
+  };
+
+  const handleDocumentNameChange = (id: string, name: string) => {
+    setDocumentFiles(prev => prev.map(d => d.id === id ? { ...d, name } : d));
+  };
+
+  const handleDocumentFileChange = (id: string, file: File | null) => {
+    if (!file) return;
+    const isAllowed = file.type === 'application/pdf' || /image\/(jpeg|jpg|png)/i.test(file.type);
+    console.log('🔍 Document file:', file);
+    const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+    if (!isAllowed) {
+      setFileErrors(prev => ({ ...prev, documents: 'Only PDF or image files are allowed' }));
+      return;
+    }
+    if (!isValidSize) {
+      setFileErrors(prev => ({ ...prev, documents: 'Each document must be 10 MB or less' }));
+      return;
+    }
+    setFileErrors(prev => ({ ...prev, documents: '' }));
+    setDocumentFiles(prev => prev.map(d => d.id === id ? { ...d, file, size: file.size, type: file.type } : d));
+  };
+
+  const removeDocumentRow = (id: string) => {
+    setDocumentFiles(prev => prev.filter(d => d.id !== id));
+  };
+
+  const uploadVenueFiles = async (venueIdHint: string) => {
+    setUploadingFiles(true);
+    try {
+      const uploadedPhotos: Array<{ name: string; url: string; type: string; size: number }> = [];
+      for (const item of photoFiles) {
+        const f = item.file as File;
+        const path = `${Date.now()}_${f.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+        const { data: up, error: upErr } = await supabase.storage.from('venue-photos').upload(path, f, { upsert: false });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from('venue-photos').getPublicUrl(up.path);
+        uploadedPhotos.push({ name: f.name, url: pub.publicUrl, type: f.type, size: f.size });
+      }
+
+      const uploadedDocs: Array<{ name: string; url: string; type: string; size: number }> = [];
+      for (const d of documentFiles) {
+        const f = d.file;
+        const path = `${Date.now()}_${f.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+        const { data: up, error: upErr } = await supabase.storage.from('venue-documents').upload(path, f, { upsert: false });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from('venue-documents').getPublicUrl(up.path);
+        uploadedDocs.push({ name: d.name || f.name, url: pub.publicUrl, type: f.type, size: f.size });
+      }
+
+      return { uploadedPhotos, uploadedDocs };
+    } finally {
+      setUploadingFiles(false);
+    }
+  };
 
   useEffect(() => {
     const loadGoogleMapsAPI = () => {
@@ -475,12 +573,12 @@ export const AddVenue: React.FC = () => {
     }
 
     // Location validation
-    if (!formData.location.trim()) {
-      newErrors.location = 'Location is required';
-      console.log('❌ Location validation failed: empty');
-    } else {
-      console.log('✅ Location validation passed');
-    }
+    // if (!formData.location.trim()) {
+    //   newErrors.location = 'Location is required';
+    //   console.log('❌ Location validation failed: empty');
+    // } else {
+    //   console.log('✅ Location validation passed');
+    // }
 
     // Contact person validation
     if (!formData.contactPerson.trim()) {
@@ -491,19 +589,20 @@ export const AddVenue: React.FC = () => {
     }
 
     // Contact role validation
-    if (!formData.contactRole.trim()) {
-      newErrors.contactRole = 'Contact role is required';
-      console.log('❌ Contact role validation failed: empty');
-    } else {
-      console.log('✅ Contact role validation passed');
-    }
+    // if (!formData.contactRole.trim()) {
+    //   newErrors.contactRole = 'Contact role is required';
+    //   console.log('❌ Contact role validation failed: empty');
+    // } else {
+    //   console.log('✅ Contact role validation passed');
+    // }
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-      console.log('❌ Email validation failed: empty');
-    } else if (!emailRegex.test(formData.email)) {
+    // if (!formData.email.trim()) {
+    //   newErrors.email = 'Email is required';
+    //   console.log('❌ Email validation failed: empty');
+    // } else
+     if (!emailRegex.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
       console.log('❌ Email validation failed: invalid format');
     } else {
@@ -523,12 +622,12 @@ export const AddVenue: React.FC = () => {
     }
 
     // Capacity validation
-    if (formData.memberCount <= 0) {
-      newErrors.memberCount = 'Capacity must be greater than 0';
-      console.log('❌ Capacity validation failed: <= 0');
-    } else {
-      console.log('✅ Capacity validation passed');
-    }
+    // if (formData.memberCount <= 0) {
+    //   newErrors.memberCount = 'Capacity must be greater than 0';
+    //   console.log('❌ Capacity validation failed: <= 0');
+    // } else {
+    //   console.log('✅ Capacity validation passed');
+    // }
 
     // Price validation
     if (formData.pricingPerDay < 0) {
@@ -546,26 +645,36 @@ export const AddVenue: React.FC = () => {
       console.log('✅ Address line 1 validation passed');
     }
 
-    if (!formData.addressStandard.trim()) {
-      newErrors.addressStandard = 'Standard address format is required';
-      console.log('❌ Address standard validation failed: empty');
-    } else {
-      console.log('✅ Address standard validation passed');
+    if (!formData.city.trim()) {
+      newErrors.city = 'City is required';
+    }
+    if (!formData.state.trim()) {
+      newErrors.state = 'State is required';
+    }
+    if (!formData.pincode.trim()) {
+      newErrors.pincode = 'Pincode is required';
+    } else if (!/^[0-9]{6}$/.test(formData.pincode)) {
+      newErrors.pincode = 'Pincode must be 6 digits';
     }
 
-    if (formData.areaSqFt <= 0) {
-      newErrors.areaSqFt = 'Area must be greater than 0';
-      console.log('❌ Area validation failed: <= 0');
-    } else {
-      console.log('✅ Area validation passed');
-    }
+    // Commented: Standard Address no longer required
+    // if (!formData.addressStandard.trim()) {
+    //   newErrors.addressStandard = 'Standard address format is required';
+    // }
 
-    if (!formData.kindOfSpace.trim()) {
-      newErrors.kindOfSpace = 'Kind of space is required';
-      console.log('❌ Kind of space validation failed: empty');
-    } else {
-      console.log('✅ Kind of space validation passed');
-    }
+    // if (formData.areaSqFt <= 0) {
+    //   newErrors.areaSqFt = 'Area must be greater than 0';
+    //   console.log('❌ Area validation failed: <= 0');
+    // } else {
+    //   console.log('✅ Area validation passed');
+    // }
+
+    // if (!formData.kindOfSpace.trim()) {
+    //   newErrors.kindOfSpace = 'Kind of space is required';
+    //   console.log('❌ Kind of space validation failed: empty');
+    // } else {
+    //   console.log('✅ Kind of space validation passed');
+    // }
 
     if (formData.pricingPerDay < 0) {
       newErrors.pricingPerDay = 'Pricing per day cannot be negative';
@@ -763,6 +872,9 @@ export const AddVenue: React.FC = () => {
         return;
       }
 
+      // Upload files first (optional; safe to proceed if none selected)
+      const { uploadedPhotos = [], uploadedDocs = [] } = await uploadVenueFiles(formData.name).catch(() => ({ uploadedPhotos: [], uploadedDocs: [] }));
+
       const insertData = {
         name: formData.name,
         location: formData.location,
@@ -775,10 +887,15 @@ export const AddVenue: React.FC = () => {
         amenities: formData.amenities,
         description: formData.description,
         status: formData.status,
-        // Extended Fields - Commented out until columns are added to database
-        // address_line1: formData.addressLine1,
+        // Extended Fields
+        address_line1: formData.addressLine1,
         // address_landmark: formData.addressLandmark,
         // address_standard: formData.addressStandard,
+        // New Address Fields (enabled if columns exist)
+        address_line2: formData.addressLine2 || null,
+        city: formData.city || null,
+        state: formData.state || null,
+        pincode: formData.pincode || null,
         // area_sq_ft: formData.areaSqFt,
         // kind_of_space: formData.kindOfSpace,
         // is_covered: formData.isCovered,
@@ -792,7 +909,10 @@ export const AddVenue: React.FC = () => {
         // longitude: formData.longitude,
         // formatted_address: formData.formattedAddress,
         // Custom Contact Information - Commented out until column is added to database
-        // custom_contacts: formData.customContacts
+        // custom_contacts: formData.customContacts,
+        // Files
+        photos: uploadedPhotos,
+        documents: uploadedDocs
       };
 
       console.log('📝 Insert data:', insertData);
@@ -904,6 +1024,10 @@ export const AddVenue: React.FC = () => {
           status: 'active',
           // Extended Fields
           addressLine1: '',
+          addressLine2: '',
+          city: '',
+          state: '',
+          pincode: '',
           addressLandmark: '',
           addressStandard: '',
           areaSqFt: 0,
@@ -989,7 +1113,7 @@ export const AddVenue: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address Line 1 * / select from google maps
+                     Address Line 1 *{/* / select from google maps */}
                   </label>
                   <input
                     type="text"
@@ -1009,6 +1133,77 @@ export const AddVenue: React.FC = () => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address Line 2
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.addressLine2}
+                    onChange={(e) => handleInputChange('addressLine2', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Apartment, suite, etc."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => handleInputChange('city', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.city ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter city"
+                    />
+                    {errors.city && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.city}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">State *</label>
+                    <input
+                      type="text"
+                      value={formData.state}
+                      onChange={(e) => handleInputChange('state', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.state ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter state"
+                    />
+                    {errors.state && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.state}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Pincode *</label>
+                    <input
+                      type="text"
+                      value={formData.pincode}
+                      onChange={(e) => handleInputChange('pincode', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.pincode ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="6-digit PIN"
+                      maxLength={6}
+                    />
+                    {errors.pincode && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.pincode}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Landmark
                   </label>
@@ -1098,10 +1293,10 @@ export const AddVenue: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
+                </div> */}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
+                  {/* <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Area (sq ft) *
                     </label>
@@ -1228,7 +1423,7 @@ export const AddVenue: React.FC = () => {
                       />
                       <span className="text-sm text-gray-700">Facility Covered</span>
                     </label>
-                  </div>
+                  </div> */}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1267,7 +1462,7 @@ export const AddVenue: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
+                  {/* <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Capacity *
                     </label>
@@ -1290,7 +1485,7 @@ export const AddVenue: React.FC = () => {
                         {errors.memberCount}
                       </p>
                     )}
-                  </div>
+                  </div> */}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1340,7 +1535,7 @@ export const AddVenue: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Role *
+                      Role
                     </label>
                     <input
                       type="text"
@@ -1363,7 +1558,7 @@ export const AddVenue: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email Address *
+                      Email Address
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -1434,9 +1629,9 @@ export const AddVenue: React.FC = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 {formData.customContacts.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                    <p>No additional contacts added yet</p>
+                  <div className="text-center text-gray-500">
+                    {/* <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" /> */}
+                    {/* <p>No additional contacts added yet</p> */}
                     <p className="text-sm">Click "Add Contact" to add multiple contact persons</p>
                   </div>
                 ) : (
@@ -1921,9 +2116,89 @@ export const AddVenue: React.FC = () => {
                   )}
                 </div>
               </CardContent>
+                        </Card>
+
+            {/* Venue Photos */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Venue Photos</h3>
+                <p className="text-sm text-gray-600">Upload JPG, JPEG, PNG files up to 5 MB each</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div
+                  className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    validateAndAddPhotos(e.dataTransfer.files);
+                  }}
+                >
+                  Drag & drop images here or
+                  <label className="text-blue-600 ml-1 underline cursor-pointer">
+                    browse
+                    <input type="file" accept="image/jpeg,image/jpg,image/png" multiple className="hidden" onChange={(e) => validateAndAddPhotos(e.target.files)} />
+                  </label>
+                </div>
+                {fileErrors.photos && (<div className="text-red-600 text-sm">{fileErrors.photos}</div>)}
+                {photoFiles.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {photoFiles.map((p, idx) => (
+                      <div key={idx} className="border rounded p-2 text-xs relative">
+                        <img src={p.previewUrl} alt={p.file.name} className="w-full h-24 object-cover rounded" />
+                        <div className="truncate mt-1">{p.file.name}</div>
+                        <div className="text-gray-500">{(p.file.size/1024/1024).toFixed(2)} MB</div>
+                        <button type="button" onClick={() => removePhotoAt(idx)} className="absolute top-1 right-1 bg-white/80 rounded px-1 text-xs">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
             </Card>
 
-            {/* Policies */}
+            {/* Venue Documents */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Venue Documents</h3>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex flex-row items-center justify-between">
+                  <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={addDocumentRow}>
+                    <Plus className="h-4 w-4" />
+                    <span>Add Document</span>
+                  </Button>
+                  {fileErrors.documents && (<div className="text-red-600 text-sm">{fileErrors.documents}</div>)}
+                  <p className="text-sm text-gray-600">Accepted: PDF or Images. Max 10MB</p>
+                  </div>
+                </div>
+                {documentFiles.length > 0 && (
+                  <div className="space-y-2 text-sm">
+                    {documentFiles.map((d) => (
+                      <div key={d.id} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center border rounded p-2">
+                        <input
+                          type="text"
+                          value={d.name}
+                          onChange={(e) => handleDocumentNameChange(d.id, e.target.value)}
+                          placeholder="Document name"
+                          className="w-full px-3 py-2 border rounded-lg"
+                        />
+                        <input
+                          type="file"
+                          onChange={(e) => handleDocumentFileChange(d.id, e.target.files?.[0] || null)}
+                        />
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">{d.file ? `${(d.file.size/1024/1024).toFixed(2)} MB` : 'No file selected'}</span>
+                          <button type="button" onClick={() => removeDocumentRow(d.id)} className="text-red-600">Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+              </CardContent>
+            </Card>
+
+             {/* Policies */}
             {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Venue Policies</h3>

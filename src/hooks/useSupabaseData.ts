@@ -166,6 +166,10 @@ export const useVenues = () => {
       joinedDate: venue.joined_date,
       // Extended fields
       addressLine1: venue.address_line1,
+      addressLine2: venue.address_line2,
+      city: venue.city,
+      state: venue.state,
+      pincode: venue.pincode,
       addressLandmark: venue.address_landmark,
       addressStandard: venue.address_standard,
       areaSqFt: venue.area_sq_ft,
@@ -186,6 +190,8 @@ export const useVenues = () => {
       longitude: venue.longitude,
       formattedAddress: venue.formatted_address,
       description: venue.description,
+      photos: venue.photos || [],
+      documents: venue.documents || [],
       // Custom Contact Information
       customContacts: venue.custom_contacts || [],
       // Timestamps

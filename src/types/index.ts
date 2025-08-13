@@ -92,6 +92,10 @@ export interface Venue {
   joinedDate?: string | null; // joined_date from DB
   // Extended fields
   addressLine1?: string | null; // address_line1 from DB
+  addressLine2?: string | null; // address_line2 from DB
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
   addressLandmark?: string | null; // address_landmark from DB
   addressStandard?: string | null; // address_standard from DB
   areaSqFt?: number | null; // area_sq_ft from DB
@@ -112,6 +116,8 @@ export interface Venue {
   longitude?: number | null;
   formattedAddress?: string | null; // formatted_address from DB
   description?: string | null;
+  photos?: Array<{ name: string; url: string; type: string; size: number }>| null; // photos from DB
+  documents?: Array<{ name: string; url: string; type: string; size: number }>| null; // documents from DB
   // Custom Contact Information
   customContacts?: Array<{
     id: string;
