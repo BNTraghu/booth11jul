@@ -1,47 +1,98 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   Plus, 
   Edit, 
   Trash2, 
-  Eye, 
   Search, 
-  Filter, 
-  Download, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar,
-  CreditCard,
   CheckCircle,
-  XCircle,
   Clock,
-  Building,
   Users,
   DollarSign,
-  FileText,
-  Send,
   X,
   Save,
-  AlertTriangle,
+  AlertCircle,
   Upload,
-  Image,
-  Globe,
-  Tag,
-  Truck,
-  Shield,
   User,
-  Package,
-  ArrowLeft
+  MapPin,
+  FileText,
+  Download,
+  Building,
+  XCircle,
+  Mail,
+  Phone,
+  Calendar,
+  CreditCard,
+  Eye,
+  Send,
+  Filter,
+  Info,
+  ArrowLeft,
+  AlertTriangle
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { Card, CardHeader, CardContent } from '../components/UI/Card';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
+import { useNavigate, Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader } from '../components/UI/Card';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { mockExhibitors } from '../data/mockData';
-import { Exhibitor } from '../types';
+import { PhoneInput } from '../components/UI/PhoneInput';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { useExhibitors } from '../hooks/useSupabaseData';
 import { supabase } from '../lib/supabase';
+import statesData from '../data/states.json';
+
+// Interface matching AddExhibitor exactly
+interface ExhibitorFormData {
+  id?: string;
+  // Personal Information
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  alternatePhone: string;
+  
+  // Address
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  
+  // Business Information
+  companyName: string;
+  website: string;
+  category: string;
+  subCategory: string;
+  panNumber: string;
+  gstNumber: string;
+  boothSize: string;
+  businessDescription: string;
+  socialMediaLinks: {
+    facebook: string;
+    linkedin: string;
+    instagram: string;
+    twitter: string;
+  };
+  
+  // Documents (supports both files and URLs)
+  documents: {
+    panCard: File | null;
+    aadharCard: File | null;
+    licence: File | null;
+  };
+  documentUrls?: {
+    panCard?: string | null;
+    aadharCard?: string | null;
+    licence?: string | null;
+  };
+  
+  // Images (supports both files and URLs)
+  images: File[];
+  imageUrls?: string[];
+  
+  // Status
+  status: 'registered' | 'confirmed' | 'pending_approval';
+  paymentStatus: 'pending' | 'paid' | 'partial';
+}
 
 interface ExhibitorFilters {
   status: string;
@@ -52,100 +103,173 @@ interface ExhibitorFilters {
   search: string;
 }
 
-interface EmailFormData {
-  subject: string;
-  message: string;
-  sendCopy: boolean;
-}
+// Categories from AddExhibitor
+const exhibitorCategories = [
+  'Technology',
+  'Healthcare',
+  'Education',
+  'Fashion',
+  'Food & Beverage',
+  'Automotive',
+  'Home & Garden',
+  'Sports & Fitness',
+  'Travel & Tourism',
+  'Finance & Banking',
+  'Real Estate',
+  'Entertainment',
+  'Manufacturing',
+  'Retail',
+  'Services',
+  'Others'
+];
 
-interface ExtendedExhibitorFormData {
-  id: string;
-  // Company Information
-  companyName: string;
-  companyDescription: string;
-  establishedYear: string;
-  companySize: string;
-  website: string;
+const subCategories = {
+  'Technology': ['Software', 'Hardware', 'AI/ML', 'IoT', 'Cybersecurity', 'Mobile Apps', 'Web Development'],
+  'Healthcare': ['Medical Devices', 'Pharmaceuticals', 'Telemedicine', 'Health Tech', 'Wellness'],
+  'Education': ['EdTech', 'Online Learning', 'Training', 'Certification', 'Academic Services'],
+  'Fashion': ['Clothing', 'Accessories', 'Footwear', 'Jewelry', 'Beauty Products'],
+  'Food & Beverage': ['Restaurants', 'Catering', 'Packaged Foods', 'Beverages', 'Organic Products'],
+  'Automotive': ['Cars', 'Motorcycles', 'Parts & Accessories', 'Services', 'Electric Vehicles'],
+  'Home & Garden': ['Furniture', 'Decor', 'Appliances', 'Gardening', 'Home Improvement'],
+  'Sports & Fitness': ['Equipment', 'Apparel', 'Fitness Centers', 'Sports Services', 'Nutrition'],
+  'Travel & Tourism': ['Hotels', 'Travel Agencies', 'Tour Operators', 'Transportation', 'Destinations'],
+  'Finance & Banking': ['Banks', 'Insurance', 'Investment', 'Fintech', 'Loans & Credit'],
+  'Real Estate': ['Residential', 'Commercial', 'Property Management', 'Construction', 'Architecture'],
+  'Entertainment': ['Events', 'Media', 'Gaming', 'Music', 'Film & Video'],
+  'Manufacturing': ['Industrial Equipment', 'Raw Materials', 'Machinery', 'Tools', 'Automation'],
+  'Retail': ['E-commerce', 'Physical Stores', 'Wholesale', 'Distribution', 'Franchising'],
+  'Services': ['Consulting', 'Marketing', 'Legal', 'Accounting', 'IT Services'],
+  'Others': ['Miscellaneous', 'Emerging Industries', 'Non-profit', 'Government', 'Research']
+};
+
+const boothSizes = ['3x3 meters', '3x6 meters', '6x6 meters', '6x9 meters', '9x9 meters', 'Custom Size'];
+// States and cities are now loaded from JSON data
+
+// File handling functions (stores placeholder data since no storage exists)
+const handleDocumentUpload = async (file: File, fileName: string): Promise<string | null> => {
+  try {
+    // Since no storage exists, create a placeholder URL
+    const timestamp = Date.now();
+    const placeholderUrl = `placeholder://documents/${fileName}_${timestamp}.${file.name.split('.').pop()}`;
+    console.log(`📄 Document ${fileName} processed as placeholder:`, placeholderUrl);
+    
+    // In a real implementation, you would upload the file to your file service here
+    // and return the actual URL
+    
+    return placeholderUrl;
+  } catch (error) {
+    console.error('Error processing document:', error);
+    return null;
+  }
+};
+
+const handleImageUploads = async (images: File[], exhibitorName: string): Promise<string[]> => {
+  const uploadedUrls: string[] = [];
   
-  // Contact Information
-  contactPerson: string;
-  designation: string;
-  email: string;
-  phone: string;
-  alternatePhone: string;
-  alternateEmail: string;
+  for (let i = 0; i < images.length; i++) {
+    const file = images[i];
+    try {
+      // Since no storage exists, create a placeholder URL
+      const timestamp = Date.now();
+      const placeholderUrl = `placeholder://images/${exhibitorName}_image_${i + 1}_${timestamp}.${file.name.split('.').pop()}`;
+      console.log(`🖼️ Image ${i + 1} processed as placeholder:`, placeholderUrl);
+      
+      // In a real implementation, you would upload the file to your file service here
+      // and return the actual URL
+      
+      uploadedUrls.push(placeholderUrl);
+    } catch (error) {
+      console.error('Error processing image:', error);
+      continue;
+    }
+  }
   
-  // Business Details
-  category: string;
-  subCategory: string;
-  businessType: string;
-  gstNumber: string;
-  panNumber: string;
-  
-  // Location & Address
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
-  country: string;
-  
-  // Exhibition Details
-  boothPreference: string;
-  boothSize: string;
-  specialRequirements: string;
-  previousExhibitions: string;
-  expectedVisitors: string;
-  
-  // Products & Services
-  products: string[];
-  services: string[];
-  targetAudience: string;
-  
-  // Payment & Billing
-  registrationFee: number;
-  paymentMethod: string;
-  billingAddress: string;
-  
-  // Additional Information
-  socialMediaLinks: {
-    linkedin: string;
-    facebook: string;
-    twitter: string;
-    instagram: string;
-  };
-  
-  // Settings
-  status: 'registered' | 'confirmed' | 'checked_in' | 'cancelled';
-  paymentStatus: 'pending' | 'paid' | 'refunded';
-  sendConfirmationEmail: boolean;
-  allowMarketingEmails: boolean;
-}
+  return uploadedUrls;
+};
 
 export const Exhibitors: React.FC = () => {
+  const navigate = useNavigate();
   const { exhibitors, loading, error, refetch } = useExhibitors();
+  
+  // DEBUG: Log all exhibitors' document/image status
+  React.useEffect(() => {
+    if (exhibitors.length > 0) {
+      console.log('🔍 ALL EXHIBITORS DOCUMENT/IMAGE STATUS:');
+      exhibitors.forEach((exhibitor, index) => {
+        console.log(`${index + 1}. ${exhibitor.companyName || 'Unknown Company'}:`, {
+          id: exhibitor.id,
+          documentUrls: exhibitor.documentUrls,
+          imageUrls: exhibitor.imageUrls,
+          hasDocuments: !!(exhibitor.documentUrls?.panCard || exhibitor.documentUrls?.aadharCard || exhibitor.documentUrls?.licence),
+          hasImages: Array.isArray(exhibitor.imageUrls) && exhibitor.imageUrls.length > 0
+        });
+      });
+    }
+  }, [exhibitors]);
+  
+  // Inline edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStep, setEditStep] = useState(1);
+  const [editData, setEditData] = useState<ExhibitorFormData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    alternatePhone: '',
+    address1: '',
+    address2: '',
+    city: '',
+    state: '',
+    pincode: '',
+    country: 'India',
+    companyName: '',
+    website: '',
+    category: '',
+    subCategory: '',
+    panNumber: '',
+    gstNumber: '',
+    boothSize: '',
+    businessDescription: '',
+    socialMediaLinks: {
+      facebook: '',
+      linkedin: '',
+      instagram: '',
+      twitter: ''
+    },
+    documents: {
+      panCard: null,
+      aadharCard: null,
+      licence: null
+    },
+    images: [],
+    status: 'registered',
+    paymentStatus: 'pending'
+  });
+  const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
+  const [saving, setSaving] = useState(false);
+  
+  // Missing state variables
   const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
-  const [selectedExhibitor, setSelectedExhibitor] = useState<Exhibitor | null>(null);
+  const [selectedExhibitor, setSelectedExhibitor] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editFormData, setEditFormData] = useState<ExtendedExhibitorFormData | null>(null);
-  const [editStep, setEditStep] = useState(1);
-  const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
-  const [emailFormData, setEmailFormData] = useState<EmailFormData>({
-    subject: '',
-    message: '',
-    sendCopy: false
-  });
+  const [editFormData, setEditFormData] = useState<any>(null);
+  const [emailFormData, setEmailFormData] = useState({ subject: '', message: '', sendCopy: false });
   const [newProduct, setNewProduct] = useState('');
   const [newService, setNewService] = useState('');
+  const [existingDocuments, setExistingDocuments] = useState<{[key: string]: string}>({});
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  
+  // Filters
   const [filters, setFilters] = useState<ExhibitorFilters>({
     status: 'all',
     paymentStatus: 'all',
     category: 'all',
+    search: '',
     subCategory: 'all',
-    city: 'all',
-    search: ''
+    city: 'all'
   });
 
   const filteredExhibitors = exhibitors.filter(exhibitor => {
@@ -204,25 +328,11 @@ export const Exhibitors: React.FC = () => {
   const categories = [...new Set(exhibitors.map(e => e.category))];
   const cities = [...new Set(exhibitors.map(e => e.city))];
 
-  // Constants for dropdowns (from AddExhibitor)
-  const subCategories = {
-    'Technology': ['Software', 'Hardware', 'AI/ML', 'Cloud Computing', 'Cybersecurity', 'IoT'],
-    'Healthcare': ['Medical Devices', 'Pharmaceuticals', 'Telemedicine', 'Wellness', 'Diagnostics'],
-    'Manufacturing': ['Automotive', 'Electronics', 'Textiles', 'Chemicals', 'Machinery'],
-    'Retail': ['E-commerce', 'Fashion', 'Electronics', 'Home & Garden', 'Sports'],
-    'Finance': ['Banking', 'Insurance', 'Investment', 'Fintech', 'Accounting'],
-    'Education': ['EdTech', 'Online Learning', 'Training', 'Certification', 'Academic Services'],
-    'Fashion': ['Clothing', 'Accessories', 'Footwear', 'Jewelry', 'Beauty Products'],
-    'Food & Beverage': ['Restaurants', 'Catering', 'Packaged Foods', 'Beverages', 'Organic Products'],
-    'Automotive': ['Cars', 'Motorcycles', 'Parts & Accessories', 'Services', 'Electric Vehicles'],
-    'Sports & Fitness': ['Equipment', 'Apparel', 'Fitness Centers', 'Sports Services', 'Nutrition'],
-    'Real Estate': ['Residential', 'Commercial', 'Property Management', 'Construction', 'Architecture'],
-    'Services': ['Consulting', 'Marketing', 'Legal', 'Accounting', 'IT Services']
-  };
+
 
   const businessTypes = ['Private Limited', 'Public Limited', 'Partnership', 'Sole Proprietorship', 'LLP', 'NGO', 'Government'];
   const boothSizes = ['3x3 meters', '3x6 meters', '6x6 meters', '6x9 meters', '9x9 meters', 'Custom Size'];
-  const states = ['Maharashtra', 'Delhi', 'Karnataka', 'Tamil Nadu', 'Gujarat', 'Rajasthan', 'West Bengal', 'Uttar Pradesh', 'Madhya Pradesh', 'Haryana'];
+  // States are now loaded from JSON data
 
   const handleSelectExhibitor = (id: string) => {
     setSelectedExhibitors(prev => 
@@ -246,80 +356,112 @@ export const Exhibitors: React.FC = () => {
     setSelectedExhibitors([]);
   };
 
-  const handleView = (exhibitor: Exhibitor) => {
+  const handleView = (exhibitor: any) => {
     setSelectedExhibitor(exhibitor);
     setShowViewModal(true);
   };
 
-  const handleEdit = (exhibitor: Exhibitor) => {
+  const handleEdit = (exhibitor: any) => {
+    console.log('🔍 Edit exhibitor called with data:', exhibitor);
+    console.log('📄 Document URLs:', exhibitor.documentUrls);
+    console.log('🖼️ Image URLs:', exhibitor.imageUrls);
     setSelectedExhibitor(exhibitor);
-    // Map Exhibitor to ExtendedExhibitorFormData with existing values
+    
+    // Set existing documents and images for display
+    const docUrls = {
+      panCard: exhibitor.documentUrls?.panCard || '',
+      aadharCard: exhibitor.documentUrls?.aadharCard || '',
+      licence: exhibitor.documentUrls?.licence || ''
+    };
+    console.log('📋 Setting existingDocuments:', docUrls);
+    setExistingDocuments(docUrls);
+    
+    const imgUrls = exhibitor.imageUrls || [];
+    console.log('🖼️ Setting existingImages:', imgUrls);
+    setExistingImages(imgUrls);
+    
+    // Map Exhibitor to ExtendedExhibitorFormData with NEW structure matching AddExhibitor exactly
     setEditFormData({
       id: exhibitor.id,
-      // Company Information
-      companyName: exhibitor.companyName || '',
-      companyDescription: exhibitor.companyDescription || '',
-      establishedYear: exhibitor.establishedYear || '',
-      companySize: exhibitor.companySize || '',
-      website: exhibitor.website || '',
       
-      // Contact Information
-      contactPerson: exhibitor.contactPerson || '',
-      designation: exhibitor.designation || '',
+      // Personal Information (Step 1 - matching AddExhibitor)
+      firstName: exhibitor.firstName || '',
+      lastName: exhibitor.lastName || '',
       email: exhibitor.email || '',
       phone: exhibitor.phone || '',
       alternatePhone: exhibitor.alternatePhone || '',
-      alternateEmail: exhibitor.alternateEmail || '',
       
-      // Business Details
-      category: exhibitor.category || '',
-      subCategory: exhibitor.subCategory || '',
-      businessType: exhibitor.businessType || '',
-      gstNumber: exhibitor.gstNumber || '',
-      panNumber: exhibitor.panNumber || '',
-      
-      // Location & Address
-      address: exhibitor.address || '',
+      // Address (Step 2 - matching AddExhibitor)
+      address1: exhibitor.address1 || '',
+      address2: exhibitor.address2 || '',
       city: exhibitor.city || '',
       state: exhibitor.state || '',
       pincode: exhibitor.pincode || '',
       country: exhibitor.country || 'India',
       
-      // Exhibition Details
-      boothPreference: exhibitor.boothPreference || '',
+      // Business Information (Step 3 - matching AddExhibitor)
+      companyName: exhibitor.companyName || '',
+      website: exhibitor.website || '',
+      category: exhibitor.category || '',
+      subCategory: exhibitor.subCategory || '',
+      panNumber: exhibitor.panNumber || '',
+      gstNumber: exhibitor.gstNumber || '',
       boothSize: exhibitor.boothSize || '',
-      specialRequirements: exhibitor.specialRequirements || '',
-      previousExhibitions: exhibitor.previousExhibitions || '',
-      expectedVisitors: exhibitor.expectedVisitors || '',
-      
-      // Products & Services
-      products: exhibitor.products || [],
-      services: exhibitor.services || [],
-      targetAudience: exhibitor.targetAudience || '',
-      
-      // Payment & Billing
-      registrationFee: exhibitor.registrationFee || 15000,
-      paymentMethod: exhibitor.paymentMethod || 'online',
-      billingAddress: exhibitor.billingAddress || '',
-      
-      // Additional Information
+      businessDescription: exhibitor.businessDescription || '',
       socialMediaLinks: {
-        linkedin: exhibitor.socialMediaLinks?.linkedin || '',
         facebook: exhibitor.socialMediaLinks?.facebook || '',
-        twitter: exhibitor.socialMediaLinks?.twitter || '',
-        instagram: exhibitor.socialMediaLinks?.instagram || ''
+        linkedin: exhibitor.socialMediaLinks?.linkedin || '',
+        instagram: exhibitor.socialMediaLinks?.instagram || '',
+        twitter: exhibitor.socialMediaLinks?.twitter || ''
       },
+      
+      // Documents (Step 4 - matching AddExhibitor)
+      documents: {
+        panCard: null,
+        aadharCard: null,
+        licence: null
+      },
+      documentUrls: exhibitor.documentUrls || {
+        panCard: null,
+        aadharCard: null,
+        licence: null
+      },
+      
+      // Upload Images (Step 5 - matching AddExhibitor)
+      images: [],
+      imageUrls: exhibitor.imageUrls || [],
       
       // Settings
       status: exhibitor.status || 'registered',
       paymentStatus: exhibitor.paymentStatus || 'pending',
       sendConfirmationEmail: exhibitor.sendConfirmationEmail === true,
-      allowMarketingEmails: exhibitor.allowMarketingEmails === true
+      allowMarketingEmails: exhibitor.allowMarketingEmails === true,
+      
+      // ========== LEGACY FIELDS (COMMENTED OUT - NOT IN ADDEXHIBITOR) ==========
+      // products: exhibitor.products || [],
+      // services: exhibitor.services || [],
+      // companyDescription: exhibitor.companyDescription || '',
+      // establishedYear: exhibitor.establishedYear || '',
+      // companySize: exhibitor.companySize || '',
+      // designation: exhibitor.designation || '',
+      // alternateEmail: exhibitor.alternateEmail || '',
+      // businessType: exhibitor.businessType || '',
+      // boothPreference: exhibitor.boothPreference || '',
+      // specialRequirements: exhibitor.specialRequirements || '',
+      // previousExhibitions: exhibitor.previousExhibitions || '',
+      // expectedVisitors: exhibitor.expectedVisitors || '',
+      // targetAudience: exhibitor.targetAudience || '',
+      // registrationFee: exhibitor.registrationFee || 15000,
+      // paymentMethod: exhibitor.paymentMethod || 'online',
+      // billingAddress: exhibitor.billingAddress || '',
+      // contactPerson: exhibitor.contactPerson || '',
+      // address: exhibitor.address || '',
     });
+    setEditStep(1);
     setShowEditModal(true);
   };
 
-  const handleEmail = (exhibitor: Exhibitor) => {
+  const handleEmail = (exhibitor: any) => {
     setSelectedExhibitor(exhibitor);
     setEmailFormData({
       subject: `Regarding your exhibition at our upcoming event`,
@@ -329,7 +471,7 @@ export const Exhibitors: React.FC = () => {
     setShowEmailModal(true);
   };
 
-  const handleDelete = (exhibitor: Exhibitor) => {
+  const handleDelete = (exhibitor: any) => {
     setSelectedExhibitor(exhibitor);
     setShowDeleteModal(true);
   };
@@ -338,67 +480,108 @@ export const Exhibitors: React.FC = () => {
     if (editFormData) {
       console.log('Starting exhibitor update with data:', editFormData);
       
-      const updateData = {
-        // Company Information
-        company_name: editFormData.companyName,
-        company_description: editFormData.companyDescription,
-        established_year: editFormData.establishedYear,
-        company_size: editFormData.companySize,
-        website: editFormData.website,
+      try {
+        // Create exhibitor name for file naming
+        const exhibitorName = `${editFormData.firstName}_${editFormData.lastName}_${editFormData.companyName}`.replace(/\s+/g, '_');
         
-        // Contact Information
-        contact_person: editFormData.contactPerson,
-        designation: editFormData.designation,
+        // Upload new documents to Supabase Storage (keeping existing ones)
+        const documentUrls: { [key: string]: string } = { ...existingDocuments };
+        
+        if (editFormData.documents.panCard) {
+          console.log('📄 Processing new PAN Card...');
+          const panCardUrl = await handleDocumentUpload(editFormData.documents.panCard, `${exhibitorName}_pan_card`);
+          if (panCardUrl) documentUrls.panCard = panCardUrl;
+        }
+        
+        if (editFormData.documents.aadharCard) {
+          console.log('📄 Processing new Aadhar Card...');
+          const aadharCardUrl = await handleDocumentUpload(editFormData.documents.aadharCard, `${exhibitorName}_aadhar_card`);
+          if (aadharCardUrl) documentUrls.aadharCard = aadharCardUrl;
+        }
+        
+        if (editFormData.documents.licence) {
+          console.log('📄 Processing new Licence...');
+          const licenceUrl = await handleDocumentUpload(editFormData.documents.licence, `${exhibitorName}_licence`);
+          if (licenceUrl) documentUrls.licence = licenceUrl;
+        }
+        
+        // Process new images (keeping existing ones)
+        let imageUrls = [...existingImages];
+        if (editFormData.images.length > 0) {
+          console.log('🖼️ Processing new images...');
+          const newImageUrls = await handleImageUploads(editFormData.images, exhibitorName);
+          imageUrls = [...imageUrls, ...newImageUrls];
+        }
+        
+        console.log('📋 Final documentUrls:', documentUrls);
+        console.log('🖼️ Final imageUrls:', imageUrls);
+      
+      const updateData = {
+        // Personal Information (NEW - matching AddExhibitor Step 1)
+        first_name: editFormData.firstName,
+        last_name: editFormData.lastName,
         email: editFormData.email,
         phone: editFormData.phone,
-        alternate_email: editFormData.alternateEmail,
         alternate_phone: editFormData.alternatePhone,
         
-        // Business Details
-        category: editFormData.category,
-        sub_category: editFormData.subCategory,
-        business_type: editFormData.businessType,
-        gst_number: editFormData.gstNumber,
-        pan_number: editFormData.panNumber,
-        
-        // Location & Address
-        address: editFormData.address,
+        // Address (NEW - matching AddExhibitor Step 2)
+        address1: editFormData.address1,
+        address2: editFormData.address2,
         city: editFormData.city,
         state: editFormData.state,
         pincode: editFormData.pincode,
         country: editFormData.country,
         
-        // Exhibition Details
-        booth_preference: editFormData.boothPreference,
+        // Business Information (NEW - matching AddExhibitor Step 3)
+        company_name: editFormData.companyName,
+        website: editFormData.website,
+        category: editFormData.category,
+        sub_category: editFormData.subCategory,
+        pan_number: editFormData.panNumber,
+        gst_number: editFormData.gstNumber,
         booth_size: editFormData.boothSize,
-        special_requirements: editFormData.specialRequirements,
-        previous_exhibitions: editFormData.previousExhibitions,
-        expected_visitors: editFormData.expectedVisitors,
+        business_description: editFormData.businessDescription,
+        facebook_url: editFormData.socialMediaLinks.facebook,
+        linkedin_url: editFormData.socialMediaLinks.linkedin,
+        instagram_url: editFormData.socialMediaLinks.instagram,
+        twitter_url: editFormData.socialMediaLinks.twitter,
         
-        // Products & Services
-        products: editFormData.products,
-        services: editFormData.services,
-        target_audience: editFormData.targetAudience,
+        // Document URLs (NEW - matching AddExhibitor)
+        document_urls: documentUrls,
         
-        // Payment & Billing
-        registration_fee: editFormData.registrationFee,
-        payment_method: editFormData.paymentMethod,
-        billing_address: editFormData.billingAddress,
-        
-        // Additional Information
-        social_media_links: editFormData.socialMediaLinks,
+        // Image URLs (NEW - matching AddExhibitor)
+        image_urls: imageUrls,
         
         // Settings
         status: editFormData.status,
         payment_status: editFormData.paymentStatus,
         send_confirmation_email: editFormData.sendConfirmationEmail,
         allow_marketing_emails: editFormData.allowMarketingEmails
+        
+        // ========== LEGACY FIELDS (COMMENTED OUT - NOT IN ADDEXHIBITOR) ==========
+        // company_description: editFormData.companyDescription,
+        // established_year: editFormData.establishedYear,
+        // company_size: editFormData.companySize,
+        // contact_person: editFormData.contactPerson,
+        // designation: editFormData.designation,
+        // alternate_email: editFormData.alternateEmail,
+        // business_type: editFormData.businessType,
+        // address: editFormData.address,
+        // booth_preference: editFormData.boothPreference,
+        // special_requirements: editFormData.specialRequirements,
+        // previous_exhibitions: editFormData.previousExhibitions,
+        // expected_visitors: editFormData.expectedVisitors,
+        // products: editFormData.products,
+        // services: editFormData.services,
+        // target_audience: editFormData.targetAudience,
+        // registration_fee: editFormData.registrationFee,
+        // payment_method: editFormData.paymentMethod,
+        // billing_address: editFormData.billingAddress,
       };
       
       console.log('Update data being sent:', updateData);
       console.log('Updating exhibitor ID:', editFormData.id);
 
-      try {
         const { data, error } = await supabase
           .from('exhibitors')
           .update(updateData)
@@ -516,7 +699,7 @@ export const Exhibitors: React.FC = () => {
 
   const addProduct = () => {
     if (newProduct.trim() && editFormData && !editFormData.products.includes(newProduct.trim())) {
-      setEditFormData(prev => prev ? {
+      setEditFormData((prev: any) => prev ? {
         ...prev,
         products: [...prev.products, newProduct.trim()]
       } : null);
@@ -528,14 +711,14 @@ export const Exhibitors: React.FC = () => {
     if (editFormData) {
       setEditFormData({
         ...editFormData,
-        products: editFormData.products.filter((_, i) => i !== index)
+        products: editFormData.products.filter((_: any, i: any) => i !== index)
       });
     }
   };
 
   const addService = () => {
     if (newService.trim() && editFormData && !editFormData.services.includes(newService.trim())) {
-      setEditFormData(prev => prev ? {
+      setEditFormData((prev: any) => prev ? {
         ...prev,
         services: [...prev.services, newService.trim()]
       } : null);
@@ -547,17 +730,17 @@ export const Exhibitors: React.FC = () => {
     if (editFormData) {
       setEditFormData({
         ...editFormData,
-        services: editFormData.services.filter((_, i) => i !== index)
+        services: editFormData.services.filter((_: any, i: any) => i !== index)
       });
     }
   };
 
   const nextEditStep = () => {
-    setEditStep(prev => Math.min(prev + 1, 5));
+    setEditStep((prev: any) => Math.min(prev + 1, 6));
   };
 
   const prevEditStep = () => {
-    setEditStep(prev => Math.max(prev - 1, 1));
+    setEditStep((prev: any) => Math.max(prev - 1, 1));
   };
 
 
@@ -585,7 +768,7 @@ export const Exhibitors: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      {/* <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
             <div className="flex items-center justify-center mb-2">
@@ -649,7 +832,7 @@ export const Exhibitors: React.FC = () => {
             <div className="text-xs sm:text-sm text-gray-600">Pending Amount</div>
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       {/* Filters and Search */}
       <Card>
@@ -759,7 +942,7 @@ export const Exhibitors: React.FC = () => {
 
       {/* Exhibitors Table */}
       <Card>
-        <CardHeader>
+        {/* <CardHeader>
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">
               Exhibitors Overview ({filteredExhibitors.length})
@@ -771,7 +954,7 @@ export const Exhibitors: React.FC = () => {
               </Button>
             </div>
           </div>
-        </CardHeader>
+        </CardHeader> */}
         <CardContent>
           <Table>
             <TableHeader>
@@ -788,10 +971,10 @@ export const Exhibitors: React.FC = () => {
                     <TableHead>Contact Person</TableHead>
                     <TableHead className="hidden md:table-cell">Category</TableHead>
                     <TableHead className="hidden lg:table-cell">Sub Category</TableHead>
-                    <TableHead className="hidden xl:table-cell">Booth</TableHead>
+                    {/* <TableHead className="hidden xl:table-cell">Booth</TableHead> */}
                     <TableHead className="hidden 2xl:table-cell">Registration Date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Payment</TableHead>
+                    {/* <TableHead>Payment</TableHead> */}
                     <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -833,7 +1016,7 @@ export const Exhibitors: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson || 'N/A'}</div>
+                        <div className="text-sm font-medium text-gray-900">{exhibitor.contactPerson || exhibitor.firstName + ' ' + exhibitor.lastName}</div>
                         <div className="text-sm text-gray-500 flex items-center truncate">
                           <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
                           <span className="truncate">{exhibitor.email || 'N/A'}</span>
@@ -850,12 +1033,12 @@ export const Exhibitors: React.FC = () => {
                     <TableCell className="hidden lg:table-cell">
                       <Badge variant="info">{exhibitor.subCategory || 'N/A'}</Badge>
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell">
+                    {/* <TableCell className="hidden xl:table-cell">
                       <div className="flex items-center">
                         <Building className="h-4 w-4 mr-2 text-blue-500" />
                         <span className="font-medium">{exhibitor.booth || 'N/A'}</span>
                       </div>
-                    </TableCell>
+                    </TableCell> */}
                     <TableCell className="hidden 2xl:table-cell">
                       <div className="flex items-center text-sm text-gray-900">
                         <Calendar className="h-4 w-4 mr-1" />
@@ -871,14 +1054,14 @@ export const Exhibitors: React.FC = () => {
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell>
+                      {/* <TableCell>
                       <div className="flex items-center">
                         <CreditCard className="h-4 w-4 mr-1" />
                         <Badge variant={getPaymentStatusVariant(exhibitor.paymentStatus)}>
                           {exhibitor.paymentStatus}
                         </Badge>
                       </div>
-                    </TableCell>
+                      </TableCell> */}
                     <TableCell>
                       <div className="flex space-x-1">
                         <Button 
@@ -936,93 +1119,50 @@ export const Exhibitors: React.FC = () => {
             </div>
             
             <div className="p-6 space-y-6">
-              {/* Company Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Company Information</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+              {/* Personal Information (Step 1) */}
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Company Name</label>
-                      <p className="text-gray-900">{selectedExhibitor.companyName}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <User className="h-5 w-5 mr-2" />
+                  Personal Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <label className="text-sm font-medium text-gray-700">First Name</label>
+                    <p className="text-gray-900">{selectedExhibitor.firstName || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Category</label>
-                      <p className="text-gray-900">{selectedExhibitor.category || 'N/A'}</p>
+                    <label className="text-sm font-medium text-gray-700">Last Name</label>
+                    <p className="text-gray-900">{selectedExhibitor.lastName || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Sub Category</label>
-                      <p className="text-gray-900">{selectedExhibitor.subCategory || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Business Type</label>
-                      <p className="text-gray-900">{selectedExhibitor.businessType || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Established Year</label>
-                      <p className="text-gray-900">{selectedExhibitor.establishedYear || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Company Size</label>
-                      <p className="text-gray-900">{selectedExhibitor.companySize || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Website</label>
-                      <p className="text-gray-900">
-                        {selectedExhibitor.website ? (
-                          <a href={selectedExhibitor.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                            {selectedExhibitor.website}
-                          </a>
-                        ) : 'N/A'}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Contact Person</label>
-                      <p className="text-gray-900">{selectedExhibitor.contactPerson || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Designation</label>
-                      <p className="text-gray-900">{selectedExhibitor.designation || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Email</label>
+                    <label className="text-sm font-medium text-gray-700">Email ID</label>
                       <p className="text-gray-900">{selectedExhibitor.email || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Phone</label>
+                    <label className="text-sm font-medium text-gray-700">Contact Number</label>
                       <p className="text-gray-900">{selectedExhibitor.phone || 'N/A'}</p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Alternate Phone</label>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-gray-700">Alternate Contact Number</label>
                       <p className="text-gray-900">{selectedExhibitor.alternatePhone || 'N/A'}</p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Alternate Email</label>
-                      <p className="text-gray-900">{selectedExhibitor.alternateEmail || 'N/A'}</p>
                     </div>
-                  </CardContent>
-                </Card>
               </div>
 
-              {/* Location & Business Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Location & Address</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+              {/* Address Information (Step 2) */}
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Address</label>
-                      <p className="text-gray-900">{selectedExhibitor.address || 'N/A'}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <MapPin className="h-5 w-5 mr-2" />
+                  Address Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Address Line 1</label>
+                    <p className="text-gray-900">{selectedExhibitor.address1 || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Address Line 2</label>
+                    <p className="text-gray-900">{selectedExhibitor.address2 || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">City</label>
@@ -1040,143 +1180,203 @@ export const Exhibitors: React.FC = () => {
                       <label className="text-sm font-medium text-gray-700">Country</label>
                       <p className="text-gray-900">{selectedExhibitor.country || 'N/A'}</p>
                     </div>
-                  </CardContent>
-                </Card>
+                </div>
+              </div>
 
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Business Details</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+              {/* Business Information (Step 3) */}
                     <div>
-                      <label className="text-sm font-medium text-gray-700">GST Number</label>
-                      <p className="text-gray-900">{selectedExhibitor.gstNumber || 'N/A'}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <Building className="h-5 w-5 mr-2" />
+                  Business Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Company Name</label>
+                    <p className="text-gray-900">{selectedExhibitor.companyName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Company Website</label>
+                    <p className="text-gray-900">
+                      {selectedExhibitor.website ? (
+                        <a href={selectedExhibitor.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {selectedExhibitor.website}
+                        </a>
+                      ) : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Category</label>
+                    <p className="text-gray-900">{selectedExhibitor.category || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Sub Category</label>
+                    <p className="text-gray-900">{selectedExhibitor.subCategory || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">PAN Number</label>
                       <p className="text-gray-900">{selectedExhibitor.panNumber || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Booth Preference</label>
-                      <p className="text-gray-900">{selectedExhibitor.boothPreference || 'N/A'}</p>
+                    <label className="text-sm font-medium text-gray-700">GST Number</label>
+                    <p className="text-gray-900">{selectedExhibitor.gstNumber || 'N/A'}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Booth Size</label>
+                    <label className="text-sm font-medium text-gray-700">Preferred Booth Size</label>
                       <p className="text-gray-900">{selectedExhibitor.boothSize || 'N/A'}</p>
                     </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-gray-700">Business Description</label>
+                    <p className="text-gray-900">{selectedExhibitor.businessDescription || 'N/A'}</p>
+                  </div>
+                  
+                  {/* Social Media Links */}
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-gray-700">Social Media Links</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Target Audience</label>
-                      <p className="text-gray-900">{selectedExhibitor.targetAudience || 'N/A'}</p>
+                        <span className="text-xs text-gray-500">Facebook:</span>
+                        <p className="text-sm text-gray-900">
+                          {selectedExhibitor.socialMediaLinks?.facebook ? (
+                            <a href={selectedExhibitor.socialMediaLinks.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Link
+                            </a>
+                          ) : 'N/A'}
+                        </p>
                     </div>
-                  </CardContent>
-                </Card>
+                      <div>
+                        <span className="text-xs text-gray-500">LinkedIn:</span>
+                        <p className="text-sm text-gray-900">
+                          {selectedExhibitor.socialMediaLinks?.linkedin ? (
+                            <a href={selectedExhibitor.socialMediaLinks.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Link
+                            </a>
+                          ) : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500">Instagram:</span>
+                        <p className="text-sm text-gray-900">
+                          {selectedExhibitor.socialMediaLinks?.instagram ? (
+                            <a href={selectedExhibitor.socialMediaLinks.instagram} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Link
+                            </a>
+                          ) : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500">Twitter:</span>
+                        <p className="text-sm text-gray-900">
+                          {selectedExhibitor.socialMediaLinks?.twitter ? (
+                            <a href={selectedExhibitor.socialMediaLinks.twitter} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Link
+                            </a>
+                          ) : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Products & Services */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Products</h3>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedExhibitor.products && selectedExhibitor.products.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedExhibitor.products.map((product, index) => (
-                          <Badge key={index} variant="default">{product}</Badge>
-                        ))}
+              {/* Documents (Step 4) */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <FileText className="h-5 w-5 mr-2" />
+                  Documents
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">PAN Card</label>
+                    <div className="mt-1">
+                      {selectedExhibitor.documentUrls?.panCard ? (
+                        <a href={selectedExhibitor.documentUrls.panCard} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                          ✓ View Document
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 text-sm">Not uploaded</span>
+                      )}
                       </div>
-                    ) : (
-                      <p className="text-gray-500">No products listed</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Services</h3>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedExhibitor.services && selectedExhibitor.services.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {selectedExhibitor.services.map((service, index) => (
-                          <Badge key={index} variant="info">{service}</Badge>
-                        ))}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Aadhar Card</label>
+                    <div className="mt-1">
+                      {selectedExhibitor.documentUrls?.aadharCard ? (
+                        <a href={selectedExhibitor.documentUrls.aadharCard} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                          ✓ View Document
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 text-sm">Not uploaded</span>
+                      )}
                       </div>
-                    ) : (
-                      <p className="text-gray-500">No services listed</p>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Licence (Optional)</label>
+                    <div className="mt-1">
+                      {selectedExhibitor.documentUrls?.licence ? (
+                        <a href={selectedExhibitor.documentUrls.licence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                          ✓ View Document
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 text-sm">Not uploaded</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Status and Payment */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Registration Status</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+              {/* Images (Step 5) */}
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Current Status</label>
-                      <div className="flex items-center mt-1">
-                        {getStatusIcon(selectedExhibitor.status)}
-                        <Badge variant={getStatusVariant(selectedExhibitor.status)} className="ml-2">
-                          {selectedExhibitor.status.replace('_', ' ')}
-                        </Badge>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  <Upload className="h-5 w-5 mr-2" />
+                  Images
+                </h3>
+                {selectedExhibitor.imageUrls && selectedExhibitor.imageUrls.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {selectedExhibitor.imageUrls.map((imageUrl: string, index: number) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={imageUrl}
+                          alt={`Company image ${index + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                        />
                       </div>
+                    ))}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Registration Date</label>
-                      <p className="text-gray-900">{selectedExhibitor.registrationDate ? new Date(selectedExhibitor.registrationDate).toLocaleDateString() : 'N/A'}</p>
+                ) : (
+                  <p className="text-gray-500 text-sm">No images uploaded</p>
+                )}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Created Date</label>
-                      <p className="text-gray-900">{new Date(selectedExhibitor.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Last Updated</label>
-                      <p className="text-gray-900">{new Date(selectedExhibitor.updated_at).toLocaleDateString()}</p>
-                    </div>
-                  </CardContent>
-                </Card>
 
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-lg font-semibold text-gray-900">Payment Information</h3>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+              {/* Status Information */}
+                    <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Status Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <label className="text-sm font-medium text-gray-700">Registration Status</label>
+                    <div className="mt-1">
+                      <Badge variant={selectedExhibitor.status === 'confirmed' ? 'success' : selectedExhibitor.status === 'pending_approval' ? 'warning' : 'default'}>
+                        {selectedExhibitor.status?.toUpperCase() || 'REGISTERED'}
+                      </Badge>
+                    </div>
+                  </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Payment Status</label>
-                      <div className="flex items-center mt-1">
-                        <CreditCard className="h-4 w-4 mr-1" />
-                        <Badge variant={getPaymentStatusVariant(selectedExhibitor.paymentStatus)}>
-                          {selectedExhibitor.paymentStatus}
+                    <div className="mt-1">
+                      <Badge variant={selectedExhibitor.paymentStatus === 'paid' ? 'success' : selectedExhibitor.paymentStatus === 'partial' ? 'warning' : 'default'}>
+                        {selectedExhibitor.paymentStatus?.toUpperCase() || 'PENDING'}
                         </Badge>
                       </div>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Registration Fee</label>
-                      <p className="text-gray-900 font-medium">₹{selectedExhibitor.registrationFee?.toLocaleString() || '15,000'}</p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Payment Method</label>
-                      <p className="text-gray-900">{selectedExhibitor.paymentMethod || 'N/A'}</p>
                     </div>
-                  </CardContent>
-                </Card>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-6 border-t border-gray-200">
-                <Button variant="outline" onClick={() => { closeModals(); handleEmail(selectedExhibitor); }}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Email
-                </Button>
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+              <Button variant="outline" onClick={closeModals}>Close</Button>
                 <Button onClick={() => { closeModals(); handleEdit(selectedExhibitor); }}>
                   <Edit className="h-4 w-4 mr-2" />
-                  Edit Details
+                Edit Exhibitor
                 </Button>
-              </div>
             </div>
           </div>
         </div>
@@ -1197,7 +1397,7 @@ export const Exhibitors: React.FC = () => {
               {/* Step Indicator */}
               <div className="mt-4">
                 <div className="flex items-center justify-center space-x-4">
-                  {[1, 2, 3, 4, 5].map((step) => (
+                  {[1, 2, 3, 4, 5, 6].map((step) => (
                     <div key={step} className="flex items-center">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                         editStep >= step 
@@ -1225,73 +1425,108 @@ export const Exhibitors: React.FC = () => {
             </div>
             
             <div className="p-6">
-              {/* Step 1: Company Information */}
+              {/* Step 1: Personal Information */}
               {editStep === 1 && (
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Company Information</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <User className="h-5 w-5 mr-2" />
+                        Personal Information
+                      </h3>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
-                        <input
-                          type="text"
-                          value={editFormData.companyName || ''}
-                          onChange={(e) => setEditFormData({...editFormData, companyName: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter company name"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Company Description</label>
-                        <textarea
-                          value={editFormData.companyDescription || ''}
-                          onChange={(e) => setEditFormData({...editFormData, companyDescription: e.target.value})}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Describe your company"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Established Year</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            First Name *
+                          </label>
                           <input
                             type="text"
-                            value={editFormData.establishedYear || ''}
-                            onChange={(e) => setEditFormData({...editFormData, establishedYear: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="e.g., 2010"
+                            value={editFormData.firstName || ''}
+                            onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.firstName ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter first name"
                           />
+                          {editErrors.firstName && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.firstName}
+                            </p>
+                          )}
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Company Size</label>
-                          <select
-                            value={editFormData.companySize || ''}
-                            onChange={(e) => setEditFormData({...editFormData, companySize: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select company size</option>
-                            <option value="1-10">1-10 employees</option>
-                            <option value="11-50">11-50 employees</option>
-                            <option value="51-200">51-200 employees</option>
-                            <option value="201-500">201-500 employees</option>
-                            <option value="500+">500+ employees</option>
-                          </select>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Last Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.lastName || ''}
+                            onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.lastName ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter last name"
+                          />
+                          {editErrors.lastName && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.lastName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Email ID *
+                          </label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            <input
+                              type="email"
+                              value={editFormData.email || ''}
+                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                              className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.email ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                              placeholder="Enter email address"
+                            />
+                          </div>
+                          {editErrors.email && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.email}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <PhoneInput
+                            label="Contact Number"
+                            value={editFormData.phone || ''}
+                            onChange={(value) => setEditFormData({...editFormData, phone: value})}
+                            required={true}
+                            error={editErrors.phone}
+                            name="phone"
+                            placeholder="9876543210"
+                          />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Website</label>
-                        <input
-                          type="url"
-                          value={editFormData.website || ''}
-                          onChange={(e) => setEditFormData({...editFormData, website: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="https://www.example.com"
+                        <PhoneInput
+                          label="Alternate Contact Number"
+                          value={editFormData.alternatePhone || ''}
+                          onChange={(value) => setEditFormData({...editFormData, alternatePhone: value})}
+                          required={false}
+                          error={editErrors.alternatePhone}
+                          name="alternatePhone"
+                          placeholder="9876543210"
                         />
                       </div>
                     </CardContent>
@@ -1304,398 +1539,328 @@ export const Exhibitors: React.FC = () => {
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <MapPin className="h-5 w-5 mr-2" />
+                        Address
+                      </h3>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person *</label>
-                          <input
-                            type="text"
-                            value={editFormData.contactPerson || ''}
-                            onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter contact person name"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
-                          <input
-                            type="text"
-                            value={editFormData.designation || ''}
-                            onChange={(e) => setEditFormData({...editFormData, designation: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="e.g., Manager, Director"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                          <input
-                            type="email"
-                            value={editFormData.email || ''}
-                            onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="contact@company.com"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Phone *</label>
-                          <input
-                            type="tel"
-                            value={editFormData.phone || ''}
-                            onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="+91 98765 43210"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Alternate Phone</label>
-                          <input
-                            type="tel"
-                            value={editFormData.alternatePhone || ''}
-                            onChange={(e) => setEditFormData({...editFormData, alternatePhone: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Alternate phone number"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Alternate Email</label>
-                          <input
-                            type="email"
-                            value={editFormData.alternateEmail || ''}
-                            onChange={(e) => setEditFormData({...editFormData, alternateEmail: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Alternate email address"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Business Details</h3>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
-                          <select
-                            value={editFormData.category || ''}
-                            onChange={(e) => {
-                              setEditFormData({...editFormData, category: e.target.value, subCategory: ''});
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select category</option>
-                            {Object.keys(subCategories).map(category => (
-                              <option key={category} value={category}>{category}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Sub Category</label>
-                          <select
-                            value={editFormData.subCategory || ''}
-                            onChange={(e) => setEditFormData({...editFormData, subCategory: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            disabled={!editFormData.category}
-                          >
-                            <option value="">Select sub-category</option>
-                            {editFormData.category && subCategories[editFormData.category as keyof typeof subCategories]?.map((subCat) => (
-                              <option key={subCat} value={subCat}>{subCat}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Business Type</label>
-                          <select
-                            value={editFormData.businessType || ''}
-                            onChange={(e) => setEditFormData({...editFormData, businessType: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select business type</option>
-                            {businessTypes.map(type => (
-                              <option key={type} value={type}>{type}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">GST Number</label>
-                          <input
-                            type="text"
-                            value={editFormData.gstNumber || ''}
-                            onChange={(e) => setEditFormData({...editFormData, gstNumber: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="GST number"
-                          />
-                        </div>
+                    <CardContent className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Address Line 1 *
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.address1 || ''}
+                          onChange={(e) => setEditFormData({...editFormData, address1: e.target.value})}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            editErrors.address1 ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="Enter street address"
+                        />
+                        {editErrors.address1 && (
+                          <p className="mt-1 text-sm text-red-600 flex items-center">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            {editErrors.address1}
+                          </p>
+                        )}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">PAN Number</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Address Line 2 (Optional)
+                        </label>
                         <input
                           type="text"
-                          value={editFormData.panNumber || ''}
-                          onChange={(e) => setEditFormData({...editFormData, panNumber: e.target.value})}
+                          value={editFormData.address2 || ''}
+                          onChange={(e) => setEditFormData({...editFormData, address2: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="PAN number"
+                          placeholder="Apartment, suite, unit, building, floor, etc."
                         />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            State *
+                          </label>
+                          <select
+                            value={editFormData.state || ''}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, state: e.target.value, city: ''}); // Clear city when state changes
+                            }}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.state ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select state</option>
+                            {statesData.map((state) => (
+                              <option key={state.id} value={state.name}>
+                                {state.name}
+                              </option>
+                            ))}
+                          </select>
+                          {editErrors.state && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.state}
+                            </p>
+                          )}
+                        </div>
+<div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            City *
+                          </label>
+                          <select
+                            value={editFormData.city || ''}
+                            onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
+                            disabled={!editFormData.state}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${
+                              editErrors.city ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select city</option>
+                            {editFormData.state && statesData
+                              .find(s => s.name === editFormData.state)?.cities
+                              .map(city => (
+                                <option key={city} value={city}>{city}</option>
+                              ))}
+                          </select>
+                          {editErrors.city && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.city}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Pincode *
+                          </label>
+                          <input
+                            type="text"
+                            value={editFormData.pincode || ''}
+                            onChange={(e) => setEditFormData({...editFormData, pincode: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.pincode ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="400001"
+                          />
+                          {editErrors.pincode && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.pincode}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Country
+                          </label>
+                          <select
+                            value={editFormData.country || 'India'}
+                            onChange={(e) => setEditFormData({...editFormData, country: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="India">India</option>
+                          </select>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
               )}
 
-              {/* Step 3: Location & Exhibition */}
+              {/* Step 3: Business Information */}
               {editStep === 3 && (
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Location & Address</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <Building className="h-5 w-5 mr-2" />
+                        Business Information
+                      </h3>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
-                        <textarea
-                          value={editFormData.address || ''}
-                          onChange={(e) => setEditFormData({...editFormData, address: e.target.value})}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter complete address"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Company Name *
+                          </label>
                           <input
                             type="text"
-                            value={editFormData.city || ''}
-                            onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter city"
+                            value={editFormData.companyName || ''}
+                            onChange={(e) => setEditFormData({...editFormData, companyName: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.companyName ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter company name"
                           />
-                        </div>
+                          {editErrors.companyName && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.companyName}
+                            </p>
+                          )}
+                      </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                          <select
-                            value={editFormData.state || ''}
-                            onChange={(e) => setEditFormData({...editFormData, state: e.target.value})}
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Company Website
+                          </label>
+                          <input
+                            type="url"
+                            value={editFormData.website || ''}
+                            onChange={(e) => setEditFormData({...editFormData, website: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="https://company.com"
+                          />
+                        </div>
+                        </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Category *
+                          </label>
+                          <select
+                            value={editFormData.category || ''}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, category: e.target.value, subCategory: ''});
+                            }}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.category ? 'border-red-300' : 'border-gray-300'
+                            }`}
                           >
-                            <option value="">Select state</option>
-                            {states.map(state => (
-                              <option key={state} value={state}>{state}</option>
+                            <option value="">Select category</option>
+                            {exhibitorCategories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </select>
+                          {editErrors.category && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.category}
+                            </p>
+                          )}
+                      </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Sub Category
+                          </label>
+                          <select
+                            value={editFormData.subCategory || ''}
+                            onChange={(e) => setEditFormData({...editFormData, subCategory: e.target.value})}
+                            disabled={!editFormData.category}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                          >
+                            <option value="">Select sub-category</option>
+                            {editFormData.category && subCategories[editFormData.category as keyof typeof subCategories]?.map((subCat) => (
+                              <option key={subCat} value={subCat}>
+                                {subCat}
+                              </option>
                             ))}
                           </select>
                         </div>
-                      </div>
+                        </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Pincode</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            PAN Number *
+                          </label>
                           <input
                             type="text"
-                            value={editFormData.pincode || ''}
-                            onChange={(e) => setEditFormData({...editFormData, pincode: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter pincode"
+                            value={editFormData.panNumber || ''}
+                            onChange={(e) => setEditFormData({...editFormData, panNumber: e.target.value})}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.panNumber ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="AAAAA0000A"
                           />
+                          {editErrors.panNumber && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.panNumber}
+                            </p>
+                          )}
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            GST Number (Optional)
+                          </label>
                           <input
                             type="text"
-                            value={editFormData.country || 'India'}
-                            onChange={(e) => setEditFormData({...editFormData, country: e.target.value})}
+                            value={editFormData.gstNumber || ''}
+                            onChange={(e) => setEditFormData({...editFormData, gstNumber: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="27AAAAA0000A1Z5"
                           />
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Exhibition Details</h3>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Booth Preference</label>
-                          <input
-                            type="text"
-                            value={editFormData.boothPreference || ''}
-                            onChange={(e) => setEditFormData({...editFormData, boothPreference: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="e.g., Corner booth, Near entrance"
-                          />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Booth Size</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Preferred Booth Size (Optional)
+                        </label>
                           <select
                             value={editFormData.boothSize || ''}
                             onChange={(e) => setEditFormData({...editFormData, boothSize: e.target.value})}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
                             <option value="">Select booth size</option>
-                            {boothSizes.map(size => (
-                              <option key={size} value={size}>{size}</option>
+                          {boothSizes.map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
                             ))}
                           </select>
-                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Special Requirements</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Business Description (Optional)
+                        </label>
                         <textarea
-                          value={editFormData.specialRequirements || ''}
-                          onChange={(e) => setEditFormData({...editFormData, specialRequirements: e.target.value})}
-                          rows={3}
+                          value={editFormData.businessDescription || ''}
+                          onChange={(e) => setEditFormData({...editFormData, businessDescription: e.target.value})}
+                          rows={4}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Any special requirements for your booth"
+                          placeholder="Describe your business, products, and services..."
                         />
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Social Media Links */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Previous Exhibitions</label>
+                        <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links (Optional)</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Facebook
+                            </label>
                           <input
-                            type="text"
-                            value={editFormData.previousExhibitions || ''}
-                            onChange={(e) => setEditFormData({...editFormData, previousExhibitions: e.target.value})}
+                              type="url"
+                              value={editFormData.socialMediaLinks?.facebook || ''}
+                              onChange={(e) => setEditFormData({
+                                ...editFormData,
+                                socialMediaLinks: {...editFormData.socialMediaLinks, facebook: e.target.value}
+                              })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="List previous exhibitions"
+                              placeholder="https://facebook.com/..."
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Expected Visitors</label>
-                          <input
-                            type="text"
-                            value={editFormData.expectedVisitors || ''}
-                            onChange={(e) => setEditFormData({...editFormData, expectedVisitors: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="e.g., 1000+ visitors"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Step 4: Products & Services */}
-              {editStep === 4 && (
-                <div className="space-y-6">
-                  <Card>
-                    <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Products & Services</h3>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Products</label>
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={newProduct}
-                              onChange={(e) => setNewProduct(e.target.value)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Add a product"
-                              onKeyPress={(e) => e.key === 'Enter' && addProduct()}
-                            />
-                            <Button onClick={addProduct} size="sm">
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {editFormData.products.map((product, index) => (
-                              <Badge key={index} variant="default" className="flex items-center gap-1">
-                                {product}
-                                <button
-                                  onClick={() => removeProduct(index)}
-                                  className="ml-1 hover:text-red-500"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Services</label>
-                        <div className="space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={newService}
-                              onChange={(e) => setNewService(e.target.value)}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Add a service"
-                              onKeyPress={(e) => e.key === 'Enter' && addService()}
-                            />
-                            <Button onClick={addService} size="sm">
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {editFormData.services.map((service, index) => (
-                              <Badge key={index} variant="info" className="flex items-center gap-1">
-                                {service}
-                                <button
-                                  onClick={() => removeService(index)}
-                                  className="ml-1 hover:text-red-500"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                        <input
-                          type="text"
-                          value={editFormData.targetAudience || ''}
-                          onChange={(e) => setEditFormData({...editFormData, targetAudience: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="e.g., B2B, Retail customers, etc."
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Social Media Links</h3>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">LinkedIn</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              LinkedIn
+                            </label>
                           <input
                             type="url"
                             value={editFormData.socialMediaLinks?.linkedin || ''}
@@ -1704,28 +1869,30 @@ export const Exhibitors: React.FC = () => {
                               socialMediaLinks: {...editFormData.socialMediaLinks, linkedin: e.target.value}
                             })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="LinkedIn profile URL"
+                              placeholder="https://linkedin.com/company/..."
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Facebook</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Instagram
+                            </label>
                           <input
                             type="url"
-                            value={editFormData.socialMediaLinks?.facebook || ''}
+                              value={editFormData.socialMediaLinks?.instagram || ''}
                             onChange={(e) => setEditFormData({
                               ...editFormData, 
-                              socialMediaLinks: {...editFormData.socialMediaLinks, facebook: e.target.value}
+                                socialMediaLinks: {...editFormData.socialMediaLinks, instagram: e.target.value}
                             })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Facebook page URL"
+                              placeholder="https://instagram.com/..."
                           />
-                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Twitter</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Twitter
+                            </label>
                           <input
                             type="url"
                             value={editFormData.socialMediaLinks?.twitter || ''}
@@ -1734,22 +1901,9 @@ export const Exhibitors: React.FC = () => {
                               socialMediaLinks: {...editFormData.socialMediaLinks, twitter: e.target.value}
                             })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Twitter profile URL"
+                              placeholder="https://twitter.com/..."
                           />
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Instagram</label>
-                          <input
-                            type="url"
-                            value={editFormData.socialMediaLinks?.instagram || ''}
-                            onChange={(e) => setEditFormData({
-                              ...editFormData, 
-                              socialMediaLinks: {...editFormData.socialMediaLinks, instagram: e.target.value}
-                            })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Instagram profile URL"
-                          />
                         </div>
                       </div>
                     </CardContent>
@@ -1757,83 +1911,386 @@ export const Exhibitors: React.FC = () => {
                 </div>
               )}
 
-              {/* Step 5: Settings & Save */}
+              {/* Step 4: Documents */}
+              {editStep === 4 && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <FileText className="h-5 w-5 mr-2" />
+                        Documents
+                      </h3>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            PAN Card *
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600 mb-2">
+                              Click to upload PAN Card
+                            </p>
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (editFormData && file) {
+                                  setEditFormData({
+                                    ...editFormData,
+                                    documents: {
+                                      ...editFormData.documents,
+                                      panCard: file
+                                    }
+                                  });
+                                }
+                              }}
+                              className="hidden"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              id="edit-panCard-upload"
+                            />
+                            <label 
+                              htmlFor="edit-panCard-upload" 
+                              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                            >
+                              Choose File
+                            </label>
+                            {editFormData?.documents.panCard && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ {editFormData.documents.panCard.name}
+                              </p>
+                            )}
+                            {!editFormData?.documents.panCard && existingDocuments.panCard && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ PAN Card Uploaded
+                              </p>
+                            )}
+                          </div>
+                          {editErrors.panCard && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.panCard}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Aadhar Card *
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600 mb-2">
+                              Click to upload Aadhar Card
+                            </p>
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (editFormData && file) {
+                                  setEditFormData({
+                                    ...editFormData,
+                                    documents: {
+                                      ...editFormData.documents,
+                                      aadharCard: file
+                                    }
+                                  });
+                                }
+                              }}
+                              className="hidden"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              id="edit-aadharCard-upload"
+                            />
+                            <label 
+                              htmlFor="edit-aadharCard-upload" 
+                              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                            >
+                              Choose File
+                            </label>
+                            {editFormData?.documents.aadharCard && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ {editFormData.documents.aadharCard.name}
+                              </p>
+                            )}
+                            {!editFormData?.documents.aadharCard && existingDocuments.aadharCard && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ Aadhar Card Uploaded
+                              </p>
+                            )}
+                          </div>
+                          {editErrors.aadharCard && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.aadharCard}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Licence (Optional)
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600 mb-2">
+                              Click to upload Licence
+                            </p>
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                if (editFormData && file) {
+                                  setEditFormData({
+                                    ...editFormData,
+                                    documents: {
+                                      ...editFormData.documents,
+                                      licence: file
+                                    }
+                                  });
+                                }
+                              }}
+                              className="hidden"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              id="edit-licence-upload"
+                            />
+                            <label 
+                              htmlFor="edit-licence-upload" 
+                              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                            >
+                              Choose File
+                            </label>
+                            {editFormData?.documents.licence && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ {editFormData.documents.licence.name}
+                              </p>
+                            )}
+                            {!editFormData?.documents.licence && existingDocuments.licence && (
+                              <p className="text-xs text-green-600 mt-2">
+                                ✓ Licence Uploaded
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex">
+                          <Info className="h-5 w-5 text-blue-400 mt-0.5 mr-3" />
+                          <div className="text-sm">
+                            <h4 className="font-medium text-blue-900">Document Guidelines</h4>
+                            <ul className="mt-2 text-blue-700 space-y-1">
+                              <li>• Upload clear, readable images or PDFs</li>
+                              <li>• Maximum file size: 100KB per document</li>
+                              <li>• Images will be automatically compressed if too large</li>
+                              <li>• PDF files over 100KB need manual compression</li>
+                              <li>• Accepted formats: PDF, JPG, JPEG, PNG</li>
+                              <li>• PAN Card and Aadhar Card are mandatory</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Step 5: Upload Images */}
               {editStep === 5 && (
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900">Settings & Status</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <Upload className="h-5 w-5 mr-2" />
+                        Upload Images
+                      </h3>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                          <select
-                            value={editFormData.status}
-                            onChange={(e) => setEditFormData({...editFormData, status: e.target.value as any})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="registered">Registered</option>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="checked_in">Checked In</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
+                      {/* Existing Images Section - Matching AddExhibitor Format */}
+                      {existingImages.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">
+                            Selected Images ({existingImages.length})
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {existingImages.map((imageUrl, index) => (
+                              <div key={index} className="relative">
+                                <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                                  <img
+                                    src={imageUrl}
+                                    alt={`Preview ${index + 1}`}
+                                    className="w-full h-full object-cover rounded-lg"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
-                          <select
-                            value={editFormData.paymentStatus}
-                            onChange={(e) => setEditFormData({...editFormData, paymentStatus: e.target.value as any})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="paid">Paid</option>
-                            <option value="refunded">Refunded</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Registration Fee</label>
-                          <input
-                            type="number"
-                            value={editFormData.registrationFee || 15000}
-                            onChange={(e) => setEditFormData({...editFormData, registrationFee: Number(e.target.value)})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Registration fee"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                          <select
-                            value={editFormData.paymentMethod || ''}
-                            onChange={(e) => setEditFormData({...editFormData, paymentMethod: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          >
-                            <option value="">Select payment method</option>
-                            <option value="online">Online Payment</option>
-                            <option value="bank_transfer">Bank Transfer</option>
-                            <option value="cheque">Cheque</option>
-                            <option value="cash">Cash</option>
-                          </select>
-                        </div>
-                      </div>
-
+                      )}
+                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Billing Address</label>
-                        <textarea
-                          value={editFormData.billingAddress || ''}
-                          onChange={(e) => setEditFormData({...editFormData, billingAddress: e.target.value})}
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Billing address (if different from company address)"
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          {existingImages.length > 0 ? 'Upload Additional Images' : 'Upload Images'}
+                        </label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                          <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                          <Upload className="h-8 w-8 text-gray-400 mb-2 ml-4" />
+                            {/* Upload Company Images */}
+                         
+                          {/* <p className="text-xs text-gray-600 mb-3">
+                            Upload images of your company, products, or booth setup
+                          </p> */}
+                          <input
+                            type="file"
+                            multiple
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length > 0) {
+                                setEditFormData((prev: any) => ({
+                                  ...prev,
+                                  images: [...prev.images, ...files]
+                                }));
+                              }
+                            }}
+                            className="hidden"
+                            accept="image/*"
+                            id="edit-images-upload"
+                          />
+                          <label 
+                            htmlFor="edit-images-upload"
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                          >
+                            Choose Images
+                          </label>
+                          </p>
+
+                          {editFormData.images.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3">
+                              Selected Images ({editFormData.images.length})
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              {editFormData.images.map((file: any, index: any) => (
+                                <div key={index} className="relative">
+                                  <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                                    <img
+                                      src={URL.createObjectURL(file)}
+                                      alt={`Preview ${index + 1}`}
+                                      className="w-full h-full object-cover rounded-lg"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditFormData((prev: any) => ({
+                                        ...prev,
+                                        images: prev.images.filter((_: any, i: any) => i !== index)
+                                      }));
+                                    }}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                  <p className="text-xs text-gray-600 mt-1 truncate">
+                                    {file.name}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        </div>
+                        
+                        
+                      </div>
+
+                      {editErrors.images && (
+                        <div className="mt-4">
+                          <p className="text-sm text-red-600 flex items-center">
+                            <AlertCircle className="h-4 w-4 mr-1" />
+                            {editErrors.images}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div className="flex">
+                          <Info className="h-4 w-4 text-green-400 mt-0.5 mr-2" />
+                          <div className="text-xs">
+                            <h4 className="font-medium text-green-900">Image Guidelines</h4>
+                            <ul className="mt-1 text-green-700 space-y-0.5">
+                              <li>• Upload high-quality images of your products or company</li>
+                              <li>• Maximum file size: 100KB per image</li>
+                              <li>• Large images will be automatically compressed</li>
+                              <li>• Accepted formats: JPG, JPEG, PNG</li>
+                              <li>• You can upload multiple images</li>
+                            </ul>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
+                </div>
+              )}
+
+              {/* Step 6: Review & Update */}
+              {editStep === 6 && (
+                <div className="space-y-6">
+                  {/* Simple Review Summary */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                    <h4 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      📋 Update Summary
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                      <div>
+                        <h5 className="font-medium text-gray-900 mb-2">Company Information</h5>
+                        <p><strong>Company:</strong> {editFormData.companyName || 'Not provided'}</p>
+                        <p><strong>Contact Person:</strong> {editFormData.contactPerson || 'Not provided'}</p>
+                        <p><strong>Email:</strong> {editFormData.email || 'Not provided'}</p>
+                        <p><strong>Phone:</strong> {editFormData.phone || 'Not provided'}</p>
+                        {editFormData.alternatePhone && <p><strong>Alt Phone:</strong> {editFormData.alternatePhone}</p>}
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium text-gray-900 mb-2">Business Details</h5>
+                        <p><strong>Category:</strong> {editFormData.category || 'Not provided'}</p>
+                        <p><strong>Sub Category:</strong> {editFormData.subCategory || 'Not provided'}</p>
+                        {editFormData.website && <p><strong>Website:</strong> {editFormData.website}</p>}
+                        {editFormData.gstNumber && <p><strong>GST:</strong> {editFormData.gstNumber}</p>}
+                        {editFormData.panNumber && <p><strong>PAN:</strong> {editFormData.panNumber}</p>}
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium text-gray-900 mb-2">Location</h5>
+                        <p><strong>Address:</strong> {editFormData.address || 'Not provided'}</p>
+                        <p><strong>City:</strong> {editFormData.city || 'Not provided'}</p>
+                        <p><strong>State:</strong> {editFormData.state || 'Not provided'}</p>
+                        <p><strong>Pincode:</strong> {editFormData.pincode || 'Not provided'}</p>
+                        <p><strong>Country:</strong> {editFormData.country || 'Not provided'}</p>
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium text-gray-900 mb-2">Status & Payment</h5>
+                        <p><strong>Status:</strong> {editFormData.status || 'Not set'}</p>
+                        <p><strong>Payment Status:</strong> {editFormData.paymentStatus || 'Not set'}</p>
+                        <p><strong>Registration Fee:</strong> ₹{(editFormData.registrationFee || 15000).toLocaleString()}</p>
+                        <p><strong>Payment Method:</strong> {editFormData.paymentMethod || 'Not provided'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex">
+                      <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 mr-3" />
+                      <div className="text-sm">
+                        <h4 className="font-medium text-green-900">Ready to Update</h4>
+                        <p className="mt-1 text-green-700">
+                          Please review the information above and click "Save Changes" to update the exhibitor details.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1853,7 +2310,7 @@ export const Exhibitors: React.FC = () => {
                     Cancel
                   </Button>
                   
-                  {editStep < 5 ? (
+                  {editStep < 6 ? (
                     <Button onClick={nextEditStep}>
                       Next
                       <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />

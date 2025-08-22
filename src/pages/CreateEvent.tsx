@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { 
-  Save, 
-  ArrowLeft, 
-  Calendar, 
-  MapPin, 
-  Users, 
+import {
+  Save,
+  ArrowLeft,
+  Calendar,
+  MapPin,
+  Users,
   Clock,
   AlertCircle,
   CheckCircle,
@@ -17,13 +17,27 @@ import {
   X,
   Image,
   DollarSign,
-  IndianRupeeIcon
+  IndianRupeeIcon,
+  Trash2
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
 import { useAuth } from '../contexts/AuthContext';
-import { useVenues } from '../hooks/useSupabaseData';
+import { useVenues, useVendors, useExhibitors } from '../hooks/useSupabaseData';
+// @ts-ignore
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker, MobileTimePicker } from '@mui/x-date-pickers';
+import dayjs, { Dayjs } from 'dayjs';
+
+interface StallConfigRow {
+  id: string;
+  stallNo: string;
+  stallSize: string;
+  stallCategory: string;
+  price: number;
+}
 
 interface FormData {
   title: string;
@@ -37,12 +51,15 @@ interface FormData {
   city: string;
   maxCapacity: number;
   planType: 'Plan A' | 'Plan B' | 'Plan C' | 'Custom';
-  status: 'draft' | 'published';
+  status: 'draft' | 'upcoming' | 'published' | 'ongoing' | 'completed' | 'cancelled';
   attendees: number;
   totalRevenue: number;
   // Image Field
   eventImage: File | null;
   eventImageUrl: string;
+  // Layout Image Field
+  layoutImage: File | null;
+  layoutImageUrl: string;
   // Venue Facilities & Amenities
   venueFacilities: string[];
   venueAmenities: string[];
@@ -60,6 +77,8 @@ interface FormData {
   cateringAllowed: boolean;
   alcoholAllowed: boolean;
   smokingAllowed: boolean;
+  // Unified stall config
+  allStalls: StallConfigRow[];
 }
 
 interface FormErrors {
@@ -77,8 +96,27 @@ export const CreateEvent: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { venues, loading: venuesLoading } = useVenues();
+  const { vendors, loading: vendorsLoading } = useVendors();
+  // const { exhibitors, loading: exhibitorsLoading } = useExhibitors();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // Helper: format date as dd/MM/yyyy
+  const formatDDMMYYYY = (iso: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  // Helper: compute clock hand rotation from HH:mm
+  const getClockAngle = (time: string) => {
+    if (!time) return 0;
+    const [h, m] = time.split(':').map(Number);
+    return (h % 12) * 30 + (m / 60) * 30; // hour hand
+  };
 
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -98,6 +136,9 @@ export const CreateEvent: React.FC = () => {
     // Image Field
     eventImage: null,
     eventImageUrl: '',
+    // Layout Image Field
+    layoutImage: null,
+    layoutImageUrl: '',
     // Venue Facilities & Amenities
     venueFacilities: [],
     venueAmenities: [],
@@ -114,10 +155,26 @@ export const CreateEvent: React.FC = () => {
     parkingSpaces: 0,
     cateringAllowed: false,
     alcoholAllowed: false,
-    smokingAllowed: false
+    smokingAllowed: false,
+    // Unified stall config
+    allStalls: []
   });
 
+  // Vendors/Exhibitors selection
+  const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
+  const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
+
+  const toggleVendor = (id: string) => {
+    setSelectedVendors(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  };
+
+  const toggleExhibitor = (id: string) => {
+    setSelectedExhibitors(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  };
+
   const [errors, setErrors] = useState<FormErrors>({});
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -143,7 +200,7 @@ export const CreateEvent: React.FC = () => {
       const eventDate = new Date(formData.eventDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (eventDate < today) {
         newErrors.eventDate = 'Event start date cannot be in the past';
       }
@@ -155,7 +212,7 @@ export const CreateEvent: React.FC = () => {
     } else if (formData.eventDate && formData.eventEndDate) {
       const startDate = new Date(formData.eventDate);
       const endDate = new Date(formData.eventEndDate);
-      
+
       if (endDate < startDate) {
         newErrors.eventEndDate = 'Event end date cannot be before start date';
       }
@@ -187,7 +244,7 @@ export const CreateEvent: React.FC = () => {
 
     // Image validation
     if (!formData.eventImage && !formData.eventImageUrl) {
-      newErrors.eventImage = 'Event image is required';
+      newErrors.eventImage = 'Event Flyers is required';
     }
 
     // Pricing validation
@@ -199,14 +256,22 @@ export const CreateEvent: React.FC = () => {
       newErrors.parkingSpaces = 'Parking spaces cannot be negative';
     }
 
+    // Ensure stall allocation matches number of stalls
+    const totalConfigured = formData.allStalls.length;
+    if (formData.noOfStalls < 0) {
+      newErrors.noOfStalls = 'Number of stalls cannot be negative';
+    } else if (formData.noOfStalls > 0 && totalConfigured !== formData.noOfStalls) {
+      newErrors.noOfStalls = `Configured stalls (${totalConfigured}) must equal Number of Stalls (${formData.noOfStalls})`;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleInputChange = (field: keyof FormData, value: any) => {
-    
+
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error for the specific field only
     if (errors[field]) {
       setErrors(prev => {
@@ -218,11 +283,11 @@ export const CreateEvent: React.FC = () => {
 
     // Auto-populate venue name and city when venue is selected
     if (field === 'venueId' && value) {
-      
+
       const selectedVenue = venues.find(v => v.id === value);
-      
+
       if (selectedVenue) {
-        
+
         const updatedData = {
           venueName: selectedVenue.name,
           city: selectedVenue.location?.split(',').pop()?.trim() || '',
@@ -231,19 +296,19 @@ export const CreateEvent: React.FC = () => {
           venueAmenities: selectedVenue.amenities || [],
           noOfStalls: selectedVenue.noOfStalls || 0
         };
-        
-        
+
+
         setFormData(prev => ({
           ...prev,
           ...updatedData
         }));
-        
+
       }
     }
   };
 
   const handleImageUpload = (file: File) => {
-    
+
     // Validate file type
     if (!file.type.startsWith('image/')) {
       setErrors(prev => ({ ...prev, eventImage: 'Please select a valid image file' }));
@@ -256,9 +321,9 @@ export const CreateEvent: React.FC = () => {
       return;
     }
 
-    
+
     const imageUrl = URL.createObjectURL(file);
-    
+
     setFormData(prev => ({
       ...prev,
       eventImage: file,
@@ -269,7 +334,7 @@ export const CreateEvent: React.FC = () => {
     if (errors.eventImage) {
       setErrors(prev => ({ ...prev, eventImage: '' }));
     }
-    
+
   };
 
   const removeImage = () => {
@@ -277,6 +342,41 @@ export const CreateEvent: React.FC = () => {
       ...prev,
       eventImage: null,
       eventImageUrl: ''
+    }));
+  };
+
+  const handleLayoutImageUpload = (file: File) => {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setErrors(prev => ({ ...prev, layoutImage: 'Please select a valid image file' }));
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, layoutImage: 'Image size must be less than 5MB' }));
+      return;
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+
+    setFormData(prev => ({
+      ...prev,
+      layoutImage: file,
+      layoutImageUrl: imageUrl
+    }));
+
+    // Clear error
+    if (errors.layoutImage) {
+      setErrors(prev => ({ ...prev, layoutImage: '' }));
+    }
+  };
+
+  const removeLayoutImage = () => {
+    setFormData(prev => ({
+      ...prev,
+      layoutImage: null,
+      layoutImageUrl: ''
     }));
   };
 
@@ -300,8 +400,8 @@ export const CreateEvent: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    
+
+
     if (!validateForm()) {
       return;
     }
@@ -314,12 +414,12 @@ export const CreateEvent: React.FC = () => {
 
       // Upload image to Supabase storage if a new image is selected
       if (formData.eventImage) {
-        
+
         const fileExt = formData.eventImage.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `event-images/${fileName}`;
 
-        
+
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('event-images')
           .upload(filePath, formData.eventImage);
@@ -328,46 +428,81 @@ export const CreateEvent: React.FC = () => {
           throw new Error(`Image upload failed: ${uploadError.message}`);
         }
 
-        
+
         const { data: urlData } = supabase.storage
           .from('event-images')
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
       } else {
-        
+
       }
 
-      
+      let layoutImageUrl = formData.layoutImageUrl;
+
+      // Upload layout image to Supabase storage if a new layout image is selected
+      if (formData.layoutImage) {
+        const fileExt = formData.layoutImage.name.split('.').pop();
+        const fileName = `layout_${Date.now()}.${fileExt}`;
+        const filePath = `event-images/${fileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('event-images')
+          .upload(filePath, formData.layoutImage);
+
+        if (uploadError) {
+          throw new Error(`Layout image upload failed: ${uploadError.message}`);
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('event-images')
+          .getPublicUrl(filePath);
+
+        layoutImageUrl = urlData.publicUrl;
+      }
+
+      // Sanitize status to match DB constraint
+      const allowedStatuses = ['draft', 'published', 'ongoing', 'completed', 'cancelled'];
+      const normalizedStatus = formData.status === 'upcoming'
+        ? 'published'
+        : (allowedStatuses.includes(formData.status as any) ? formData.status : 'draft');
+
       const insertData = {
-          title: formData.title,
-          description: formData.description,
-          event_date: formData.eventDate,
+        title: formData.title,
+        description: formData.description,
+        event_date: formData.eventDate,
         event_end_date: formData.eventEndDate,
-          event_time: formData.eventTime,
+        event_time: formData.eventTime,
         event_end_time: formData.eventEndTime,
-          venue_id: formData.venueId,
-          venue_name: formData.venueName,
-          city: formData.city,
-          max_capacity: formData.maxCapacity,
-          plan_type: formData.planType,
-          status: formData.status,
-          attendees: formData.attendees,
-          total_revenue: formData.totalRevenue,
-          created_by: user?.id,
-        vendor_ids: [],
+        venue_id: formData.venueId,
+        venue_name: formData.venueName,
+        city: formData.city,
+        max_capacity: formData.maxCapacity,
+        plan_type: formData.planType,
+        status: normalizedStatus,
+        attendees: formData.attendees,
+        total_revenue: formData.totalRevenue,
+        created_by: user?.id,
+        vendor_ids: selectedVendors,
+        exhibitor_ids: selectedExhibitors,
         // Image field
         event_image_url: imageUrl,
+        // Layout image field
+        layout_image_url: layoutImageUrl,
         // Pricing & Availability
         price_per_hour: formData.pricePerHour,
         available_hours: formData.availableHours,
         parking_spaces: formData.parkingSpaces,
         catering_allowed: formData.cateringAllowed,
         alcohol_allowed: formData.alcoholAllowed,
-        smoking_allowed: formData.smokingAllowed
+        smoking_allowed: formData.smokingAllowed,
+        // Stalls Configuration
+        no_of_stalls: formData.noOfStalls,
+        in_site_stalls: formData.allStalls, // Store as JSONB array
+        all_stalls: formData.allStalls.map(stall => stall.stallNo) // Store stall numbers as string array
       };
 
-      
+
       const { data, error } = await supabase
         .from('events')
         .insert(insertData)
@@ -377,16 +512,16 @@ export const CreateEvent: React.FC = () => {
       if (error) {
         throw new Error(error.message);
       }
-      
-      
+
+
       setSubmitSuccess(true);
       showNotification('Event created successfully!', 'success');
-      
+
       // Redirect after success
       setTimeout(() => {
         navigate('/events');
       }, 2000);
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create event. Please try again.';
       setErrors({ submit: errorMessage });
@@ -399,12 +534,11 @@ export const CreateEvent: React.FC = () => {
   // Notification function
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
-      type === 'success' ? 'bg-green-500 text-white' :
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
       type === 'error' ? 'bg-red-500 text-white' :
-      'bg-blue-500 text-white'
-    }`;
-    
+        'bg-blue-500 text-white'
+      }`;
+
     notification.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center">
@@ -416,14 +550,14 @@ export const CreateEvent: React.FC = () => {
         </button>
       </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Animate in
     setTimeout(() => {
       notification.classList.remove('translate-x-full');
     }, 100);
-    
+
     // Auto remove after 5 seconds
     setTimeout(() => {
       if (notification.parentElement) {
@@ -436,6 +570,34 @@ export const CreateEvent: React.FC = () => {
       }
     }, 5000);
   };
+
+  // helpers to manage stall rows
+  const addStall = () => {
+    const currentStallCount = formData.allStalls.length;
+    const maxStalls = formData.noOfStalls;
+    
+    if (maxStalls > 0 && currentStallCount >= maxStalls) {
+      alert(`Cannot add more stalls. Maximum limit is ${maxStalls} stalls. You have already configured ${currentStallCount} stalls.`);
+      return;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      allStalls: [...prev.allStalls, { id: Date.now().toString(), stallNo: '', stallSize: '', stallCategory: '', price: 0 }]
+    }));
+  };
+  const updateStall = (index: number, field: keyof StallConfigRow, value: any) => {
+    setFormData(prev => {
+      const rows = [...prev.allStalls];
+      rows[index] = { ...rows[index], [field]: field === 'price' ? Number(value) || 0 : value } as StallConfigRow;
+      return { ...prev, allStalls: rows };
+    });
+  };
+  const removeStall = (index: number) => {
+    setFormData(prev => ({ ...prev, allStalls: prev.allStalls.filter((_, i) => i !== index) }));
+  };
+
+
 
   if (submitSuccess) {
     return (
@@ -453,8 +615,8 @@ export const CreateEvent: React.FC = () => {
               <Button onClick={() => navigate('/events')} className="w-full">
                 Go to Events
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSubmitSuccess(false);
                   setFormData({
@@ -474,6 +636,8 @@ export const CreateEvent: React.FC = () => {
                     totalRevenue: 0,
                     eventImage: null,
                     eventImageUrl: '',
+                    layoutImage: null,
+                    layoutImageUrl: '',
                     venueFacilities: [],
                     venueAmenities: [],
                     // Selected Facilities & Amenities for Event
@@ -489,7 +653,9 @@ export const CreateEvent: React.FC = () => {
                     parkingSpaces: 0,
                     cateringAllowed: false,
                     alcoholAllowed: false,
-                    smokingAllowed: false
+                    smokingAllowed: false,
+                    // Unified stall config
+                    allStalls: []
                   });
                 }}
                 className="w-full"
@@ -508,8 +674,8 @@ export const CreateEvent: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => navigate('/events')}
             className="flex items-center space-x-2"
           >
@@ -523,10 +689,14 @@ export const CreateEvent: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Form */}
-          <div className="lg:col-span-2 space-y-6">
+
+        <form onSubmit={handleSubmit} className="justify-between space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* <div className="lg:col-span-2 space-y-6">
+              
+            </div> */}
+            {/* Main Form */}
+            <div className="lg:col-span-2 space-y-6">
             {/* Basic Information */}
             <Card>
               <CardHeader>
@@ -544,9 +714,8 @@ export const CreateEvent: React.FC = () => {
                     type="text"
                     value={formData.title}
                     onChange={(e) => handleInputChange('title', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.title ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.title ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder="Enter event title"
                   />
                   {errors.title && (
@@ -565,9 +734,8 @@ export const CreateEvent: React.FC = () => {
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     rows={4}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.description ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.description ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder="Describe your event..."
                   />
                   {errors.description && (
@@ -583,15 +751,16 @@ export const CreateEvent: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Event Start Date *
                     </label>
-                    <input
-                      type="date"
-                      value={formData.eventDate}
-                      onChange={(e) => handleInputChange('eventDate', e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.eventDate ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                    />
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        label="Event Start Date"
+                        value={formData.eventDate ? dayjs(formData.eventDate) : null}
+                        onChange={(v: Dayjs | null) => handleInputChange('eventDate', v ? v.format('YYYY-MM-DD') : '')}
+                        format="DD/MM/YYYY"
+                        slotProps={{ textField: { size: 'small', fullWidth: true, error: !!errors.eventDate } }}
+                      />
+                    </LocalizationProvider>
+                    <div className="text-xs text-gray-500 mt-1">{formData.eventDate ? formatDDMMYYYY(formData.eventDate) : ''}</div>
                     {errors.eventDate && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="h-4 w-4 mr-1" />
@@ -604,15 +773,17 @@ export const CreateEvent: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Event End Date *
                     </label>
-                    <input
-                      type="date"
-                      value={formData.eventEndDate}
-                      onChange={(e) => handleInputChange('eventEndDate', e.target.value)}
-                      min={formData.eventDate || new Date().toISOString().split('T')[0]}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.eventEndDate ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                    />
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        label="Event End Date"
+                        value={formData.eventEndDate ? dayjs(formData.eventEndDate) : null}
+                        onChange={(v: Dayjs | null) => handleInputChange('eventEndDate', v ? v.format('YYYY-MM-DD') : '')}
+                        minDate={formData.eventDate ? dayjs(formData.eventDate) : undefined}
+                        format="DD/MM/YYYY"
+                        slotProps={{ textField: { size: 'small', fullWidth: true, error: !!errors.eventEndDate } }}
+                      />
+                    </LocalizationProvider>
+                    <div className="text-xs text-gray-500 mt-1">{formData.eventEndDate ? formatDDMMYYYY(formData.eventEndDate) : ''}</div>
                     {errors.eventEndDate && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="h-4 w-4 mr-1" />
@@ -625,22 +796,52 @@ export const CreateEvent: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Event Start Time *
                     </label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="time"
-                        value={formData.eventTime}
-                        onChange={(e) => handleInputChange('eventTime', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.eventTime ? 'border-red-300' : 'border-gray-300'
+                    <select
+                      value={formData.eventTime}
+                      onChange={(e) => handleInputChange('eventTime', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.eventTime ? 'border-red-300' : 'border-gray-300'
                         }`}
-                      />
-                    </div>
+                    >
+                      <option value="">Select start time</option>
+                      <option value="06:00">06:00 AM</option>
+                      <option value="06:30">06:30 AM</option>
+                      <option value="07:00">07:00 AM</option>
+                      <option value="07:30">07:30 AM</option>
+                      <option value="08:00">08:00 AM</option>
+                      <option value="08:30">08:30 AM</option>
+                      <option value="09:00">09:00 AM</option>
+                      <option value="09:30">09:30 AM</option>
+                      <option value="10:00">10:00 AM</option>
+                      <option value="10:30">10:30 AM</option>
+                      <option value="11:00">11:00 AM</option>
+                      <option value="11:30">11:30 AM</option>
+                      <option value="12:00">12:00 PM</option>
+                      <option value="12:30">12:30 PM</option>
+                      <option value="13:00">01:00 PM</option>
+                      <option value="13:30">01:30 PM</option>
+                      <option value="14:00">02:00 PM</option>
+                      <option value="14:30">02:30 PM</option>
+                      <option value="15:00">03:00 PM</option>
+                      <option value="15:30">03:30 PM</option>
+                      <option value="16:00">04:00 PM</option>
+                      <option value="16:30">04:30 PM</option>
+                      <option value="17:00">05:00 PM</option>
+                      <option value="17:30">05:30 PM</option>
+                      <option value="18:00">06:00 PM</option>
+                      <option value="18:30">06:30 PM</option>
+                      <option value="19:00">07:00 PM</option>
+                      <option value="19:30">07:30 PM</option>
+                      <option value="20:00">08:00 PM</option>
+                      <option value="20:30">08:30 PM</option>
+                      <option value="21:00">09:00 PM</option>
+                      <option value="21:30">09:30 PM</option>
+                      <option value="22:00">10:00 PM</option>
+                      <option value="22:30">10:30 PM</option>
+                      <option value="23:00">11:00 PM</option>
+                      <option value="23:30">11:30 PM</option>
+                    </select>
                     {errors.eventTime && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.eventTime}
-                      </p>
+                      <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.eventTime}</p>
                     )}
                   </div>
 
@@ -648,22 +849,52 @@ export const CreateEvent: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Event End Time *
                     </label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="time"
-                        value={formData.eventEndTime}
-                        onChange={(e) => handleInputChange('eventEndTime', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.eventEndTime ? 'border-red-300' : 'border-gray-300'
+                    <select
+                      value={formData.eventEndTime}
+                      onChange={(e) => handleInputChange('eventEndTime', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.eventEndTime ? 'border-red-300' : 'border-gray-300'
                         }`}
-                      />
-                    </div>
+                    >
+                      <option value="">Select end time</option>
+                      <option value="06:00">06:00 AM</option>
+                      <option value="06:30">06:30 AM</option>
+                      <option value="07:00">07:00 AM</option>
+                      <option value="07:30">07:30 AM</option>
+                      <option value="08:00">08:00 AM</option>
+                      <option value="08:30">08:30 AM</option>
+                      <option value="09:00">09:00 AM</option>
+                      <option value="09:30">09:30 AM</option>
+                      <option value="10:00">10:00 AM</option>
+                      <option value="10:30">10:30 AM</option>
+                      <option value="11:00">11:00 AM</option>
+                      <option value="11:30">11:30 AM</option>
+                      <option value="12:00">12:00 PM</option>
+                      <option value="12:30">12:30 PM</option>
+                      <option value="13:00">01:00 PM</option>
+                      <option value="13:30">01:30 PM</option>
+                      <option value="14:00">02:00 PM</option>
+                      <option value="14:30">02:30 PM</option>
+                      <option value="15:00">03:00 PM</option>
+                      <option value="15:30">03:30 PM</option>
+                      <option value="16:00">04:00 PM</option>
+                      <option value="16:30">04:30 PM</option>
+                      <option value="17:00">05:00 PM</option>
+                      <option value="17:30">05:30 PM</option>
+                      <option value="18:00">06:00 PM</option>
+                      <option value="18:30">06:30 PM</option>
+                      <option value="19:00">07:00 PM</option>
+                      <option value="19:30">07:30 PM</option>
+                      <option value="20:00">08:00 PM</option>
+                      <option value="20:30">08:30 PM</option>
+                      <option value="21:00">09:00 PM</option>
+                      <option value="21:30">09:30 PM</option>
+                      <option value="22:00">10:00 PM</option>
+                      <option value="22:30">10:30 PM</option>
+                      <option value="23:00">11:00 PM</option>
+                      <option value="23:30">11:30 PM</option>
+                    </select>
                     {errors.eventEndTime && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.eventEndTime}
-                      </p>
+                      <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.eventEndTime}</p>
                     )}
                   </div>
                 </div>
@@ -671,7 +902,7 @@ export const CreateEvent: React.FC = () => {
                 {/* Event Image Upload */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Event Image *
+                    Event Flyers *
                   </label>
                   <div className="space-y-4">
                     {formData.eventImageUrl ? (
@@ -744,9 +975,8 @@ export const CreateEvent: React.FC = () => {
                   <select
                     value={formData.venueId}
                     onChange={(e) => handleInputChange('venueId', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.venueId ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.venueId ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     disabled={venuesLoading}
                   >
                     <option value="">
@@ -754,7 +984,7 @@ export const CreateEvent: React.FC = () => {
                     </option>
                     {venues.map((venue) => (
                       <option key={venue.id} value={venue.id}>
-                        {venue.name} - {venue.location} (Capacity: {venue.memberCount})
+                         {venue.name} - {venue?.location?venue.location:venue.city} {/*(Capacity: {venue.memberCount}) */}
                       </option>
                     ))}
                   </select>
@@ -766,8 +996,8 @@ export const CreateEvent: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
+                {/*<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Venue Name
                     </label>
@@ -778,7 +1008,7 @@ export const CreateEvent: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                       placeholder="Auto-filled when venue is selected"
                     />
-                  </div>
+                  </div> 
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -790,9 +1020,8 @@ export const CreateEvent: React.FC = () => {
                         type="text"
                         value={formData.city}
                         onChange={(e) => handleInputChange('city', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.city ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.city ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="Enter city"
                       />
                     </div>
@@ -803,7 +1032,7 @@ export const CreateEvent: React.FC = () => {
                       </p>
                     )}
                   </div>
-                </div>
+                </div>*/}
 
                 {/* Venue Facilities & Amenities Selection */}
                 {(formData.venueFacilities.length > 0 || formData.venueAmenities.length > 0) && (
@@ -833,7 +1062,7 @@ export const CreateEvent: React.FC = () => {
                         </p>
                       </div>
                     )}
-                    
+
                     {/* Amenities Selection */}
                     {formData.venueAmenities.length > 0 && (
                       <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -861,6 +1090,42 @@ export const CreateEvent: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                {/* Vendors Section */}
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Vendors ({selectedVendors.length} selected)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-32 overflow-auto p-2 border rounded-lg">
+                    {vendorsLoading ? (
+                      <div className="text-sm text-gray-500">Loading vendors...</div>
+                    ) : vendors.map(v => (
+                      <label key={v.id} className="flex items-center justify-between px-3 py-2 border rounded">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
+                          <div className="text-xs text-gray-600 truncate">{v.category} • {v.city || 'N/A'}</div>
+                        </div>
+                        <input type="checkbox" checked={selectedVendors.includes(v.id)} onChange={() => toggleVendor(v.id)} className="h-4 w-4" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Exhibitors Section */}
+                {/* <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Exhibitors ({selectedExhibitors.length} selected)</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-32 overflow-auto p-2 border rounded-lg">
+                    {exhibitorsLoading ? (
+                      <div className="text-sm text-gray-500">Loading exhibitors...</div>
+                    ) : exhibitors.map(ex => (
+                      <label key={ex.id} className="flex items-center justify-between px-3 py-2 border rounded">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">{ex.companyName}</div>
+                          <div className="text-xs text-gray-600 truncate">{ex.category || 'N/A'} • {ex.city || 'N/A'}</div>
+                        </div>
+                        <input type="checkbox" checked={selectedExhibitors.includes(ex.id)} onChange={() => toggleExhibitor(ex.id)} className="h-4 w-4" />
+                      </label>
+                    ))}
+                  </div>
+                </div> */}
               </CardContent>
             </Card>
 
@@ -886,9 +1151,8 @@ export const CreateEvent: React.FC = () => {
                         type="number"
                         value={formData.maxCapacity}
                         onChange={(e) => handleInputChange('maxCapacity', parseInt(e.target.value) || 0)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.maxCapacity ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.maxCapacity ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="Maximum attendees"
                         min="10"
                       />
@@ -901,22 +1165,10 @@ export const CreateEvent: React.FC = () => {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Event Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => handleInputChange('status', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="published">Published</option>
-                    </select>
-                  </div>
+
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Plan Type
                   </label>
@@ -942,7 +1194,7 @@ export const CreateEvent: React.FC = () => {
                       </label>
                     ))}
                   </div>
-                </div>
+                </div> */}
               </CardContent>
             </Card>
 
@@ -955,68 +1207,224 @@ export const CreateEvent: React.FC = () => {
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Number of Stalls
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Number of Stalls</label>
                     <input
                       type="number"
                       value={formData.noOfStalls}
                       onChange={(e) => handleInputChange('noOfStalls', parseInt(e.target.value) || 0)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter number of stalls"
-                      min="0"
+                      min={0}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      {formData.venueName ? `Available at ${formData.venueName}: ${formData.noOfStalls}` : 'Select a venue first'}
+                      Configured stalls: {formData.allStalls.length} / {formData.noOfStalls}
                     </p>
+                    {errors.noOfStalls && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.noOfStalls}</p>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Stall Size
-                    </label>
-                    <select
-                      value={formData.stallSize}
-                      onChange={(e) => handleInputChange('stallSize', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select stall size</option>
-                      <option value="Small (6x6 ft)">Small (6x6 ft)</option>
-                      <option value="Medium (8x8 ft)">Medium (8x8 ft)</option>
-                      <option value="Large (10x10 ft)">Large (10x10 ft)</option>
-                      <option value="Extra Large (12x12 ft)">Extra Large (12x12 ft)</option>
-                      <option value="Custom">Custom</option>
-                    </select>
+                  {/* Single Stalls Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-gray-800">
+                        Stalls ({formData.allStalls.length}{formData.noOfStalls > 0 ? `/${formData.noOfStalls}` : ''})
+                      </h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center space-x-2"
+                        onClick={addStall}
+                        disabled={formData.noOfStalls > 0 && formData.allStalls.length >= formData.noOfStalls}
+                      >
+                        <span>+ Add Stall</span>
+                      </Button>
+                    </div>
+                    
+                    {formData.noOfStalls > 0 && formData.allStalls.length >= formData.noOfStalls && (
+                      <div className="flex items-center p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-yellow-600 mr-2" />
+                        <span className="text-sm text-yellow-700">
+                          Maximum stalls limit reached ({formData.allStalls.length}/{formData.noOfStalls})
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      {formData.allStalls.map((row, idx) => (
+                        <div key={row.id} className="border border-gray-200 rounded-md p-3">
+                          <div className="flex items-center mb-3">
+                            <Badge variant="default" className="mr-2">#{idx + 1}</Badge>
+                            <span className="text-xs text-gray-500">Stall</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-y-3 gap-x-0 items-end">
+                            {/* Stall No */}
+                            <div>
+                              <label htmlFor={`stall-stallNo-${row.id}`} className="block text-xs text-gray-600 mb-1">Stall No.</label>
+                              <input
+                                id={`stall-stallNo-${row.id}`}
+                                type="text"
+                                value={row.stallNo}
+                                onChange={(e) => updateStall(idx, 'stallNo', e.target.value)}
+                                placeholder="e.g., A1"
+                                className="w-full px-3 py-2 border rounded"
+                              />
+                            </div>
+
+                            {/* Stall Size */}
+                            <div>
+                              <label htmlFor={`stall-stallSize-${row.id}`} className="block text-xs text-gray-600 mb-1">Size</label>
+                              <select
+                                id={`stall-stallSize-${row.id}`}
+                                value={row.stallSize}
+                                onChange={(e) => updateStall(idx, 'stallSize', e.target.value)}
+                                className="w-full px-3 py-2 border rounded"
+                              >
+                                <option value="">Select</option>
+                                <option value="Small (6x6 ft)">Small (6x6 ft)</option>
+                                <option value="Medium (8x8 ft)">Medium (8x8 ft)</option>
+                                <option value="Large (10x10 ft)">Large (10x10 ft)</option>
+                                <option value="Extra Large (12x12 ft)">Extra Large (12x12 ft)</option>
+                                <option value="Custom">Custom</option>
+                              </select>
+                            </div>
+
+                            {/* Category */}
+                            <div>
+                              <label htmlFor={`stall-stallCategory-${row.id}`} className="block text-xs text-gray-600 mb-1">Category</label>
+                              <select
+                                id={`stall-stallCategory-${row.id}`}
+                                value={row.stallCategory}
+                                onChange={(e) => updateStall(idx, 'stallCategory', e.target.value)}
+                                className="w-full px-3 py-2 border rounded"
+                              >
+                                <option value="">Select</option>
+                                <option value="Food & Beverage">Food & Beverage</option>
+                                <option value="Arts & Crafts">Arts & Crafts</option>
+                                <option value="Technology">Technology</option>
+                                <option value="Fashion & Accessories">Fashion & Accessories</option>
+                                <option value="Health & Wellness">Health & Wellness</option>
+                                <option value="Education">Education</option>
+                                <option value="Entertainment">Entertainment</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+
+                            {/* Price */}
+                            <div>
+                              <label htmlFor={`stall-price-${row.id}`} className="block text-xs text-gray-600 mb-1">Price (₹)</label>
+                              <input
+                                id={`stall-price-${row.id}`}
+                                type="text"
+                                value={row.price}
+                                onChange={(e) => updateStall(idx, 'price', e.target.value)}
+                                placeholder="e.g., 1500"
+                                className="w-full px-3 py-2 border rounded"
+                              />
+                            </div>
+
+                            {/* Delete Button */}
+                            <div className="flex justify-start">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeStall(idx)}
+                                className="h-[40px]"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Stall Category
-                    </label>
-                    <select
-                      value={formData.stallCategory}
-                      onChange={(e) => handleInputChange('stallCategory', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select category</option>
-                      <option value="Food & Beverage">Food & Beverage</option>
-                      <option value="Arts & Crafts">Arts & Crafts</option>
-                      <option value="Technology">Technology</option>
-                      <option value="Fashion & Accessories">Fashion & Accessories</option>
-                      <option value="Health & Wellness">Health & Wellness</option>
-                      <option value="Education">Education</option>
-                      <option value="Entertainment">Entertainment</option>
-                      <option value="Other">Other</option>
-                    </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Upload Layout */}
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Image className="h-5 w-5 mr-2" />
+                  Upload Layout
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Stall Layout Image
+                  </label>
+                  <div className="space-y-4">
+                    {formData.layoutImageUrl ? (
+                      <div className="relative">
+                        <img
+                          src={formData.layoutImageUrl}
+                          alt="Layout preview"
+                          className="w-full h-64 object-contain rounded-lg border border-gray-300 bg-gray-50"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeLayoutImage}
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
+                          title="Remove layout image"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        <div className="mt-2 text-sm text-gray-600">
+                          Layout image selected: {formData.layoutImage?.name}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+                        <label
+                          htmlFor="layout-image-upload"
+                          className="cursor-pointer flex flex-col items-center space-y-2"
+                        >
+                          <Upload className="h-8 w-8 text-gray-400" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-700">
+                              Click to upload layout image
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              PNG, JPG, GIF up to 5MB
+                            </p>
+                          </div>
+                        </label>
+                        <input
+                          id="layout-image-upload"
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleLayoutImageUpload(file);
+                          }}
+                          className="hidden"
+                        />
+                      </div>
+                    )}
+                    {errors.layoutImage && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.layoutImage}
+                      </p>
+                    )}
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Upload an image showing the stall layout structure for this event. This helps exhibitors understand the venue arrangement.
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
             {/* Pricing & Availability */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <IndianRupeeIcon className="h-5 w-5 mr-2" />
@@ -1124,18 +1532,83 @@ export const CreateEvent: React.FC = () => {
                   </div>
                 </div>
               </CardContent>
+            </Card> */}
+
+            {/* Event Status */}
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Calendar className="h-5 w-5 mr-2" />
+                  Event Status
+                </h3>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleInputChange('status', e.target.value)}
+                  className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </CardContent>
             </Card>
+
+            {/* Action Buttons */}
+            <div className="space-y-3 justify-end flex flex-row gap-3 items-end">
+              {errors.submit && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    {errors.submit}
+                  </p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isSubmitting || venuesLoading}
+                className="w-full flex items-center justify-center space-x-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Creating Event...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Create Event</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('/events')}
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
+          
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          {/* <div className="space-y-6"> */}
             {/* Event Summary */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Event Summary</h3>
               </CardHeader>
               <CardContent>
-                {/* Event Image Preview */}
+                // Event Image Preview 
                 {formData.eventImageUrl && (
                   <div className="mb-4">
                     <img
@@ -1156,15 +1629,11 @@ export const CreateEvent: React.FC = () => {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Start Date:</span>
-                      <span className="font-medium">
-                        {formData.eventDate ? new Date(formData.eventDate).toLocaleDateString() : 'Not set'}
-                      </span>
+                      <span className="font-medium">{formData.eventDate ? formatDDMMYYYY(formData.eventDate) : 'Not set'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">End Date:</span>
-                      <span className="font-medium">
-                        {formData.eventEndDate ? new Date(formData.eventEndDate).toLocaleDateString() : 'Not set'}
-                      </span>
+                      <span className="font-medium">{formData.eventEndDate ? formatDDMMYYYY(formData.eventEndDate) : 'Not set'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Start Time:</span>
@@ -1188,17 +1657,17 @@ export const CreateEvent: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Status:</span>
-                      <Badge variant={formData.status === 'published' ? 'success' : 'warning'}>
+                      <Badge variant={formData.status === 'upcoming' ? 'success' : 'warning'}>
                         {formData.status}
                       </Badge>
                     </div>
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Guidelines */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <Info className="h-5 w-5 mr-2" />
@@ -1229,48 +1698,10 @@ export const CreateEvent: React.FC = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              {errors.submit && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-600 flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    {errors.submit}
-                  </p>
-                </div>
-              )}
-              
-              <Button
-                type="submit"
-                disabled={isSubmitting || venuesLoading}
-                className="w-full flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating Event...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    <span>Create Event</span>
-                  </>
-                )}
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/events')}
-                className="w-full"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+            
+          {/* </div> */}
         </div>
       </form>
     </div>

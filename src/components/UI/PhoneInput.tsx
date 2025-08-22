@@ -16,7 +16,7 @@ interface PhoneInputProps {
 export const PhoneInput: React.FC<PhoneInputProps> = ({
   value,
   onChange,
-  placeholder = "+91-9876543210",
+  placeholder = "9876543210",
   required = false,
   error,
   className = "",
@@ -24,84 +24,61 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   name,
   disabled = false
 }) => {
-  const [displayValue, setDisplayValue] = useState(value);
+  const [inputValue, setInputValue] = useState(value);
 
-  // Format the phone number for display
-  const formatPhoneNumber = (phone: string): string => {
-    // Remove all non-digits
-    const digits = phone.replace(/\D/g, '');
-    
-    // If no digits, return empty
-    if (digits.length === 0) return '';
-    
-    // If starts with 91, remove it (we'll add it back)
-    let formattedDigits = digits;
-    if (digits.startsWith('91') && digits.length > 10) {
-      formattedDigits = digits.substring(2);
-    }
-    
-    // Limit to 10 digits
-    formattedDigits = formattedDigits.substring(0, 10);
-    
-    // Format as +91-XXXXXXXXXX
-    if (formattedDigits.length > 0) {
-      return `+91-${formattedDigits}`;
-    }
-    
-    return '';
-  };
+  // Sync with prop value
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
 
-  // Handle input change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
+    const newValue = e.target.value;
     
-    // Remove all non-digits from input
-    const digits = inputValue.replace(/\D/g, '');
+    // Remove all non-digits
+    const digits = newValue.replace(/\D/g, '');
     
     // Limit to 10 digits
     const limitedDigits = digits.substring(0, 10);
     
-    // Format for display
-    const formatted = formatPhoneNumber(limitedDigits);
-    setDisplayValue(formatted);
+    // Update display
+    setInputValue(limitedDigits);
     
-    // Pass the raw digits (without formatting) to parent component
+    // Send to parent
     onChange(limitedDigits);
   };
 
-  // Handle key press to only allow numbers
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Allow: backspace, delete, tab, escape, enter, and navigation keys
-    if ([8, 9, 27, 13, 46, 37, 38, 39, 40].includes(e.keyCode)) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Allow navigation and control keys
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+    
+    if (allowedKeys.includes(e.key)) {
       return;
     }
     
-    // Allow only numbers
-    if (!/[0-9]/.test(e.key)) {
+    // Only allow digits
+    if (!/^[0-9]$/.test(e.key)) {
       e.preventDefault();
+      return;
+    }
+    
+    // Check if we already have 10 digits
+    if (inputValue.length >= 10) {
+      e.preventDefault();
+      return;
     }
   };
 
-  // Handle paste to clean the input
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
+    
     const pastedText = e.clipboardData.getData('text');
     const digits = pastedText.replace(/\D/g, '').substring(0, 10);
     
-    if (digits.length > 0) {
-      const formatted = formatPhoneNumber(digits);
-      setDisplayValue(formatted);
+    if (digits) {
+      setInputValue(digits);
       onChange(digits);
     }
   };
-
-  // Update display value when prop value changes
-  useEffect(() => {
-    if (value !== displayValue.replace(/\D/g, '')) {
-      const formatted = formatPhoneNumber(value);
-      setDisplayValue(formatted);
-    }
-  }, [value]);
 
   return (
     <div className="w-full">
@@ -115,16 +92,16 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         <input
           type="tel"
           name={name}
-          value={displayValue}
+          value={inputValue}
           onChange={handleChange}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           disabled={disabled}
           className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
             error ? 'border-red-300' : 'border-gray-300'
           } ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''} ${className}`}
           placeholder={placeholder}
-          maxLength={15} // +91-XXXXXXXXXX = 15 characters
+          maxLength={10}
           autoComplete="tel"
         />
       </div>

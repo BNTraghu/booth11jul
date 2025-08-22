@@ -80,7 +80,7 @@ export const Dashboard: React.FC = () => {
 
   // Calculate stats from real data
   const totalEvents = events.length;
-  const activeEvents = events.filter(e => e.status === 'ongoing' || e.status === 'published').length;
+  const activeEvents = events.filter(e => e.status === 'ongoing' || e.status === 'upcoming').length;
   const totalVenues = venues.length;
   const totalVendors = vendors.length;
   const totalExhibitors = exhibitors.length;
@@ -164,7 +164,7 @@ export const Dashboard: React.FC = () => {
                     <div className="text-right ml-4 flex-shrink-0">
                       <p className="text-xs sm:text-sm font-medium text-gray-900">{event.attendees} attendees</p>
                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        event.status === 'published' ? 'bg-green-100 text-green-800' :
+                        event.status === 'upcoming' ? 'bg-green-100 text-green-800' :
                         event.status === 'ongoing' ? 'bg-blue-100 text-blue-800' :
                         'bg-yellow-100 text-yellow-800'
                       }`}>

@@ -127,6 +127,7 @@ export const useEvents = () => {
       createdBy: event.created_by,
       totalRevenue: event.total_revenue || 0,
       eventImageUrl: event.event_image_url,
+      layoutImageUrl: event.layout_image_url,
       // Pricing & Availability
       pricePerHour: event.price_per_hour,
       availableHours: event.available_hours,
@@ -134,6 +135,12 @@ export const useEvents = () => {
       cateringAllowed: event.catering_allowed,
       alcoholAllowed: event.alcohol_allowed,
       smokingAllowed: event.smoking_allowed,
+      // Stalls Configuration
+      exhibitors: event.exhibitor_ids || [],
+      noOfStalls: event.no_of_stalls,
+      inSiteStalls: event.in_site_stalls || [],
+      outSiteStalls: event.out_site_stalls || [],
+      allStalls: event.in_site_stalls || [], // Use in_site_stalls for the detailed stall objects
       created_at: event.created_at,
       updated_at: event.updated_at
     };
@@ -170,6 +177,7 @@ export const useVenues = () => {
       city: venue.city,
       state: venue.state,
       pincode: venue.pincode,
+      country: venue.country,
       addressLandmark: venue.address_landmark,
       addressStandard: venue.address_standard,
       areaSqFt: venue.area_sq_ft,
@@ -194,6 +202,12 @@ export const useVenues = () => {
       documents: venue.documents || [],
       // Custom Contact Information
       customContacts: venue.custom_contacts || [],
+      // Bank details
+      bankName: venue.bank_name,
+      bankAccountNumber: venue.bank_account_number,
+      bankHolderName: venue.bank_holder_name,
+      bankIfsc: venue.bank_ifsc,
+      bankMicr: venue.bank_micr,
       // Timestamps
       created_at: venue.created_at,
       updated_at: venue.updated_at
@@ -236,6 +250,10 @@ export const useExhibitors = () => {
   // Transform data to match our Exhibitor interface
   const exhibitors: Exhibitor[] = data.map((exhibitor: any) => ({
     id: exhibitor.id,
+    // Personal Information (NEW - matching AddExhibitor Step 1)
+    firstName: exhibitor.first_name || '',
+    lastName: exhibitor.last_name || '',
+    
     // Company Information
     companyName: exhibitor.company_name,
     companyDescription: exhibitor.company_description,
@@ -257,9 +275,12 @@ export const useExhibitors = () => {
     businessType: exhibitor.business_type,
     gstNumber: exhibitor.gst_number,
     panNumber: exhibitor.pan_number,
+    businessDescription: exhibitor.business_description || '',
     
-    // Location & Address
+    // Location & Address (NEW - matching AddExhibitor Step 2)
     address: exhibitor.address,
+    address1: exhibitor.address1 || exhibitor.address || '',
+    address2: exhibitor.address2 || '',
     city: exhibitor.city,
     state: exhibitor.state,
     pincode: exhibitor.pincode,
@@ -289,6 +310,14 @@ export const useExhibitors = () => {
       twitter: '',
       instagram: ''
     },
+    
+    // Documents & Images (NEW - matching AddExhibitor Steps 4 & 5)
+    documentUrls: exhibitor.document_urls || {
+      panCard: null,
+      aadharCard: null,
+      licence: null
+    },
+    imageUrls: exhibitor.image_urls || [],
     
     // Settings
     status: exhibitor.status,

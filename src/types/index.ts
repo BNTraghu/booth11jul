@@ -46,6 +46,14 @@ export type UserRole =
   // | 'society'
   // | 'exhibitor';
 
+export interface StallConfig {
+  id: string;
+  stallNo: string;
+  stallSize: string;
+  stallCategory: string;
+  price: number;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -56,15 +64,34 @@ export interface Event {
   eventEndTime?: string | null; // event_end_time from DB
   venue: string; // venue_name from DB
   city?: string | null;
-  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
+  status: 'draft' | 'upcoming' | 'published' | 'ongoing' | 'completed' | 'cancelled';
   attendees: number;
   maxCapacity: number; // max_capacity from DB
   planType?: 'Plan A' | 'Plan B' | 'Plan C' | 'Custom' | null; // plan_type from DB
   vendors: string[]; // vendor_ids from DB
+  exhibitors?: string[] | null; // exhibitor_ids from DB
   venueId?: string | null; // venue_id from DB
   createdBy?: string | null; // created_by from DB
   totalRevenue: number; // total_revenue from DB
+  // Address & Location
+  addressLine1?: string | null; // address_line1 from DB
+  addressLandmark?: string | null; // address_landmark from DB
+  addressStandard?: string | null; // address_standard from DB
+  areaSqFt?: number | null; // area_sq_ft from DB
+  kindOfSpace?: string | null; // kind_of_space from DB
+  isCovered?: boolean | null; // is_covered from DB
+  pricingPerDay?: number | null; // pricing_per_day from DB
+  facilityAreaSqFt?: number | null; // facility_area_sq_ft from DB
+  noOfStalls?: number | null; // no_of_stalls from DB
+  facilityCovered?: boolean | null; // facility_covered from DB
+  amenities?: string | null; // amenities from DB
+  noOfFlats?: number | null; // no_of_flats from DB
+  latitude?: number | null; // latitude from DB
+  longitude?: number | null; // longitude from DB
+  formattedAddress?: string | null; // formatted_address from DB
+  // Images
   eventImageUrl?: string | null; // event_image_url from DB
+  layoutImageUrl?: string | null; // layout_image_url from DB
   // Pricing & Availability
   pricePerHour?: number | null; // price_per_hour from DB
   availableHours?: string | null; // available_hours from DB
@@ -72,6 +99,10 @@ export interface Event {
   cateringAllowed?: boolean | null; // catering_allowed from DB
   alcoholAllowed?: boolean | null; // alcohol_allowed from DB
   smokingAllowed?: boolean | null; // smoking_allowed from DB
+  // Stalls Configuration
+  inSiteStalls?: StallConfig[] | null; // in_site_stalls from DB
+  outSiteStalls?: StallConfig[] | null; // out_site_stalls from DB
+  allStalls?: string[] | null; // all_stalls from DB
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +127,7 @@ export interface Venue {
   city?: string | null;
   state?: string | null;
   pincode?: string | null;
+  country?: string | null; // country from DB
   addressLandmark?: string | null; // address_landmark from DB
   addressStandard?: string | null; // address_standard from DB
   areaSqFt?: number | null; // area_sq_ft from DB
@@ -126,6 +158,12 @@ export interface Venue {
     phone: string;
     role: string;
   }> | null; // custom_contacts from DB
+  // Bank Details
+  bankName?: string | null; // bank_name from DB
+  bankAccountNumber?: string | null; // bank_account_number from DB
+  bankHolderName?: string | null; // bank_holder_name from DB
+  bankIfsc?: string | null; // bank_ifsc from DB
+  bankMicr?: string | null; // bank_micr from DB
   created_at: string;
   updated_at: string;
 }
@@ -148,6 +186,10 @@ export interface Vendor {
 
 export interface Exhibitor {
   id: string;
+  // Personal Information (NEW - matching AddExhibitor Step 1)
+  firstName?: string | null; // first_name from DB
+  lastName?: string | null; // last_name from DB
+  
   // Company Information
   companyName: string; // company_name from DB
   companyDescription?: string | null; // company_description from DB
@@ -169,9 +211,12 @@ export interface Exhibitor {
   businessType?: string | null; // business_type from DB
   gstNumber?: string | null; // gst_number from DB
   panNumber?: string | null; // pan_number from DB
+  businessDescription?: string | null; // business_description from DB
   
-  // Location & Address
+  // Location & Address (NEW - matching AddExhibitor Step 2)
   address?: string | null;
+  address1?: string | null; // address1 from DB
+  address2?: string | null; // address2 from DB
   city?: string | null;
   state?: string | null;
   pincode?: string | null;
@@ -201,6 +246,14 @@ export interface Exhibitor {
     twitter?: string | null;
     instagram?: string | null;
   } | null; // social_media_links from DB
+  
+  // Documents & Images (NEW - matching AddExhibitor Steps 4 & 5)
+  documentUrls?: {
+    panCard?: string | null;
+    aadharCard?: string | null;
+    licence?: string | null;
+  } | null; // document_urls from DB
+  imageUrls?: string[] | null; // image_urls from DB
   
   // Settings
   status: 'registered' | 'confirmed' | 'checked_in' | 'cancelled';

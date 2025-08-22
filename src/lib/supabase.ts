@@ -150,6 +150,8 @@ export interface Database {
           description: string | null;
           event_date: string | null;
           event_time: string | null;
+          event_end_date: string | null;
+          event_end_time: string | null;
           venue_name: string | null;
           city: string | null;
           status: string;
@@ -157,9 +159,40 @@ export interface Database {
           max_capacity: number | null;
           plan_type: string | null;
           vendor_ids: string[] | null;
+          exhibitor_ids: string[] | null;
           venue_id: string | null;
           created_by: string | null;
           total_revenue: number | null;
+          // Address & Location fields
+          address_line1: string | null;
+          address_landmark: string | null;
+          address_standard: string | null;
+          area_sq_ft: number | null;
+          kind_of_space: string | null;
+          is_covered: boolean | null;
+          pricing_per_day: number | null;
+          facility_area_sq_ft: number | null;
+          no_of_stalls: number | null;
+          facility_covered: boolean | null;
+          amenities: string | null;
+          no_of_flats: number | null;
+          latitude: number | null;
+          longitude: number | null;
+          formatted_address: string | null;
+          // Image URLs
+          event_image_url: string | null;
+          layout_image_url: string | null;
+          // Pricing & Availability
+          price_per_hour: number | null;
+          available_hours: string | null;
+          parking_spaces: number | null;
+          catering_allowed: boolean | null;
+          alcohol_allowed: boolean | null;
+          smoking_allowed: boolean | null;
+          // Stalls Configuration
+          in_site_stalls: any[] | null;
+          out_site_stalls: any[] | null;
+          all_stalls: string[] | null;
           created_at: string;
           updated_at: string;
         };
@@ -169,6 +202,8 @@ export interface Database {
           description?: string | null;
           event_date?: string | null;
           event_time?: string | null;
+          event_end_date?: string | null;
+          event_end_time?: string | null;
           venue_name?: string | null;
           city?: string | null;
           status?: string;
@@ -176,9 +211,40 @@ export interface Database {
           max_capacity?: number | null;
           plan_type?: string | null;
           vendor_ids?: string[] | null;
+          exhibitor_ids?: string[] | null;
           venue_id?: string | null;
           created_by?: string | null;
           total_revenue?: number | null;
+          // Address & Location fields
+          address_line1?: string | null;
+          address_landmark?: string | null;
+          address_standard?: string | null;
+          area_sq_ft?: number | null;
+          kind_of_space?: string | null;
+          is_covered?: boolean | null;
+          pricing_per_day?: number | null;
+          facility_area_sq_ft?: number | null;
+          no_of_stalls?: number | null;
+          facility_covered?: boolean | null;
+          amenities?: string | null;
+          no_of_flats?: number | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          formatted_address?: string | null;
+          // Image URLs
+          event_image_url?: string | null;
+          layout_image_url?: string | null;
+          // Pricing & Availability
+          price_per_hour?: number | null;
+          available_hours?: string | null;
+          parking_spaces?: number | null;
+          catering_allowed?: boolean | null;
+          alcohol_allowed?: boolean | null;
+          smoking_allowed?: boolean | null;
+          // Stalls Configuration
+          in_site_stalls?: any[] | null;
+          out_site_stalls?: any[] | null;
+          all_stalls?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -188,6 +254,8 @@ export interface Database {
           description?: string | null;
           event_date?: string | null;
           event_time?: string | null;
+          event_end_date?: string | null;
+          event_end_time?: string | null;
           venue_name?: string | null;
           city?: string | null;
           status?: string;
@@ -195,9 +263,40 @@ export interface Database {
           max_capacity?: number | null;
           plan_type?: string | null;
           vendor_ids?: string[] | null;
+          exhibitor_ids?: string[] | null;
           venue_id?: string | null;
           created_by?: string | null;
           total_revenue?: number | null;
+          // Address & Location fields
+          address_line1?: string | null;
+          address_landmark?: string | null;
+          address_standard?: string | null;
+          area_sq_ft?: number | null;
+          kind_of_space?: string | null;
+          is_covered?: boolean | null;
+          pricing_per_day?: number | null;
+          facility_area_sq_ft?: number | null;
+          no_of_stalls?: number | null;
+          facility_covered?: boolean | null;
+          amenities?: string | null;
+          no_of_flats?: number | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          formatted_address?: string | null;
+          // Image URLs
+          event_image_url?: string | null;
+          layout_image_url?: string | null;
+          // Pricing & Availability
+          price_per_hour?: number | null;
+          available_hours?: string | null;
+          parking_spaces?: number | null;
+          catering_allowed?: boolean | null;
+          alcohol_allowed?: boolean | null;
+          smoking_allowed?: boolean | null;
+          // Stalls Configuration
+          in_site_stalls?: any[] | null;
+          out_site_stalls?: any[] | null;
+          all_stalls?: string[] | null;
           created_at?: string;
           updated_at?: string;
         };

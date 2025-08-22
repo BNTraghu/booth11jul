@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Save, 
-  ArrowLeft, 
-  Building, 
-  User, 
-  Mail, 
-  MapPin, 
+import {
+  Save,
+  ArrowLeft,
+  Building,
+  User,
+  Mail,
+  MapPin,
   Calendar,
   CreditCard,
   FileText,
@@ -31,70 +31,70 @@ import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import statesData from '../data/states.json';
 
 interface FormData {
-  // Company Information
-  companyName: string;
+  // Legacy fields for backward compatibility
+  products: string[];
+  services: string[];
   companyDescription: string;
   establishedYear: string;
   companySize: string;
-  website: string;
-  
-  // Contact Information
-  contactPerson: string;
   designation: string;
+  alternateEmail: string;
+  businessType: string;
+  boothPreference: string;
+  specialRequirements: string;
+  previousExhibitions: string;
+  expectedVisitors: string;
+  targetAudience: string;
+  registrationFee: number;
+  paymentMethod: string;
+  billingAddress: string;
+  contactPerson: string;
+  address: string;
+  // Personal Information
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   alternatePhone: string;
-  alternateEmail: string;
-  
-  // Business Details
+
+  // Business Information
+  companyName: string;
+  website: string;
   category: string;
   subCategory: string;
-  businessType: string;
-  gstNumber: string;
   panNumber: string;
-  
-  // Location & Address
-  address: string;
+  gstNumber: string;
+  boothSize: string;
+  businessDescription: string;
+  socialMediaLinks: {
+    facebook: string;
+    linkedin: string;
+    instagram: string;
+    twitter: string;
+  };
+
+  // Address
+  address1: string;
+  address2: string;
   city: string;
   state: string;
   pincode: string;
   country: string;
-  
-  // Exhibition Details
-  boothPreference: string;
-  boothSize: string;
-  specialRequirements: string;
-  previousExhibitions: string;
-  expectedVisitors: string;
-  
-  // Products & Services
-  products: string[];
-  services: string[];
-  targetAudience: string;
-  
-  // Payment & Billing
-  registrationFee: number;
-  paymentMethod: string;
-  billingAddress: string;
-  
-  // Additional Information
-  socialMediaLinks: {
-    linkedin: string;
-    facebook: string;
-    twitter: string;
-    instagram: string;
-  };
-  
+
+
   // Documents
   documents: {
-    companyProfile: File | null;
-    gstCertificate: File | null;
     panCard: File | null;
-    productCatalog: File | null;
+    aadharCard: File | null;
+    licence: File | null;
   };
-  
+
+  // Upload Images
+  images: File[];
+
   // Settings
   status: 'registered' | 'confirmed' | 'pending_approval';
   paymentStatus: 'pending' | 'paid' | 'partial';
@@ -147,8 +147,6 @@ const subCategories = {
 const businessTypes = ['Private Limited', 'Public Limited', 'Partnership', 'Sole Proprietorship', 'LLP', 'NGO', 'Government'];
 const companySizes = ['1-10 employees', '11-50 employees', '51-200 employees', '201-500 employees', '500+ employees'];
 const boothSizes = ['3x3 meters', '3x6 meters', '6x6 meters', '6x9 meters', '9x9 meters', 'Custom Size'];
-const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad', 'Kolkata', 'Ahmedabad', 'Surat', 'Jaipur'];
-const states = ['Maharashtra', 'Delhi', 'Karnataka', 'Tamil Nadu', 'Gujarat', 'Rajasthan', 'West Bengal', 'Uttar Pradesh', 'Madhya Pradesh', 'Haryana'];
 
 export const AddExhibitor: React.FC = () => {
   const navigate = useNavigate();
@@ -158,73 +156,74 @@ export const AddExhibitor: React.FC = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
-    // Company Information
-    companyName: '',
-    companyDescription: '',
-    establishedYear: '',
-    companySize: '',
-    website: '',
-    
-    // Contact Information
-    contactPerson: '',
-    designation: '',
+    // Personal Information
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     alternatePhone: '',
-    alternateEmail: '',
-    
-    // Business Details
+
+    // Business Information
+    companyName: '',
+    website: '',
     category: '',
     subCategory: '',
-    businessType: '',
-    gstNumber: '',
     panNumber: '',
-    
-    // Location & Address
-    address: '',
+    gstNumber: '',
+    boothSize: '',
+    businessDescription: '',
+    socialMediaLinks: {
+      facebook: '',
+      linkedin: '',
+      instagram: '',
+      twitter: ''
+    },
+
+    // Address
+    address1: '',
+    address2: '',
     city: '',
     state: '',
     pincode: '',
     country: 'India',
-    
-    // Exhibition Details
-    boothPreference: '',
-    boothSize: '',
-    specialRequirements: '',
-    previousExhibitions: '',
-    expectedVisitors: '',
-    
-    // Products & Services
-    products: [],
-    services: [],
-    targetAudience: '',
-    
-    // Payment & Billing
-    registrationFee: 15000,
-    paymentMethod: 'online',
-    billingAddress: '',
-    
-    // Additional Information
-    socialMediaLinks: {
-      linkedin: '',
-      facebook: '',
-      twitter: '',
-      instagram: ''
-    },
-    
+
     // Documents
     documents: {
-      companyProfile: null,
-      gstCertificate: null,
       panCard: null,
-      productCatalog: null
+      aadharCard: null,
+      licence: null
     },
-    
+
+    // Upload Images
+    images: [],
+
     // Settings
     status: 'registered',
     paymentStatus: 'pending',
-    sendConfirmationEmail: true,
-    allowMarketingEmails: false
+
+    // Add all missing fields to match FormData type
+    sendConfirmationEmail: false,
+    allowMarketingEmails: false,
+
+    // Add missing fields based on FormData interface
+    products: [],
+    services: [],
+    companyDescription: '',
+    establishedYear: '',
+    businessType: '',
+    companySize: '',
+    designation: '',
+    alternateEmail: '',
+    boothPreference: '',
+    specialRequirements: '',
+    previousExhibitions: '',
+    expectedVisitors: '',
+    targetAudience: '',
+    registrationFee: 15000,
+    paymentMethod: 'online',
+    billingAddress: '',
+    contactPerson: '',
+    address: ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -247,34 +246,40 @@ export const AddExhibitor: React.FC = () => {
     const newErrors: FormErrors = {};
 
     switch (step) {
-      case 1: // Company Information
-        if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
-        if (!formData.companyDescription.trim()) newErrors.companyDescription = 'Company description is required';
-        if (!formData.category) newErrors.category = 'Category is required';
-        if (!formData.businessType) newErrors.businessType = 'Business type is required';
-        break;
-
-      case 2: // Contact Information
-        if (!formData.contactPerson.trim()) newErrors.contactPerson = 'Contact person is required';
+      case 1: // Personal Information
+        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
         if (!formData.email.trim()) newErrors.email = 'Email is required';
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
-        if (!formData.phone.trim()) newErrors.phone = 'Phone number is required';
-        else if (formData.phone.length !== 10) newErrors.phone = 'Phone number must be exactly 10 digits';
-        else if (!/^[0-9]{10}$/.test(formData.phone)) newErrors.phone = 'Phone number must contain only digits';
-        if (!formData.designation.trim()) newErrors.designation = 'Designation is required';
+        if (!formData.phone.trim()) newErrors.phone = 'Contact number is required';
+        else if (formData.phone.length !== 10) newErrors.phone = 'Contact number must be exactly 10 digits';
+        else if (!/^[0-9]{10}$/.test(formData.phone)) newErrors.phone = 'Contact number must contain only digits';
+
+        // Validate alternate phone if provided
+        if (formData.alternatePhone.trim()) {
+          if (formData.alternatePhone.length !== 10) newErrors.alternatePhone = 'Alternate contact number must be exactly 10 digits';
+          else if (!/^[0-9]{10}$/.test(formData.alternatePhone)) newErrors.alternatePhone = 'Alternate contact number must contain only digits';
+        }
         break;
 
-      case 3: // Business & Location Details
-        if (!formData.address.trim()) newErrors.address = 'Address is required';
+      case 2: // Address
+        if (!formData.address1.trim()) newErrors.address1 = 'Address line 1 is required';
         if (!formData.city) newErrors.city = 'City is required';
         if (!formData.state) newErrors.state = 'State is required';
         if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
         break;
 
-      case 4: // Exhibition Details
-        if (!formData.boothSize) newErrors.boothSize = 'Booth size is required';
-        if (!formData.expectedVisitors.trim()) newErrors.expectedVisitors = 'Expected visitors is required';
+      case 3: // Business Information
+        if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
+        if (!formData.category) newErrors.category = 'Category is required';
+        if (!formData.panNumber.trim()) newErrors.panNumber = 'PAN number is required';
         break;
+
+      case 4: // Documents
+        if (!formData.documents.panCard) newErrors.panCard = 'PAN card is required';
+        if (!formData.documents.aadharCard) newErrors.aadharCard = 'Aadhar card is required';
+        break;
+
     }
 
     setErrors(newErrors);
@@ -295,28 +300,227 @@ export const AddExhibitor: React.FC = () => {
       }
       return { ...prev, [field]: value };
     });
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
-  const handleFileUpload = (field: string, file: File | null) => {
-    setFormData(prev => ({
-      ...prev,
-      documents: {
-        ...prev.documents,
-        [field]: file
+  // File compression functions
+  const compressImage = (file: File, maxSizeKB: number = 100): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions to reduce file size
+        let { width, height } = img;
+        const maxDimension = 1024; // Max width/height
+
+        if (width > height && width > maxDimension) {
+          height = (height * maxDimension) / width;
+          width = maxDimension;
+        } else if (height > maxDimension) {
+          width = (width * maxDimension) / height;
+          height = maxDimension;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Try different quality levels to get under size limit
+        const tryCompress = (quality: number): void => {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, {
+                  type: file.type,
+                  lastModified: Date.now()
+                });
+
+                // Check if compressed file is under limit
+                if (compressedFile.size <= maxSizeKB * 1024 || quality <= 0.1) {
+                  resolve(compressedFile);
+                } else {
+                  // Try with lower quality
+                  tryCompress(quality - 0.1);
+                }
+              } else {
+                reject(new Error('Compression failed'));
+              }
+            },
+            file.type,
+            quality
+          );
+        };
+
+        // Start with 90% quality
+        tryCompress(0.9);
+      };
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const compressPDF = async (file: File, maxSizeKB: number = 100): Promise<File> => {
+    // For PDF files, we can't easily compress them in the browser
+    // So we'll just return the original file and show a message
+    // In a real app, you'd send this to a server for compression
+    if (file.size <= maxSizeKB * 1024) {
+      return file;
+    }
+
+    // If PDF is too large, we can't compress it client-side
+    throw new Error(`PDF file is ${Math.round(file.size / 1024)}KB. Please compress it to under ${maxSizeKB}KB using online tools.`);
+  };
+
+  const compressFile = async (file: File, maxSizeKB: number = 100): Promise<File> => {
+    if (file.size <= maxSizeKB * 1024) {
+      return file; // File is already small enough
+    }
+
+    if (file.type.startsWith('image/')) {
+      return await compressImage(file, maxSizeKB);
+    } else if (file.type === 'application/pdf') {
+      return await compressPDF(file, maxSizeKB);
+    } else {
+      throw new Error(`Cannot compress ${file.type} files. Please reduce file size manually.`);
+    }
+  };
+
+  const handleFileUpload = async (field: string, file: File | null) => {
+    if (file) {
+      try {
+        // Clear any previous errors
+        setErrors(prev => ({ ...prev, [field]: '' }));
+
+        // Show loading state
+        setErrors(prev => ({ ...prev, [field]: 'Processing file...' }));
+
+        // Validate file type first
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+          setErrors(prev => ({ ...prev, [field]: 'Please upload only PDF, JPG, JPEG, or PNG files' }));
+          return;
+        }
+
+        // Compress file if needed
+        const compressedFile = await compressFile(file, 100);
+
+        // Clear loading state
+        setErrors(prev => ({ ...prev, [field]: '' }));
+
+        // Update form data with compressed file
+        setFormData(prev => ({
+          ...prev,
+          documents: {
+            ...prev.documents,
+            [field]: compressedFile
+          }
+        }));
+
+        // Show success message if file was compressed
+        if (compressedFile.size < file.size) {
+          const originalSizeKB = Math.round(file.size / 1024);
+          const compressedSizeKB = Math.round(compressedFile.size / 1024);
+          console.log(`File compressed from ${originalSizeKB}KB to ${compressedSizeKB}KB`);
+        }
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to process file';
+        setErrors(prev => ({ ...prev, [field]: errorMessage }));
       }
-    }));
+    } else {
+      // Clear file if null
+      setFormData(prev => ({
+        ...prev,
+        documents: {
+          ...prev.documents,
+          [field]: null
+        }
+      }));
+    }
+  };
+
+  const uploadDocumentToSupabase = async (file: File, fileName: string): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${fileName}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('exhibitor-documents')
+        .upload(filePath, file, {
+          upsert: true
+        });
+
+      if (error) {
+        console.error('Error uploading file:', error);
+        return null;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('exhibitor-documents')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
+  const uploadImagesToSupabase = async (images: File[], exhibitorName: string): Promise<string[]> => {
+    const uploadedUrls: string[] = [];
+
+    for (let i = 0; i < images.length; i++) {
+      const file = images[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${exhibitorName.replace(/\s+/g, '_')}_image_${i + 1}.${fileExt}`;
+
+      try {
+        const { data, error } = await supabase.storage
+          .from('exhibitor-images')
+          .upload(fileName, file, {
+            upsert: true
+          });
+
+        if (error) {
+          console.error('Error uploading image:', error);
+          continue;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('exhibitor-images')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(urlData.publicUrl);
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        continue;
+      }
+    }
+
+    return uploadedUrls;
   };
 
   const addProduct = () => {
-    if (newProduct.trim() && !formData.products.includes(newProduct.trim())) {
+    if (
+      typeof newProduct === 'string' &&
+      newProduct.trim() &&
+      Array.isArray(formData.products) &&
+      !formData.products.includes(newProduct.trim())
+    ) {
       setFormData(prev => ({
         ...prev,
-        products: [...prev.products, newProduct.trim()]
+        products: [...(prev.products || []), newProduct.trim()]
       }));
       setNewProduct('');
     }
@@ -348,7 +552,7 @@ export const AddExhibitor: React.FC = () => {
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 5));
+      setCurrentStep(prev => Math.min(prev + 1, 6));
     }
   };
 
@@ -364,61 +568,71 @@ export const AddExhibitor: React.FC = () => {
     setIsSubmitting(true);
 
     try {
+      // Create exhibitor name for file naming
+      const exhibitorName = `${formData.firstName}_${formData.lastName}_${formData.companyName}`.replace(/\s+/g, '_');
+
+      // Upload documents to Supabase Storage
+      const documentUrls: { [key: string]: string } = {};
+
+      if (formData.documents.panCard) {
+        const panCardUrl = await uploadDocumentToSupabase(formData.documents.panCard, `${exhibitorName}_pan_card`);
+        if (panCardUrl) documentUrls.panCard = panCardUrl;
+      }
+
+      if (formData.documents.aadharCard) {
+        const aadharCardUrl = await uploadDocumentToSupabase(formData.documents.aadharCard, `${exhibitorName}_aadhar_card`);
+        if (aadharCardUrl) documentUrls.aadharCard = aadharCardUrl;
+      }
+
+      if (formData.documents.licence) {
+        const licenceUrl = await uploadDocumentToSupabase(formData.documents.licence, `${exhibitorName}_licence`);
+        if (licenceUrl) documentUrls.licence = licenceUrl;
+      }
+
+      // Upload images to Supabase Storage
+      const imageUrls = formData.images.length > 0
+        ? await uploadImagesToSupabase(formData.images, exhibitorName)
+        : [];
+
       const insertData = {
-        // Company Information
-        company_name: formData.companyName,
-        company_description: formData.companyDescription,
-        established_year: formData.establishedYear,
-        company_size: formData.companySize,
-        website: formData.website,
-        
-        // Contact Information
-        contact_person: formData.contactPerson,
-        designation: formData.designation,
+        // Personal Information
+        first_name: formData.firstName,
+        last_name: formData.lastName,
         email: formData.email,
         phone: formData.phone,
         alternate_phone: formData.alternatePhone,
-        alternate_email: formData.alternateEmail,
-        
-        // Business Details
+
+        // Business Information
+        company_name: formData.companyName,
+        website: formData.website,
         category: formData.category,
         sub_category: formData.subCategory,
-        business_type: formData.businessType,
-        gst_number: formData.gstNumber,
         pan_number: formData.panNumber,
-        
-        // Location & Address
-        address: formData.address,
+        gst_number: formData.gstNumber,
+        booth_size: formData.boothSize,
+        business_description: formData.businessDescription,
+        facebook_url: formData.socialMediaLinks.facebook,
+        linkedin_url: formData.socialMediaLinks.linkedin,
+        instagram_url: formData.socialMediaLinks.instagram,
+        twitter_url: formData.socialMediaLinks.twitter,
+
+        // Address
+        address1: formData.address1,
+        address2: formData.address2,
         city: formData.city,
         state: formData.state,
         pincode: formData.pincode,
         country: formData.country,
-        
-        // Exhibition Details
-        booth_preference: formData.boothPreference,
-        booth_size: formData.boothSize,
-        special_requirements: formData.specialRequirements,
-        previous_exhibitions: formData.previousExhibitions,
-        expected_visitors: formData.expectedVisitors,
-        
-        // Products & Services
-        products: formData.products,
-        services: formData.services,
-        target_audience: formData.targetAudience,
-        
-        // Payment & Billing
-        registration_fee: formData.registrationFee,
-        payment_method: formData.paymentMethod,
-        billing_address: formData.billingAddress,
-        
-        // Additional Information
-        social_media_links: formData.socialMediaLinks,
-        
+
+        // Document URLs
+        document_urls: documentUrls,
+
+        // Image URLs
+        image_urls: imageUrls,
+
         // Settings
         status: formData.status,
-        payment_status: formData.paymentStatus,
-        send_confirmation_email: formData.sendConfirmationEmail,
-        allow_marketing_emails: formData.allowMarketingEmails
+        payment_status: formData.paymentStatus
       };
 
       const { data, error } = await supabase
@@ -433,12 +647,12 @@ export const AddExhibitor: React.FC = () => {
 
       showNotification('Exhibitor registered successfully!', 'success');
       setSubmitSuccess(true);
-      
+
       // Redirect after success
       setTimeout(() => {
         navigate('/exhibitors');
       }, 2000);
-      
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to register exhibitor. Please try again.';
       setErrors({ submit: errorMessage });
@@ -451,12 +665,11 @@ export const AddExhibitor: React.FC = () => {
   // Notification function
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
-      type === 'success' ? 'bg-green-500 text-white' :
-      type === 'error' ? 'bg-red-500 text-white' :
-      'bg-blue-500 text-white'
-    }`;
-    
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+          'bg-blue-500 text-white'
+      }`;
+
     notification.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center">
@@ -468,14 +681,14 @@ export const AddExhibitor: React.FC = () => {
         </button>
       </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Animate in
     setTimeout(() => {
       notification.classList.remove('translate-x-full');
     }, 100);
-    
+
     // Auto remove after 5 seconds
     setTimeout(() => {
       if (notification.parentElement) {
@@ -490,11 +703,12 @@ export const AddExhibitor: React.FC = () => {
   };
 
   const steps = [
-    { number: 1, title: 'Company Info', icon: Building },
-    { number: 2, title: 'Contact Details', icon: User },
-    { number: 3, title: 'Business & Location', icon: MapPin },
-    { number: 4, title: 'Exhibition Details', icon: Package },
-    { number: 5, title: 'Review & Submit', icon: CheckCircle }
+    { number: 1, title: 'Personal Information', icon: User },
+    { number: 2, title: 'Address', icon: MapPin },
+    { number: 3, title: 'Business Information', icon: Building },
+    { number: 4, title: 'Documents', icon: FileText },
+    { number: 5, title: 'Upload Images', icon: Upload },
+    { number: 6, title: 'Review & Submit', icon: CheckCircle }
   ];
 
   if (submitSuccess) {
@@ -513,8 +727,8 @@ export const AddExhibitor: React.FC = () => {
               <Button onClick={() => navigate('/exhibitors')} className="w-full">
                 Go to Exhibitor Management
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSubmitSuccess(false);
                   setCurrentStep(1);
@@ -536,8 +750,8 @@ export const AddExhibitor: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => navigate('/exhibitors')}
             className="flex items-center space-x-2"
           >
@@ -557,11 +771,10 @@ export const AddExhibitor: React.FC = () => {
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
               <div key={step.number} className="flex items-center">
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                  currentStep >= step.number 
-                    ? 'bg-blue-600 border-blue-600 text-white' 
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${currentStep >= step.number
+                    ? 'bg-blue-600 border-blue-600 text-white'
                     : 'border-gray-300 text-gray-500'
-                }`}>
+                  }`}>
                   {currentStep > step.number ? (
                     <CheckCircle className="h-5 w-5" />
                   ) : (
@@ -569,21 +782,18 @@ export const AddExhibitor: React.FC = () => {
                   )}
                 </div>
                 <div className="ml-3 hidden sm:block">
-                  <p className={`text-sm font-medium ${
-                    currentStep >= step.number ? 'text-blue-600' : 'text-gray-500'
-                  }`}>
+                  <p className={`text-sm font-medium ${currentStep >= step.number ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
                     Step {step.number}
                   </p>
-                  <p className={`text-xs ${
-                    currentStep >= step.number ? 'text-blue-600' : 'text-gray-500'
-                  }`}>
+                  <p className={`text-xs ${currentStep >= step.number ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
                     {step.title}
                   </p>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-12 sm:w-20 h-0.5 mx-4 ${
-                    currentStep > step.number ? 'bg-blue-600' : 'bg-gray-300'
-                  }`} />
+                  <div className={`w-12 sm:w-20 h-0.5 mx-4 ${currentStep > step.number ? 'bg-blue-600' : 'bg-gray-300'
+                    }`} />
                 )}
               </div>
             ))}
@@ -594,13 +804,252 @@ export const AddExhibitor: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Form */}
         <div className="lg:col-span-3">
-          {/* Step 1: Company Information */}
+          {/* Step 1: Personal Information */}
           {currentStep === 1 && (
             <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <User className="h-5 w-5 mr-2" />
+                  Personal Information
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.firstName ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter first name"
+                    />
+                    {errors.firstName && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.firstName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) => handleInputChange('lastName', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.lastName ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter last name"
+                    />
+                    {errors.lastName && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.lastName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email ID *
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange('email', e.target.value)}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter email address"
+                      />
+                    </div>
+                    {errors.email && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.email}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <PhoneInput
+                      label="Contact Number"
+                      value={formData.phone}
+                      onChange={(value) => handleInputChange('phone', value)}
+                      required={true}
+                      error={errors.phone}
+                      name="phone"
+                      placeholder="+91 9876543210"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <PhoneInput
+                    label="Alternate Contact Number"
+                    value={formData.alternatePhone}
+                    onChange={(value) => handleInputChange('alternatePhone', value)}
+                    required={false}
+                    error={errors.alternatePhone}
+                    name="alternatePhone"
+                    placeholder="+91 9876543210"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 2: Address */}
+          {currentStep === 2 && (
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <MapPin className="h-5 w-5 mr-2" />
+                  Address
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address Line 1 *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address1}
+                    onChange={(e) => handleInputChange('address1', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.address1 ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    placeholder="Enter street address"
+                  />
+                  {errors.address1 && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-1" />
+                      {errors.address1}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address Line 2 (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address2}
+                    onChange={(e) => handleInputChange('address2', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Apartment, suite, unit, building, floor, etc."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      State *
+                    </label>
+                                          <select
+                        value={formData.state}
+                        onChange={(e) => {
+                          handleInputChange('state', e.target.value);
+                          handleInputChange('city', ''); // Clear city when state changes
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.state ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                      >
+                      <option value="">Select state</option>
+                      {statesData.map((state) => (
+                        <option key={state.id} value={state.name}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.state && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.state}
+                      </p>
+                    )}
+                  </div>
+                                      <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        City *
+                      </label>
+                      <select
+                        value={formData.city}
+                        onChange={(e) => handleInputChange('city', e.target.value)}
+                        disabled={!formData.state}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${errors.city ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                      >
+                        <option value="">Select city</option>
+                        {formData.state && statesData
+                          .find(s => s.name === formData.state)?.cities
+                          .map(city => (
+                            <option key={city} value={city}>{city}</option>
+                          ))}
+                      </select>
+                      {errors.city && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.city}
+                        </p>
+                      )}
+                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Pincode *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.pincode}
+                      onChange={(e) => handleInputChange('pincode', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.pincode ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="400001"
+                    />
+                    {errors.pincode && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.pincode}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Country
+                    </label>
+                    <select
+                      value={formData.country}
+                      onChange={(e) => handleInputChange('country', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="India">India</option>
+                    </select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 3: Business Information */}
+          {currentStep === 3 && (
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <Building className="h-5 w-5 mr-2" />
-                  Company Information
+                  Business Information
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -613,9 +1062,8 @@ export const AddExhibitor: React.FC = () => {
                       type="text"
                       value={formData.companyName}
                       onChange={(e) => handleInputChange('companyName', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.companyName ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.companyName ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       placeholder="Enter company name"
                     />
                     {errors.companyName && (
@@ -628,6 +1076,24 @@ export const AddExhibitor: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Company Website
+                    </label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="url"
+                        value={formData.website}
+                        onChange={(e) => handleInputChange('website', e.target.value)}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="https://company.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Category *
                     </label>
                     <select
@@ -636,9 +1102,8 @@ export const AddExhibitor: React.FC = () => {
                         handleInputChange('category', e.target.value);
                         handleInputChange('subCategory', ''); // Reset subcategory
                       }}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.category ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.category ? 'border-red-300' : 'border-gray-300'
+                        }`}
                     >
                       <option value="">Select category</option>
                       {exhibitorCategories.map((category) => (
@@ -654,12 +1119,10 @@ export const AddExhibitor: React.FC = () => {
                       </p>
                     )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Sub-Category
+                      Sub Category
                     </label>
                     <select
                       value={formData.subCategory}
@@ -675,245 +1138,78 @@ export const AddExhibitor: React.FC = () => {
                       ))}
                     </select>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      PAN Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.panNumber}
+                      onChange={(e) => handleInputChange('panNumber', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.panNumber ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="AAAAA0000A"
+                    />
+                    {errors.panNumber && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.panNumber}
+                      </p>
+                    )}
+                  </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Business Type *
+                      GST Number (Optional)
                     </label>
-                    <select
-                      value={formData.businessType}
-                      onChange={(e) => handleInputChange('businessType', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.businessType ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                    >
-                      <option value="">Select business type</option>
-                      {businessTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.businessType && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.businessType}
-                      </p>
-                    )}
+                    <input
+                      type="text"
+                      value={formData.gstNumber}
+                      onChange={(e) => handleInputChange('gstNumber', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="27AAAAA0000A1Z5"
+                    />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Company Description *
+                    Preferred Booth Size (Optional)
+                  </label>
+                  <select
+                    value={formData.boothSize}
+                    onChange={(e) => handleInputChange('boothSize', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select booth size</option>
+                    {boothSizes.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Business Description (Optional)
                   </label>
                   <textarea
-                    value={formData.companyDescription}
-                    onChange={(e) => handleInputChange('companyDescription', e.target.value)}
+                    value={formData.businessDescription}
+                    onChange={(e) => handleInputChange('businessDescription', e.target.value)}
                     rows={4}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.companyDescription ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="Describe your company, products, and services..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Describe your business, products, and services..."
                   />
-                  {errors.companyDescription && (
-                    <p className="mt-1 text-sm text-red-600 flex items-center">
-                      <AlertCircle className="h-4 w-4 mr-1" />
-                      {errors.companyDescription}
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Established Year
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.establishedYear}
-                      onChange={(e) => handleInputChange('establishedYear', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="2020"
-                      min="1900"
-                      max={new Date().getFullYear()}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Company Size
-                    </label>
-                    <select
-                      value={formData.companySize}
-                      onChange={(e) => handleInputChange('companySize', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select size</option>
-                      {companySizes.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Website
-                    </label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="url"
-                        value={formData.website}
-                        onChange={(e) => handleInputChange('website', e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://company.com"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 2: Contact Information */}
-          {currentStep === 2 && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <User className="h-5 w-5 mr-2" />
-                  Contact Information
-                </h3>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Person *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.contactPerson}
-                      onChange={(e) => handleInputChange('contactPerson', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.contactPerson ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      placeholder="Enter contact person name"
-                    />
-                    {errors.contactPerson && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.contactPerson}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Designation *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.designation}
-                      onChange={(e) => handleInputChange('designation', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.designation ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      placeholder="CEO, Manager, Director, etc."
-                    />
-                    {errors.designation && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.designation}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Primary Email *
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.email ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="contact@company.com"
-                      />
-                    </div>
-                    {errors.email && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.email}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Alternate Email
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="email"
-                        value={formData.alternateEmail}
-                        onChange={(e) => handleInputChange('alternateEmail', e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="alternate@company.com"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <PhoneInput
-                      label="Primary Phone"
-                      value={formData.phone}
-                      onChange={(value) => handleInputChange('phone', value)}
-                      required={true}
-                      error={errors.phone}
-                      name="phone"
-                    />
-                  </div>
-
-                  <div>
-                    <PhoneInput
-                      label="Alternate Phone"
-                      value={formData.alternatePhone}
-                      onChange={(value) => handleInputChange('alternatePhone', value)}
-                      required={false}
-                      name="alternatePhone"
-                    />
-                  </div>
                 </div>
 
                 {/* Social Media Links */}
                 <div>
                   <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links (Optional)</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        LinkedIn
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.socialMediaLinks.linkedin}
-                        onChange={(e) => handleInputChange('socialMediaLinks.linkedin', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://linkedin.com/company/..."
-                      />
-                    </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Facebook
@@ -929,14 +1225,14 @@ export const AddExhibitor: React.FC = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Twitter
+                        LinkedIn
                       </label>
                       <input
                         type="url"
-                        value={formData.socialMediaLinks.twitter}
-                        onChange={(e) => handleInputChange('socialMediaLinks.twitter', e.target.value)}
+                        value={formData.socialMediaLinks.linkedin}
+                        onChange={(e) => handleInputChange('socialMediaLinks.linkedin', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://twitter.com/..."
+                        placeholder="https://linkedin.com/company/..."
                       />
                     </div>
 
@@ -952,472 +1248,152 @@ export const AddExhibitor: React.FC = () => {
                         placeholder="https://instagram.com/..."
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Twitter
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.socialMediaLinks.twitter}
+                        onChange={(e) => handleInputChange('socialMediaLinks.twitter', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="https://twitter.com/..."
+                      />
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Step 3: Business & Location Details */}
-          {currentStep === 3 && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <MapPin className="h-5 w-5 mr-2" />
-                  Business & Location Details
-                </h3>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Business Registration */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Business Registration</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GST Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.gstNumber}
-                        onChange={(e) => handleInputChange('gstNumber', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="27AAAAA0000A1Z5"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        PAN Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.panNumber}
-                        onChange={(e) => handleInputChange('panNumber', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="AAAAA0000A"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Address Information */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Address Information</h4>
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Complete Address *
-                      </label>
-                      <textarea
-                        value={formData.address}
-                        onChange={(e) => handleInputChange('address', e.target.value)}
-                        rows={3}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.address ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="Enter complete business address"
-                      />
-                      {errors.address && (
-                        <p className="mt-1 text-sm text-red-600 flex items-center">
-                          <AlertCircle className="h-4 w-4 mr-1" />
-                          {errors.address}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          City *
-                        </label>
-                        <select
-                          value={formData.city}
-                          onChange={(e) => handleInputChange('city', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.city ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        >
-                          <option value="">Select city</option>
-                          {cities.map((city) => (
-                            <option key={city} value={city}>
-                              {city}
-                            </option>
-                          ))}
-                        </select>
-                        {errors.city && (
-                          <p className="mt-1 text-sm text-red-600 flex items-center">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            {errors.city}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          State *
-                        </label>
-                        <select
-                          value={formData.state}
-                          onChange={(e) => handleInputChange('state', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.state ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                        >
-                          <option value="">Select state</option>
-                          {states.map((state) => (
-                            <option key={state} value={state}>
-                              {state}
-                            </option>
-                          ))}
-                        </select>
-                        {errors.state && (
-                          <p className="mt-1 text-sm text-red-600 flex items-center">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            {errors.state}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Pincode *
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.pincode}
-                          onChange={(e) => handleInputChange('pincode', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.pincode ? 'border-red-300' : 'border-gray-300'
-                          }`}
-                          placeholder="400001"
-                        />
-                        {errors.pincode && (
-                          <p className="mt-1 text-sm text-red-600 flex items-center">
-                            <AlertCircle className="h-4 w-4 mr-1" />
-                            {errors.pincode}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Country
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.country}
-                          onChange={(e) => handleInputChange('country', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="India"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Document Upload */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Document Upload (Optional)</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[
-                      { key: 'companyProfile', label: 'Company Profile' },
-                      { key: 'gstCertificate', label: 'GST Certificate' },
-                      { key: 'panCard', label: 'PAN Card' },
-                      { key: 'productCatalog', label: 'Product Catalog' }
-                    ].map((doc) => (
-                      <div key={doc.key}>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {doc.label}
-                        </label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
-                          <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-600 mb-2">
-                            Click to upload or drag and drop
-                          </p>
-                          <input
-                            type="file"
-                            onChange={(e) => handleFileUpload(doc.key, e.target.files?.[0] || null)}
-                            className="hidden"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                          />
-                          <Button size="sm" variant="outline">
-                            Choose File
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 4: Exhibition Details */}
+          {/* Step 4: Documents */}
           {currentStep === 4 && (
             <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <Package className="h-5 w-5 mr-2" />
-                  Exhibition Details
+                  <FileText className="h-5 w-5 mr-2" />
+                  Documents
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Booth Information */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Booth Requirements</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Preferred Booth Size *
-                      </label>
-                      <select
-                        value={formData.boothSize}
-                        onChange={(e) => handleInputChange('boothSize', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.boothSize ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      PAN Card *
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">
+                        Click to upload PAN Card
+                      </p>
+                      <input
+                        type="file"
+                        onChange={(e) => handleFileUpload('panCard', e.target.files?.[0] || null)}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        id="panCard-upload"
+                      />
+                      <label
+                        htmlFor="panCard-upload"
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                       >
-                        <option value="">Select booth size</option>
-                        {boothSizes.map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.boothSize && (
-                        <p className="mt-1 text-sm text-red-600 flex items-center">
-                          <AlertCircle className="h-4 w-4 mr-1" />
-                          {errors.boothSize}
+                        Choose File
+                      </label>
+                      {formData.documents.panCard && (
+                        <p className="text-xs text-green-600 mt-2">
+                          ✓ {formData.documents.panCard.name}
                         </p>
                       )}
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Booth Preference
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.boothPreference}
-                        onChange={(e) => handleInputChange('boothPreference', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Corner booth, near entrance, etc."
-                      />
-                    </div>
+                    {errors.panCard && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.panCard}
+                      </p>
+                    )}
                   </div>
-                </div>
 
-                {/* Exhibition Experience */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Exhibition Experience</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Expected Visitors *
-                      </label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Aadhar Card *
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">
+                        Click to upload Aadhar Card
+                      </p>
                       <input
-                        type="number"
-                        value={formData.expectedVisitors}
-                        onChange={(e) => handleInputChange('expectedVisitors', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.expectedVisitors ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="100"
-                        min="1"
+                        type="file"
+                        onChange={(e) => handleFileUpload('aadharCard', e.target.files?.[0] || null)}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        id="aadharCard-upload"
                       />
-                      {errors.expectedVisitors && (
-                        <p className="mt-1 text-sm text-red-600 flex items-center">
-                          <AlertCircle className="h-4 w-4 mr-1" />
-                          {errors.expectedVisitors}
+                      <label
+                        htmlFor="aadharCard-upload"
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                      >
+                        Choose File
+                      </label>
+                      {formData.documents.aadharCard && (
+                        <p className="text-xs text-green-600 mt-2">
+                          ✓ {formData.documents.aadharCard.name}
                         </p>
                       )}
                     </div>
+                    {errors.aadharCard && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.aadharCard}
+                      </p>
+                    )}
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Target Audience
-                      </label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Licence (Optional)
+                    </label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 mb-2">
+                        Click to upload Licence
+                      </p>
                       <input
-                        type="text"
-                        value={formData.targetAudience}
-                        onChange={(e) => handleInputChange('targetAudience', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Business owners, consumers, professionals, etc."
+                        type="file"
+                        onChange={(e) => handleFileUpload('licence', e.target.files?.[0] || null)}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        id="licence-upload"
                       />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Products & Services */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Products & Services</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Products to Showcase
-                      </label>
-                      <div className="space-y-3">
-                        <div className="flex space-x-2">
-                          <input
-                            type="text"
-                            value={newProduct}
-                            onChange={(e) => setNewProduct(e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter product name"
-                            onKeyPress={(e) => e.key === 'Enter' && addProduct()}
-                          />
-                          <Button type="button" onClick={addProduct} size="sm">
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {formData.products.map((product, index) => (
-                            <Badge key={index} variant="default" className="flex items-center space-x-1">
-                              <span>{product}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeProduct(index)}
-                                className="ml-1 hover:text-red-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Services Offered
-                      </label>
-                      <div className="space-y-3">
-                        <div className="flex space-x-2">
-                          <input
-                            type="text"
-                            value={newService}
-                            onChange={(e) => setNewService(e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Enter service name"
-                            onKeyPress={(e) => e.key === 'Enter' && addService()}
-                          />
-                          <Button type="button" onClick={addService} size="sm">
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {formData.services.map((service, index) => (
-                            <Badge key={index} variant="default" className="flex items-center space-x-1">
-                              <span>{service}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeService(index)}
-                                className="ml-1 hover:text-red-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Special Requirements */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Special Requirements
-                  </label>
-                  <textarea
-                    value={formData.specialRequirements}
-                    onChange={(e) => handleInputChange('specialRequirements', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Power requirements, internet, storage, setup assistance, etc."
-                  />
-                </div>
-
-                {/* Previous Exhibitions */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Previous Exhibition Experience
-                  </label>
-                  <textarea
-                    value={formData.previousExhibitions}
-                    onChange={(e) => handleInputChange('previousExhibitions', e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="List previous exhibitions, trade shows, or events participated in..."
-                  />
-                </div>
-
-                {/* Payment Information */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Payment Information</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Registration Fee
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
-                        <input
-                          type="number"
-                          value={formData.registrationFee}
-                          onChange={(e) => handleInputChange('registrationFee', parseInt(e.target.value))}
-                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          min="0"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Payment Method
-                      </label>
-                      <select
-                        value={formData.paymentMethod}
-                        onChange={(e) => handleInputChange('paymentMethod', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      <label
+                        htmlFor="licence-upload"
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
                       >
-                        <option value="online">Online Payment</option>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="cheque">Cheque</option>
-                        <option value="cash">Cash</option>
-                      </select>
+                        Choose File
+                      </label>
+                      {formData.documents.licence && (
+                        <p className="text-xs text-green-600 mt-2">
+                          ✓ {formData.documents.licence.name}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Settings */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Notification Settings</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="sendConfirmationEmail"
-                        checked={formData.sendConfirmationEmail}
-                        onChange={(e) => handleInputChange('sendConfirmationEmail', e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="sendConfirmationEmail" className="ml-2 block text-sm text-gray-700">
-                        Send confirmation email with booth details
-                      </label>
-                    </div>
-
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="allowMarketingEmails"
-                        checked={formData.allowMarketingEmails}
-                        onChange={(e) => handleInputChange('allowMarketingEmails', e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="allowMarketingEmails" className="ml-2 block text-sm text-gray-700">
-                        Allow marketing and promotional emails
-                      </label>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex">
+                    <Info className="h-5 w-5 text-blue-400 mt-0.5 mr-3" />
+                    <div className="text-sm">
+                      <h4 className="font-medium text-blue-900">Document Guidelines</h4>
+                      <ul className="mt-2 text-blue-700 space-y-1">
+                        <li>• Upload clear, readable images or PDFs</li>
+                        <li>• Maximum file size: 100KB per document</li>
+                        <li>• Images will be automatically compressed if too large</li>
+                        <li>• PDF files over 100KB need manual compression</li>
+                        <li>• Accepted formats: PDF, JPG, JPEG, PNG</li>
+                        <li>• PAN Card and Aadhar Card are mandatory</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
@@ -1425,8 +1401,161 @@ export const AddExhibitor: React.FC = () => {
             </Card>
           )}
 
-          {/* Step 5: Review & Submit */}
+          {/* Step 5: Upload Images */}
           {currentStep === 5 && (
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Upload className="h-5 w-5 mr-2" />
+                  Upload Images
+                </h3>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  {/* <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Images
+                    </label> */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+                    <p className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                      <Upload className="h-8 w-8 text-gray-400 mb-2 ml-4" />
+                      {/* Upload Company Images */}
+                    
+                    {/* <p className="text-xs text-gray-600 mb-3">
+                      Upload images of your company, products, or booth setup
+                    </p> */}
+                    <input
+                      type="file"
+                      multiple
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || []);
+                        const validFiles: File[] = [];
+
+                        // Show processing message
+                        if (files.length > 0) {
+                          setErrors(prev => ({ ...prev, images: 'Processing images...' }));
+                        }
+
+                        for (const file of files) {
+                          try {
+                            // Check file type first
+                            if (!file.type.startsWith('image/')) {
+                              setErrors(prev => ({
+                                ...prev,
+                                images: `File "${file.name}" is not a valid image.`
+                              }));
+                              continue;
+                            }
+
+                            // Compress image if needed
+                            const compressedFile = await compressFile(file, 100);
+                            validFiles.push(compressedFile);
+
+                            // Log compression info
+                            if (compressedFile.size < file.size) {
+                              const originalSizeKB = Math.round(file.size / 1024);
+                              const compressedSizeKB = Math.round(compressedFile.size / 1024);
+                              console.log(`Image "${file.name}" compressed from ${originalSizeKB}KB to ${compressedSizeKB}KB`);
+                            }
+
+                          } catch (error) {
+                            setErrors(prev => ({
+                              ...prev,
+                              images: `Failed to process "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+                            }));
+                            continue;
+                          }
+                        }
+
+                        if (validFiles.length > 0) {
+                          // Clear errors if files are valid
+                          setErrors(prev => ({ ...prev, images: '' }));
+                          setFormData(prev => ({
+                            ...prev,
+                            images: [...prev.images, ...validFiles]
+                          }));
+                        }
+                      }}
+                      className="hidden"
+                      accept="image/*"
+                      id="images-upload"
+                    />
+                    <label
+                      htmlFor="images-upload"
+                      className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+                    >
+                      Choose Images
+                    </label>
+                    </p>
+                    {formData.images.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">
+                          Selected Images ({formData.images.length})
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {formData.images.map((file, index) => (
+                            <div key={index} className="relative">
+                              <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                                <img
+                                  src={URL.createObjectURL(file)}
+                                  alt={`Preview ${index + 1}`}
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    images: prev.images.filter((_, i) => i !== index)
+                                  }));
+                                }}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                              <p className="text-xs text-gray-600 mt-1 truncate">
+                                {file.name}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {errors.images && (
+                    <div className="mt-4">
+                      <p className="text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.images}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex">
+                    <Info className="h-4 w-4 text-green-400 mt-0.5 mr-2" />
+                    <div className="text-xs">
+                      <h4 className="font-medium text-green-900">Image Guidelines</h4>
+                      <ul className="mt-1 text-green-700 space-y-0.5">
+                        <li>• Upload high-quality images of your products or company</li>
+                        <li>• Maximum file size: 100KB per image</li>
+                        <li>• Large images will be automatically compressed</li>
+                        <li>• Accepted formats: JPG, JPEG, PNG</li>
+                        <li>• You can upload multiple images</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 6: Review & Submit */}
+          {currentStep === 6 && (
             <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -1435,140 +1564,57 @@ export const AddExhibitor: React.FC = () => {
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card className="border-l-4 border-l-blue-500">
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Company Information</h4>
-                      <div className="space-y-2 text-sm">
-                        <div><strong>Name:</strong> {formData.companyName}</div>
-                        <div><strong>Category:</strong> {formData.category}</div>
-                        <div><strong>Business Type:</strong> {formData.businessType}</div>
-                        <div><strong>Website:</strong> {formData.website || 'Not provided'}</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-l-4 border-l-green-500">
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Contact Details</h4>
-                      <div className="space-y-2 text-sm">
-                        <div><strong>Contact Person:</strong> {formData.contactPerson}</div>
-                        <div><strong>Designation:</strong> {formData.designation}</div>
-                        <div><strong>Email:</strong> {formData.email}</div>
-                        <div><strong>Phone:</strong> {formData.phone}</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-l-4 border-l-purple-500">
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Location</h4>
-                      <div className="space-y-2 text-sm">
-                        <div><strong>City:</strong> {formData.city}</div>
-                        <div><strong>State:</strong> {formData.state}</div>
-                        <div><strong>Pincode:</strong> {formData.pincode}</div>
-                        <div><strong>GST:</strong> {formData.gstNumber || 'Not provided'}</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-l-4 border-l-orange-500">
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Exhibition Details</h4>
-                      <div className="space-y-2 text-sm">
-                        <div><strong>Booth Size:</strong> {formData.boothSize}</div>
-                        <div><strong>Expected Visitors:</strong> {formData.expectedVisitors}</div>
-                        <div><strong>Registration Fee:</strong> ₹{formData.registrationFee.toLocaleString()}</div>
-                        <div><strong>Payment Method:</strong> {formData.paymentMethod.replace('_', ' ')}</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Products & Services */}
-                {(formData.products.length > 0 || formData.services.length > 0) && (
-                  <Card>
-                    <CardContent className="p-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Products & Services</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {formData.products.length > 0 && (
-                          <div>
-                            <h5 className="text-sm font-medium text-gray-700 mb-2">Products:</h5>
-                            <div className="flex flex-wrap gap-1">
-                              {formData.products.map((product, index) => (
-                                <Badge key={index} variant="default" className="text-xs">
-                                  {product}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {formData.services.length > 0 && (
-                          <div>
-                            <h5 className="text-sm font-medium text-gray-700 mb-2">Services:</h5>
-                            <div className="flex flex-wrap gap-1">
-                              {formData.services.map((service, index) => (
-                                <Badge key={index} variant="default" className="text-xs">
-                                  {service}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Terms & Conditions */}
-                <Card className="bg-gray-50">
-                  <CardContent className="p-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">Terms & Conditions</h4>
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <div className="flex items-start">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <span>Registration fee is non-refundable after booth allocation</span>
-                      </div>
-                      <div className="flex items-start">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <span>Booth setup must comply with event guidelines and safety regulations</span>
-                      </div>
-                      <div className="flex items-start">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <span>Exhibitor is responsible for booth decoration and product display</span>
-                      </div>
-                      <div className="flex items-start">
-                        <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <span>Event organizers reserve the right to modify booth assignments</span>
-                      </div>
+                {/* Simple Review Summary */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                  <h4 className="text-lg font-semibold text-blue-900 mb-4">📋 Registration Summary</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                    <div>
+                      <h5 className="font-medium text-gray-900 mb-2">Personal Information</h5>
+                      <p><strong>Name:</strong> {formData.firstName} {formData.lastName}</p>
+                      <p><strong>Email:</strong> {formData.email}</p>
+                      <p><strong>Phone:</strong> {formData.phone}</p>
+                      {formData.alternatePhone && <p><strong>Alt Phone:</strong> {formData.alternatePhone}</p>}
                     </div>
-                  </CardContent>
-                </Card>
 
-                {/* Final Actions */}
-                <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="acceptTerms"
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        required
-                      />
-                      <label htmlFor="acceptTerms" className="ml-2 block text-sm text-gray-700">
-                        I accept the terms and conditions
-                      </label>
+                    <div>
+                      <h5 className="font-medium text-gray-900 mb-2">Company Information</h5>
+                      <p><strong>Company:</strong> {formData.companyName || 'Not provided'}</p>
+                      <p><strong>Category:</strong> {formData.category || 'Not provided'}</p>
+                      <p><strong>Sub Category:</strong> {formData.subCategory || 'Not provided'}</p>
+                      {formData.website && <p><strong>Website:</strong> {formData.website}</p>}
+                    </div>
+
+                    <div>
+                      <h5 className="font-medium text-gray-900 mb-2">Address</h5>
+                      <p><strong>Address:</strong> {formData.address1}</p>
+                      {formData.address2 && <p>{formData.address2}</p>}
+                      <p>{formData.city}, {formData.state} - {formData.pincode}</p>
+                      <p>{formData.country}</p>
+                    </div>
+
+                    <div>
+                      <h5 className="font-medium text-gray-900 mb-2">Documents & Images</h5>
+                      <p><strong>PAN Card:</strong> {formData.documents.panCard ? '✅ Uploaded' : '❌ Missing'}</p>
+                      <p><strong>Aadhar Card:</strong> {formData.documents.aadharCard ? '✅ Uploaded' : '❌ Missing'}</p>
+                      <p><strong>Licence:</strong> {formData.documents.licence ? '✅ Uploaded' : 'Optional'}</p>
+                      <p><strong>Images:</strong> {formData.images.length} uploaded</p>
                     </div>
                   </div>
-                  
-                  {errors.submit && (
-                    <div className="text-sm text-red-600 flex items-center">
-                      <AlertCircle className="h-4 w-4 mr-1" />
-                      {errors.submit}
-                    </div>
-                  )}
                 </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex">
+                    <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 mr-3" />
+                    <div className="text-sm">
+                      <h4 className="font-medium text-green-900">Ready to Submit</h4>
+                      <p className="mt-1 text-green-700">
+                        Please review the information above and click "Register Exhibitor" to complete the registration.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+
               </CardContent>
             </Card>
           )}
@@ -1591,7 +1637,7 @@ export const AddExhibitor: React.FC = () => {
                   Step {currentStep} of {steps.length}
                 </p>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                  <div 
+                  <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${(currentStep / steps.length) * 100}%` }}
                   ></div>
@@ -1600,67 +1646,9 @@ export const AddExhibitor: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Category Preview */}
-          {formData.category && (
-            <Card>
-              <CardHeader>
-                <h3 className="text-lg font-semibold text-gray-900">Category Preview</h3>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900">{formData.category}</span>
-                    <Badge variant="info">{formData.category}</Badge>
-                  </div>
-                  {formData.subCategory && (
-                    <div className="text-sm text-gray-600">
-                      <strong>Sub-category:</strong> {formData.subCategory}
-                    </div>
-                  )}
-                  <div className="text-sm text-gray-600">
-                    <strong>Suggested booth size:</strong> 3x3 meters or larger
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <strong>Typical visitors:</strong> Business professionals, consumers, industry experts
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Help & Guidelines */}
-          <Card>
-            <CardHeader>
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <Info className="h-5 w-5 mr-2" />
-                Guidelines
-              </h3>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 text-sm text-gray-600">
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <p>Provide accurate company information for verification</p>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <p>Upload relevant documents to speed up approval</p>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <p>Choose booth size based on your display requirements</p>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                  <p>Registration fee varies by booth size and location</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Navigation Buttons */}
           <div className="space-y-3">
-            {currentStep < 5 ? (
+            {currentStep < 6 ? (
               <>
                 <Button
                   onClick={nextStep}
@@ -1699,7 +1687,7 @@ export const AddExhibitor: React.FC = () => {
                 )}
               </Button>
             )}
-            
+
             <Button
               variant="outline"
               onClick={() => navigate('/exhibitors')}

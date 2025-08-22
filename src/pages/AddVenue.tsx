@@ -6,13 +6,13 @@ declare global {
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { 
-  Save, 
-  ArrowLeft, 
-  Building2, 
-  MapPin, 
-  Users, 
-  Phone, 
+import {
+  Save,
+  ArrowLeft,
+  Building2,
+  MapPin,
+  Users,
+  Phone,
   Mail,
   AlertCircle,
   CheckCircle,
@@ -23,6 +23,8 @@ import {
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
+import { COUNTRIES } from '../data/locations';
+import statesData from '../data/states.json';
 
 interface FormData {
   name: string;
@@ -42,6 +44,7 @@ interface FormData {
   city: string;
   state: string;
   pincode: string;
+  country: string;
   addressLandmark: string;
   addressStandard: string;
   areaSqFt: number;
@@ -64,6 +67,12 @@ interface FormData {
     phone: string;
     role: string;
   }>;
+  // Bank Details
+  bankName: string;
+  bankAccountNumber: string;
+  bankHolderName: string;
+  bankIfsc: string;
+  bankMicr: string;
 }
 
 interface FormErrors {
@@ -74,7 +83,7 @@ const defaultFacilities = [
   'Auditorium',
   'Community Hall',
   'Garden Area',
-  'Parking',  
+  'Parking',
   // 'Projector',  
   // 'Kitchen',
   // 'Restrooms',
@@ -126,6 +135,7 @@ export const AddVenue: React.FC = () => {
     city: '',
     state: '',
     pincode: '',
+    country: 'India',
     addressLandmark: '',
     addressStandard: '',
     areaSqFt: 0,
@@ -141,7 +151,13 @@ export const AddVenue: React.FC = () => {
     longitude: 0,
     formattedAddress: '',
     // Custom Contact Information
-    customContacts: []
+    customContacts: [],
+    // Bank
+    bankName: '',
+    bankAccountNumber: '',
+    bankHolderName: '',
+    bankIfsc: '',
+    bankMicr: ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -212,27 +228,40 @@ export const AddVenue: React.FC = () => {
     setDocumentFiles(prev => prev.filter(d => d.id !== id));
   };
 
+  // Utility to create a safe slug from venue name for storage paths
+  const slugifyVenue = (name: string) =>
+    (name || 'venue')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-_]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+
   const uploadVenueFiles = async (venueIdHint: string) => {
     setUploadingFiles(true);
     try {
       const uploadedPhotos: Array<{ name: string; url: string; type: string; size: number }> = [];
+      const slug = slugifyVenue(venueIdHint);
       for (const item of photoFiles) {
         const f = item.file as File;
-        const path = `${Date.now()}_${f.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+        const safeName = f.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const path = `${slug}/${Date.now()}_${safeName}`;
         const { data: up, error: upErr } = await supabase.storage.from('venue-photos').upload(path, f, { upsert: false });
         if (upErr) throw upErr;
         const { data: pub } = supabase.storage.from('venue-photos').getPublicUrl(up.path);
-        uploadedPhotos.push({ name: f.name, url: pub.publicUrl, type: f.type, size: f.size });
+        uploadedPhotos.push({ name: `${venueIdHint} - ${f.name}`, url: pub.publicUrl, type: f.type, size: f.size });
       }
 
       const uploadedDocs: Array<{ name: string; url: string; type: string; size: number }> = [];
       for (const d of documentFiles) {
         const f = d.file;
-        const path = `${Date.now()}_${f.name.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+        if (!f) continue;
+        const safeName = f.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const path = `${slug}/${Date.now()}_${safeName}`;
         const { data: up, error: upErr } = await supabase.storage.from('venue-documents').upload(path, f, { upsert: false });
         if (upErr) throw upErr;
         const { data: pub } = supabase.storage.from('venue-documents').getPublicUrl(up.path);
-        uploadedDocs.push({ name: d.name || f.name, url: pub.publicUrl, type: f.type, size: f.size });
+        uploadedDocs.push({ name: d.name ? `${venueIdHint} - ${d.name}` : `${venueIdHint} - ${f.name}`, url: pub.publicUrl, type: f.type, size: f.size });
       }
 
       return { uploadedPhotos, uploadedDocs };
@@ -244,23 +273,23 @@ export const AddVenue: React.FC = () => {
   useEffect(() => {
     const loadGoogleMapsAPI = () => {
       console.log('🔍 Starting Google Maps API loading...');
-      
+
       // Test environment variable access
       const envVars = {
         importMeta: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
         process: (process as any).env?.VITE_GOOGLE_MAPS_API_KEY,
         window: (window as any).VITE_GOOGLE_MAPS_API_KEY
       };
-      
+
       console.log('🔑 Environment variable test:', envVars);
-      
+
       console.log('🔑 API Key check:', {
         hasKey: !!import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
         keyLength: import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.length,
         keyStart: import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.substring(0, 10) + '...',
         fullKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
       });
-      
+
       // Check if API is already loaded
       if (window.google && window.google.maps) {
         console.log('✅ Google Maps API already loaded');
@@ -284,15 +313,15 @@ export const AddVenue: React.FC = () => {
       if (!apiKey) {
         apiKey = (window as any).VITE_GOOGLE_MAPS_API_KEY;
       }
-      
+
       // Fallback to hardcoded key for testing
       if (!apiKey) {
         console.log('⚠️ Using fallback API key for testing');
         apiKey = 'AIzaSyDhg6EWDV5yYQmpx71HL1up9mpgYL8eHaI';
       }
-      
+
       console.log('🔑 Final API key:', apiKey ? 'Found' : 'Not found');
-      
+
       if (!apiKey || apiKey === 'YOUR_API_KEY' || apiKey === '') {
         const errorMsg = 'Google Maps API key is missing. Please set VITE_GOOGLE_MAPS_API_KEY in your .env file';
         console.error(errorMsg);
@@ -300,7 +329,7 @@ export const AddVenue: React.FC = () => {
         setIsGoogleMapsAvailable(false);
         return;
       }
-      
+
       // Check if script is already being loaded
       if (document.querySelector('script[src*="maps.googleapis.com"]')) {
         console.log('📜 Google Maps script already loading...');
@@ -312,35 +341,35 @@ export const AddVenue: React.FC = () => {
       const scriptUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
       script.src = scriptUrl;
       console.log('📜 Script URL:', scriptUrl);
-      
+
       script.async = true;
       script.defer = true;
-      
+
       script.onload = () => {
         console.log('✅ Google Maps script loaded successfully');
         try {
           setIsGoogleMapsAvailable(true);
           setGoogleMapsError(null);
-          
+
           // Add a small delay to ensure the API is fully initialized
           setTimeout(() => {
             initializeMap();
           }, 100);
-          
+
         } catch (error) {
           console.error('Error initializing map after script load:', error);
           setGoogleMapsError('Failed to initialize map after loading');
           setIsGoogleMapsAvailable(false);
         }
       };
-      
+
       script.onerror = () => {
         const errorMsg = 'Failed to load Google Maps API. Please check your API key and network connection.';
         console.error(errorMsg);
         setGoogleMapsError(errorMsg);
         setIsGoogleMapsAvailable(false);
       };
-      
+
       document.head.appendChild(script);
       console.log('📜 Google Maps script added to document head');
     };
@@ -351,7 +380,7 @@ export const AddVenue: React.FC = () => {
   const initializeMap = (retryCount = 0) => {
     try {
       console.log('🗺️ Starting map initialization...', retryCount > 0 ? `(retry ${retryCount})` : '');
-      
+
       // Wait for the map container to be available
       if (!mapRef.current) {
         if (retryCount < 10) { // Max 10 retries (1 second total)
@@ -437,7 +466,7 @@ export const AddVenue: React.FC = () => {
   const updateAddressFromCoordinates = (lat: number, lng: number) => {
     try {
       console.log('🗺️ Updating address from coordinates:', { lat, lng });
-      
+
       if (!window.google || !window.google.maps) {
         console.error('❌ Google Maps API is not loaded for geocoding');
         return;
@@ -450,14 +479,14 @@ export const AddVenue: React.FC = () => {
       geocoder.geocode({ location: latlng }, (results: any, status: any) => {
         try {
           console.log('📍 Geocoding result:', { status, resultsCount: results?.length });
-          
+
           if (status === 'OK' && results && results[0]) {
             const result = results[0];
             const addressComponents = result.address_components;
-            
+
             console.log('🏠 Full address:', result.formatted_address);
             console.log('🏗️ Address components:', addressComponents);
-            
+
             // Extract address components
             let streetNumber = '';
             let route = '';
@@ -468,7 +497,7 @@ export const AddVenue: React.FC = () => {
 
             for (const component of addressComponents) {
               const types = component.types;
-              
+
               if (types.includes('street_number')) {
                 streetNumber = component.long_name;
               } else if (types.includes('route')) {
@@ -505,7 +534,7 @@ export const AddVenue: React.FC = () => {
             };
 
             console.log('📝 Updating form with:', updatedFormData);
-            
+
             setFormData(prev => {
               const newData = {
                 ...prev,
@@ -514,7 +543,7 @@ export const AddVenue: React.FC = () => {
               console.log('✅ Form updated:', newData);
               return newData;
             });
-            
+
             console.log('✅ Address auto-population completed');
           } else {
             console.log('❌ Geocoding failed:', status);
@@ -533,19 +562,19 @@ export const AddVenue: React.FC = () => {
 
     setIsMapUpdating(true);
     const geocoder = new window.google.maps.Geocoder();
-    
+
     geocoder.geocode({ address: address }, (results: any, status: any) => {
       setIsMapUpdating(false);
-      
+
       if (status === 'OK' && results && results[0]) {
         const result = results[0];
         const location = result.geometry.location;
-        
+
         // Update map position
         mapInstanceRef.current.setCenter(location);
         mapInstanceRef.current.setZoom(15);
         markerRef.current.setPosition(location);
-        
+
         // Update form data with coordinates
         setFormData(prev => ({
           ...prev,
@@ -602,7 +631,7 @@ export const AddVenue: React.FC = () => {
     //   newErrors.email = 'Email is required';
     //   console.log('❌ Email validation failed: empty');
     // } else
-     if (!emailRegex.test(formData.email)) {
+    if (!emailRegex.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
       console.log('❌ Email validation failed: invalid format');
     } else {
@@ -676,6 +705,32 @@ export const AddVenue: React.FC = () => {
     //   console.log('✅ Kind of space validation passed');
     // }
 
+    // Bank details validation
+    if (!formData.bankName.trim()) {
+      newErrors.bankName = 'Bank name is required';
+    }
+    const accountRegex = /^[0-9]{9,18}$/;
+    if (!formData.bankAccountNumber.trim()) {
+      newErrors.bankAccountNumber = 'Account number is required';
+    } else if (!accountRegex.test(formData.bankAccountNumber.trim())) {
+      newErrors.bankAccountNumber = 'Account number must be 9-18 digits';
+    }
+    if (!formData.bankHolderName.trim()) {
+      newErrors.bankHolderName = 'Account holder name is required';
+    }
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+    if (!formData.bankIfsc.trim()) {
+      newErrors.bankIfsc = 'IFSC is required';
+    } else if (!ifscRegex.test(formData.bankIfsc.trim())) {
+      newErrors.bankIfsc = 'Invalid IFSC format (e.g., HDFC0001234)';
+    }
+    // const micrRegex = /^[0-9]{9}$/;
+    // if (!formData.bankMicr.trim()) {
+    //   newErrors.bankMicr = 'MICR is required';
+    // } else if (!micrRegex.test(formData.bankMicr.trim())) {
+    //   newErrors.bankMicr = 'MICR must be 9 digits';
+    // }
+
     if (formData.pricingPerDay < 0) {
       newErrors.pricingPerDay = 'Pricing per day cannot be negative';
       console.log('❌ Pricing per day validation failed: negative');
@@ -701,7 +756,7 @@ export const AddVenue: React.FC = () => {
 
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -781,32 +836,32 @@ export const AddVenue: React.FC = () => {
       phone: '',
       role: ''
     };
-    
+
     setFormData(prev => ({
       ...prev,
       customContacts: [...prev.customContacts, newContact]
     }));
-    
+
   };
 
   const updateCustomContact = (id: string, field: string, value: string) => {
-    
+
     setFormData(prev => ({
       ...prev,
       customContacts: prev.customContacts.map(contact =>
         contact.id === id ? { ...contact, [field]: value } : contact
       )
     }));
-    
+
   };
 
   const removeCustomContact = (id: string) => {
-    
+
     setFormData(prev => ({
       ...prev,
       customContacts: prev.customContacts.filter(contact => contact.id !== id)
     }));
-    
+
   };
 
   const checkForDuplicates = async (): Promise<{ hasDuplicates: boolean; message: string }> => {
@@ -852,9 +907,9 @@ export const AddVenue: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     console.log('🔍 Starting form submission...');
-    
+
     if (!validateForm()) {
       console.log('❌ Form validation failed');
       return;
@@ -896,6 +951,7 @@ export const AddVenue: React.FC = () => {
         city: formData.city || null,
         state: formData.state || null,
         pincode: formData.pincode || null,
+        country: formData.country || 'India',
         // area_sq_ft: formData.areaSqFt,
         // kind_of_space: formData.kindOfSpace,
         // is_covered: formData.isCovered,
@@ -910,6 +966,12 @@ export const AddVenue: React.FC = () => {
         // formatted_address: formData.formattedAddress,
         // Custom Contact Information - Commented out until column is added to database
         // custom_contacts: formData.customContacts,
+        // Bank details (if columns exist)
+        bank_name: formData.bankName || null,
+        bank_account_number: formData.bankAccountNumber || null,
+        bank_holder_name: formData.bankHolderName || null,
+        bank_ifsc: formData.bankIfsc || null,
+        bank_micr: formData.bankMicr || null,
         // Files
         photos: uploadedPhotos,
         documents: uploadedDocs
@@ -917,7 +979,7 @@ export const AddVenue: React.FC = () => {
 
       console.log('📝 Insert data:', insertData);
       console.log('⚠️  Note: Some form fields are commented out until database columns are added');
-      console.log('📋 Missing columns: contact_role, address_line1, address_landmark, address_standard, area_sq_ft, kind_of_space, is_covered, pricing_per_day, facility_area_sq_ft, no_of_stalls, facility_covered, no_of_flats, latitude, longitude, formatted_address, custom_contacts');
+      console.log('📋 Missing columns: contact_role, address_line1, address_landmark, address_standard, area_sq_ft, kind_of_space, is_covered, pricing_per_day, facility_area_sq_ft, no_of_stalls, facility_covered, no_of_flats, latitude, longitude, formatted_address, custom_contacts, bank_name, bank_account_number, bank_holder_name, bank_ifsc, bank_micr');
 
       const { data, error } = await supabase
         .from('venues')
@@ -933,12 +995,12 @@ export const AddVenue: React.FC = () => {
       console.log('✅ Venue created successfully:', data);
       showNotification('Venue created successfully!', 'success');
       setSubmitSuccess(true);
-      
+
       // Redirect after success
       setTimeout(() => {
         navigate('/venues');
       }, 2000);
-      
+
     } catch (error) {
       console.error('❌ Error creating venue:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create venue. Please try again.';
@@ -952,12 +1014,11 @@ export const AddVenue: React.FC = () => {
   // Notification function
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
-      type === 'success' ? 'bg-green-500 text-white' :
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
       type === 'error' ? 'bg-red-500 text-white' :
-      'bg-blue-500 text-white'
-    }`;
-    
+        'bg-blue-500 text-white'
+      }`;
+
     notification.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center">
@@ -969,14 +1030,14 @@ export const AddVenue: React.FC = () => {
         </button>
       </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Animate in
     setTimeout(() => {
       notification.classList.remove('translate-x-full');
     }, 100);
-    
+
     // Auto remove after 5 seconds
     setTimeout(() => {
       if (notification.parentElement) {
@@ -1006,45 +1067,52 @@ export const AddVenue: React.FC = () => {
               <Button onClick={() => navigate('/venues')} className="w-full">
                 Go to Venue Management
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSubmitSuccess(false);
-                          setFormData({
-          name: '',
-          location: '',
-          contactPerson: '',
-          contactRole: '',
-          email: '',
-          phone: '',
-          memberCount: 0,
-          facilities: [],
-          amenities: [],
-          description: '',
-          status: 'active',
-          // Extended Fields
-          addressLine1: '',
-          addressLine2: '',
-          city: '',
-          state: '',
-          pincode: '',
-          addressLandmark: '',
-          addressStandard: '',
-          areaSqFt: 0,
-          kindOfSpace: '',
-          isCovered: false,
-          pricingPerDay: 0,
-          facilityAreaSqFt: 0,
-          noOfStalls: 0,
-          facilityCovered: false,
-          noOfFlats: 0,
-          // Google Maps Fields
-          latitude: 0,
-          longitude: 0,
-          formattedAddress: '',
-          // Custom Contact Information
-          customContacts: []
-        });
+                  setFormData({
+                    name: '',
+                    location: '',
+                    contactPerson: '',
+                    contactRole: '',
+                    email: '',
+                    phone: '',
+                    memberCount: 0,
+                    facilities: [],
+                    amenities: [],
+                    description: '',
+                    status: 'pending',
+                    // Extended Fields
+                    addressLine1: '',
+                    addressLine2: '',
+                    city: '',
+                    state: '',
+                    pincode: '',
+                    country: 'India',
+                    addressLandmark: '',
+                    addressStandard: '',
+                    areaSqFt: 0,
+                    kindOfSpace: '',
+                    isCovered: false,
+                    pricingPerDay: 0,
+                    facilityAreaSqFt: 0,
+                    noOfStalls: 0,
+                    facilityCovered: false,
+                    noOfFlats: 0,
+                    // Google Maps Fields
+                    latitude: 0,
+                    longitude: 0,
+                    formattedAddress: '',
+                    // Custom Contact Information
+                    customContacts: [],
+                    // Bank
+                    bankName: '',
+                    bankAccountNumber: '',
+                    bankHolderName: '',
+                    bankIfsc: '',
+                    bankMicr: ''
+                  });
                 }}
                 className="w-full"
               >
@@ -1062,8 +1130,8 @@ export const AddVenue: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => navigate('/venues')}
             className="flex items-center space-x-2"
           >
@@ -1078,7 +1146,7 @@ export const AddVenue: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Basic Information */}
@@ -1092,15 +1160,14 @@ export const AddVenue: React.FC = () => {
               <CardContent className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Venue Name *
+                    Venue Name *
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.name ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.name ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder="Enter venue name"
                   />
                   {errors.name && (
@@ -1113,15 +1180,14 @@ export const AddVenue: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                     Address Line 1 *{/* / select from google maps */}
+                    Address Line 1 *{/* / select from google maps */}
                   </label>
                   <input
                     type="text"
                     value={formData.addressLine1}
                     onChange={(e) => handleInputChange('addressLine1', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.addressLine1 ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.addressLine1 ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder="Flat/Lane/Building..."
                   />
                   {errors.addressLine1 && (
@@ -1147,16 +1213,41 @@ export const AddVenue: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">State *</label>
+                    <select
+                      value={formData.state}
+                      onChange={(e) => { handleInputChange('state', e.target.value); handleInputChange('city', ''); }}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.state ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                    >
+                      <option value="">Select State</option>
+                      {statesData.map(state => (
+                        <option key={state.id} value={state.name}>{state.name}</option>
+                      ))}
+                    </select>
+                    {errors.state && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.state}
+                      </p>
+                    )}
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.city}
                       onChange={(e) => handleInputChange('city', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.city ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      placeholder="Enter city"
-                    />
+                      disabled={!formData.state}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${errors.city ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                    >
+                      <option value="">Select City</option>
+                      {formData.state && statesData
+                        .find(s => s.name === formData.state)?.cities
+                        .map(city => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                    </select>
                     {errors.city && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="h-4 w-4 mr-1" />
@@ -1164,21 +1255,23 @@ export const AddVenue: React.FC = () => {
                       </p>
                     )}
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">State *</label>
-                    <input
-                      type="text"
-                      value={formData.state}
-                      onChange={(e) => handleInputChange('state', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.state ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      placeholder="Enter state"
-                    />
-                    {errors.state && (
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Country *</label>
+                    <select
+                      value={formData.country}
+                      onChange={(e) => handleInputChange('country', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.country ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                    >
+                      {COUNTRIES.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    {errors.country && (
                       <p className="mt-1 text-sm text-red-600 flex items-center">
                         <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.state}
+                        {errors.country}
                       </p>
                     )}
                   </div>
@@ -1188,9 +1281,8 @@ export const AddVenue: React.FC = () => {
                       type="text"
                       value={formData.pincode}
                       onChange={(e) => handleInputChange('pincode', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.pincode ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.pincode ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       placeholder="6-digit PIN"
                       maxLength={6}
                     />
@@ -1433,9 +1525,8 @@ export const AddVenue: React.FC = () => {
                       type="number"
                       value={formData.noOfFlats}
                       onChange={(e) => handleInputChange('noOfFlats', Number(e.target.value))}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.noOfFlats ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.noOfFlats ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       placeholder="Enter number of flats"
                     />
                     {errors.noOfFlats && (
@@ -1496,8 +1587,8 @@ export const AddVenue: React.FC = () => {
                       onChange={(e) => handleInputChange('status', e.target.value as 'active' | 'inactive' | 'pending')}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="active">Active</option>
                       <option value="pending">Pending</option>
+                      <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
                   </div>
@@ -1520,9 +1611,8 @@ export const AddVenue: React.FC = () => {
                       type="text"
                       value={formData.contactPerson}
                       onChange={(e) => handleInputChange('contactPerson', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.contactPerson ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.contactPerson ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       placeholder="Enter contact person name"
                     />
                     {errors.contactPerson && (
@@ -1541,9 +1631,8 @@ export const AddVenue: React.FC = () => {
                       type="text"
                       value={formData.contactRole}
                       onChange={(e) => handleInputChange('contactRole', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.contactRole ? 'border-red-300' : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.contactRole ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       placeholder="Manager, Coordinator, etc."
                     />
                     {errors.contactRole && (
@@ -1566,9 +1655,8 @@ export const AddVenue: React.FC = () => {
                         type="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.email ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.email ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="Enter email address"
                       />
                     </div>
@@ -1590,9 +1678,8 @@ export const AddVenue: React.FC = () => {
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => handleInputChange('phone', e.target.value)}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.phone ? 'border-red-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.phone ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         placeholder="+91-9876543210"
                       />
                     </div>
@@ -1652,7 +1739,7 @@ export const AddVenue: React.FC = () => {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1666,7 +1753,7 @@ export const AddVenue: React.FC = () => {
                               placeholder="Enter contact name"
                             />
                           </div>
-                          
+
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Role
@@ -1679,7 +1766,7 @@ export const AddVenue: React.FC = () => {
                               placeholder="Manager, Coordinator, etc."
                             />
                           </div>
-                          
+
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Email
@@ -1692,7 +1779,7 @@ export const AddVenue: React.FC = () => {
                               placeholder="Enter email address"
                             />
                           </div>
-                          
+
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Phone
@@ -1710,7 +1797,7 @@ export const AddVenue: React.FC = () => {
                     ))}
                   </div>
                 )}
-                
+
                 {formData.customContacts.length > 0 && (
                   <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
                     <p className="flex items-center">
@@ -1975,7 +2062,6 @@ export const AddVenue: React.FC = () => {
             </Card> */}
 
 
-
             {/* Facilities & Amenities */}
             <Card>
               <CardHeader>
@@ -2116,7 +2202,108 @@ export const AddVenue: React.FC = () => {
                   )}
                 </div>
               </CardContent>
-                        </Card>
+            </Card>
+
+
+            {/* Bank Details */}
+            <Card>
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900">Bank Details</h3>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name *</label>
+                    <input
+                      type="text"
+                      value={formData.bankName}
+                      onChange={(e) => handleInputChange('bankName', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.bankName ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter bank name"
+                    />
+                    {errors.bankName && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.bankName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Account Number *</label>
+                    <input
+                      type="text"
+                      value={formData.bankAccountNumber}
+                      onChange={(e) => handleInputChange('bankAccountNumber', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.bankAccountNumber ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter bank account number"
+                    />
+                    {errors.bankAccountNumber && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.bankAccountNumber}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Holder Name *</label>
+                    <input
+                      type="text"
+                      value={formData.bankHolderName}
+                      onChange={(e) => handleInputChange('bankHolderName', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.bankHolderName ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter bank holder name"
+                    />
+                    {errors.bankHolderName && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.bankHolderName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank IFSC *</label>
+                    <input
+                      type="text"
+                      value={formData.bankIfsc}
+                      onChange={(e) => handleInputChange('bankIfsc', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.bankIfsc ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter bank IFSC"
+                    />
+                    {errors.bankIfsc && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.bankIfsc}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank MICR *</label>
+                    <input
+                      type="text"
+                      value={formData.bankMicr}
+                      onChange={(e) => handleInputChange('bankMicr', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.bankMicr ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter bank MICR"
+                    />
+                    {errors.bankMicr && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {errors.bankMicr}
+                      </p>
+                    )}
+                  </div> */}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Venue Photos */}
             <Card>
@@ -2146,7 +2333,7 @@ export const AddVenue: React.FC = () => {
                       <div key={idx} className="border rounded p-2 text-xs relative">
                         <img src={p.previewUrl} alt={p.file.name} className="w-full h-24 object-cover rounded" />
                         <div className="truncate mt-1">{p.file.name}</div>
-                        <div className="text-gray-500">{(p.file.size/1024/1024).toFixed(2)} MB</div>
+                        <div className="text-gray-500">{(p.file.size / 1024 / 1024).toFixed(2)} MB</div>
                         <button type="button" onClick={() => removePhotoAt(idx)} className="absolute top-1 right-1 bg-white/80 rounded px-1 text-xs">✕</button>
                       </div>
                     ))}
@@ -2163,12 +2350,12 @@ export const AddVenue: React.FC = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex flex-row items-center justify-between">
-                  <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={addDocumentRow}>
-                    <Plus className="h-4 w-4" />
-                    <span>Add Document</span>
-                  </Button>
-                  {fileErrors.documents && (<div className="text-red-600 text-sm">{fileErrors.documents}</div>)}
-                  <p className="text-sm text-gray-600">Accepted: PDF or Images. Max 10MB</p>
+                    <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={addDocumentRow}>
+                      <Plus className="h-4 w-4" />
+                      <span>Add Document</span>
+                    </Button>
+                    {fileErrors.documents && (<div className="text-red-600 text-sm">{fileErrors.documents}</div>)}
+                    <p className="text-sm text-gray-600">Accepted: PDF or Images. Max 10MB</p>
                   </div>
                 </div>
                 {documentFiles.length > 0 && (
@@ -2187,18 +2374,19 @@ export const AddVenue: React.FC = () => {
                           onChange={(e) => handleDocumentFileChange(d.id, e.target.files?.[0] || null)}
                         />
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">{d.file ? `${(d.file.size/1024/1024).toFixed(2)} MB` : 'No file selected'}</span>
+                          <span className="text-gray-600">{d.file ? `${(d.file.size / 1024 / 1024).toFixed(2)} MB` : 'No file selected'}</span>
                           <button type="button" onClick={() => removeDocumentRow(d.id)} className="text-red-600">Remove</button>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                
+
               </CardContent>
+              
             </Card>
 
-             {/* Policies */}
+            {/* Policies */}
             {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Venue Policies</h3>
@@ -2237,12 +2425,51 @@ export const AddVenue: React.FC = () => {
                 </div>
               </CardContent>
             </Card> */}
-          </div>
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              {errors.submit && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    {errors.submit}
+                  </p>
+                </div>
+              )}
 
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center space-x-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Creating Venue...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Create Venue</span>
+                  </>
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('/venues')}
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+              
           {/* Sidebar */}
-          <div className="space-y-6">
+          {/* <div className="space-y-6"> */}
             {/* Venue Summary */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Venue Summary</h3>
               </CardHeader>
@@ -2302,7 +2529,7 @@ export const AddVenue: React.FC = () => {
                           </div>
                         </div>
                       )}
-                      
+
                       {formData.amenities.length > 0 && (
                         <div>
                           <div className="text-sm font-medium text-gray-700 mb-2">
@@ -2327,10 +2554,11 @@ export const AddVenue: React.FC = () => {
                   )}
                 </div>
               </CardContent>
-            </Card>
+              
+            </Card> */}
 
             {/* Guidelines */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <Info className="h-5 w-5 mr-2" />
@@ -2357,48 +2585,10 @@ export const AddVenue: React.FC = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              {errors.submit && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-600 flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    {errors.submit}
-                  </p>
-                </div>
-              )}
-              
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full flex items-center justify-center space-x-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Creating Venue...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    <span>Create Venue</span>
-                  </>
-                )}
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/venues')}
-                className="w-full"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+            
+          {/* </div> */}
         </div>
       </form>
     </div>

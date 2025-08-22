@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle, Image as ImageIcon, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -9,6 +9,8 @@ import { Button } from '../components/UI/Button';
 import { Venue } from '../types';
 import { supabase } from '../lib/supabase';
 import { useVenues } from '../hooks/useSupabaseData';
+import { COUNTRIES } from '../data/locations';
+import statesData from '../data/states.json';
 
 interface ExtendedVenueFormData {
   id: string;
@@ -28,6 +30,7 @@ interface ExtendedVenueFormData {
   city: string;
   state: string;
   pincode: string;
+  country: string;
   addressLandmark: string;
   addressStandard: string;
   areaSqFt: number;
@@ -59,11 +62,17 @@ interface ExtendedVenueFormData {
   cateringAllowed: boolean;
   alcoholAllowed: boolean;
   smokingAllowed: boolean;
+  // Bank
+  bankName: string;
+  bankAccountNumber: string;
+  bankHolderName: string;
+  bankIfsc: string;
+  bankMicr: string;
 }
 
 export const Venues: React.FC = () => {
   const { venues, loading, error, refetch } = useVenues();
-  
+
   const [localVenues, setLocalVenues] = useState<Venue[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,15 +81,15 @@ export const Venues: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<ExtendedVenueFormData | null>(null);
-  const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
+  const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
 
   const filteredVenues = venues.filter(venue => {
     const matchesFilter = filter === 'all' || venue.status === filter;
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       venue.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       venue.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       venue.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     return matchesFilter && matchesSearch;
   });
 
@@ -112,13 +121,14 @@ export const Venues: React.FC = () => {
       facilities: venue.facilities || [],
       amenities: venue.amenities || [],
       description: venue.description || '',
-      status: venue.status || 'active',
+      status: venue.status || 'pending',
       // Extended Fields
       addressLine1: venue.addressLine1 || '',
       addressLine2: (venue as any).address_line2 || (venue as any).addressLine2 || '',
       city: (venue as any).city || '',
       state: (venue as any).state || '',
       pincode: (venue as any).pincode || '',
+      country: (venue as any).country || 'India',
       addressLandmark: venue.addressLandmark || '',
       addressStandard: venue.addressStandard || '',
       areaSqFt: venue.areaSqFt || 0,
@@ -143,7 +153,13 @@ export const Venues: React.FC = () => {
       parkingSpaces: venue.parkingSpaces || 0,
       cateringAllowed: venue.cateringAllowed || false,
       alcoholAllowed: venue.alcoholAllowed || false,
-      smokingAllowed: venue.smokingAllowed || false
+      smokingAllowed: venue.smokingAllowed || false,
+      // Bank
+      bankName: (venue as any).bankName || (venue as any).bank_name || '',
+      bankAccountNumber: (venue as any).bankAccountNumber || (venue as any).bank_account_number || '',
+      bankHolderName: (venue as any).bankHolderName || (venue as any).bank_holder_name || '',
+      bankIfsc: (venue as any).bankIfsc || (venue as any).bank_ifsc || '',
+      bankMicr: (venue as any).bankMicr || (venue as any).bank_micr || ''
     });
     setShowEditModal(true);
   };
@@ -208,9 +224,9 @@ export const Venues: React.FC = () => {
 
   const validateEditForm = (): boolean => {
     if (!editFormData) return false;
-    
-    const errors: {[key: string]: string} = {};
-    
+
+    const errors: { [key: string]: string } = {};
+
     // Basic validation
     if (!editFormData.name.trim()) {
       errors.name = 'Venue name is required';
@@ -224,7 +240,7 @@ export const Venues: React.FC = () => {
     // if (!editFormData.email.trim()) {
     //   errors.email = 'Email is required';
     // } else
-     if (!/\S+@\S+\.\S+/.test(editFormData.email)) {
+    if (!/\S+@\S+\.\S+/.test(editFormData.email)) {
       errors.email = 'Please enter a valid email address';
     }
     if (!editFormData.phone.trim()) {
@@ -247,10 +263,47 @@ export const Venues: React.FC = () => {
     } else if (!/^[0-9]{6}$/.test(editFormData.pincode)) {
       errors.pincode = 'Pincode must be 6 digits';
     }
-    
+    if (!editFormData.country.trim()) {
+      errors.country = 'Country is required';
+    }
+    // Bank validations
+    if (!editFormData.bankName.trim()) {
+      errors.bankName = 'Bank name is required';
+    }
+    const accountRegex = /^[0-9]{9,18}$/;
+    if (!editFormData.bankAccountNumber.trim()) {
+      errors.bankAccountNumber = 'Account number is required';
+    } else if (!accountRegex.test(editFormData.bankAccountNumber.trim())) {
+      errors.bankAccountNumber = 'Account number must be 9-18 digits';
+    }
+    if (!editFormData.bankHolderName.trim()) {
+      errors.bankHolderName = 'Account holder name is required';
+    }
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+    if (!editFormData.bankIfsc.trim()) {
+      errors.bankIfsc = 'IFSC is required';
+    } else if (!ifscRegex.test(editFormData.bankIfsc.trim())) {
+      errors.bankIfsc = 'Invalid IFSC format (e.g., HDFC0001234)';
+    }
+    // const micrRegex = /^[0-9]{9}$/;
+    // if (!editFormData.bankMicr.trim()) {
+    //   errors.bankMicr = 'MICR is required';
+    // } else if (!micrRegex.test(editFormData.bankMicr.trim())) {
+    //   errors.bankMicr = 'MICR must be 9 digits';
+    // }
+
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   };
+
+  // Utility to create a safe slug from venue name for storage paths
+  const slugifyVenue = (name: string) =>
+    (name || 'venue')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-_]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
 
   // Helper: compress image without noticeable quality loss
   async function compressImage(file: File, maxSizePx: number = 1600, quality: number = 0.85): Promise<File> {
@@ -296,10 +349,10 @@ export const Venues: React.FC = () => {
       reader.readAsDataURL(file);
     });
   }
- 
+
   // Helper: upload a file to a storage bucket and return public URL
-  async function uploadToBucket(bucket: string, path: string, file: File): Promise<{ url: string }>{
-    const { data: up, error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+  async function uploadToBucket(bucket: string, path: string, file: File): Promise<{ url: string }> {
+    const { data: up, error: upErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
     if (upErr) throw upErr;
     const { data: pub } = supabase.storage.from(bucket).getPublicUrl(up.path);
     return { url: pub.publicUrl };
@@ -308,13 +361,13 @@ export const Venues: React.FC = () => {
   const handleSaveEdit = async () => {
     if (editFormData) {
       console.log('Starting venue update with data:', editFormData);
-      
+
       // Validate the final form
       if (!validateEditForm()) {
         showNotification('Please fix the validation errors before saving.', 'error');
         return;
       }
-      
+
       // Check for duplicates
       const duplicateCheck = await checkForDuplicates(editFormData.id);
       if (duplicateCheck.hasDuplicates) {
@@ -327,26 +380,27 @@ export const Venues: React.FC = () => {
       let finalDocuments: Array<{ name: string; url: string; type: string; size: number }> = [];
 
       try {
-        // Existing photos (with http(s) URL)
+        const slug = slugifyVenue(editFormData.name);
+        // Existing photos
         const existingPhotos = (editFormData.photos as any[] || []).filter(p => p && typeof p.url === 'string' && /^https?:\/\//.test(p.url));
         finalPhotos.push(...existingPhotos.map(p => ({ name: p.name, url: p.url, type: p.type, size: p.size })));
 
-        // New photos to upload
+        // New photos
         const newPhotoFiles = (editFormData.photos as any[] || []).filter(p => p && p._file instanceof File).map(p => p._file as File);
         for (const raw of newPhotoFiles) {
           const optimized = await compressImage(raw, 1600, 0.85);
           const safeName = optimized.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-          const path = `${editFormData.id}/${Date.now()}_${safeName}`;
+          const path = `${slug}/${Date.now()}_${safeName}`;
           const { url } = await uploadToBucket('venue-photos', path, optimized);
-          finalPhotos.push({ name: optimized.name, url, type: optimized.type, size: optimized.size });
+          finalPhotos.push({ name: `${editFormData.name} - ${optimized.name}`, url, type: optimized.type, size: optimized.size });
         }
 
-        // Existing documents (with http(s) URL)
+        // Existing documents
         const existingDocs = (editFormData.documents as any[] || []).filter(d => d && typeof d.url === 'string' && /^https?:\/\//.test(d.url));
         finalDocuments.push(...existingDocs.map(d => ({ name: d.name, url: d.url, type: d.type, size: d.size })));
 
-        // New documents to upload (pdf or image)
-        const newDocEntries = (editFormData.documents as any[] || []).filter(d => d && d._file instanceof File);
+        // New documents
+        const newDocEntries = (editFormData.documents as any[] || []).filter(d => d && d._file && typeof d._file !== 'string');
         for (const d of newDocEntries) {
           const file = d._file as File;
           let toUpload = file;
@@ -354,9 +408,9 @@ export const Venues: React.FC = () => {
             toUpload = await compressImage(file, 1600, 0.85);
           }
           const safeName = toUpload.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
-          const path = `${editFormData.id}/${Date.now()}_${safeName}`;
+          const path = `${slug}/${Date.now()}_${safeName}`;
           const { url } = await uploadToBucket('venue-documents', path, toUpload);
-          finalDocuments.push({ name: d.name || toUpload.name, url, type: toUpload.type, size: toUpload.size });
+          finalDocuments.push({ name: d.name ? `${editFormData.name} - ${d.name}` : `${editFormData.name} - ${toUpload.name}`, url, type: toUpload.type, size: toUpload.size });
         }
       } catch (uploadErr: any) {
         console.error('Upload error:', uploadErr);
@@ -370,23 +424,24 @@ export const Venues: React.FC = () => {
         location: editFormData.location,
         description: editFormData.description,
         status: editFormData.status,
-        
+
         // Contact Information
         contact_person: editFormData.contactPerson,
         email: editFormData.email,
         phone: editFormData.phone,
-        
+
         // Capacity & Facilities
         capacity: editFormData.memberCount,
         facilities: editFormData.facilities,
         amenities: editFormData.amenities,
-        
+
         // Extended Fields
         address_line1: editFormData.addressLine1,
-        address_line2: editFormData.addressLine2 || null,
+        address_line2: editFormData.addressLine2 || '',
         city: editFormData.city || null,
         state: editFormData.state || null,
         pincode: editFormData.pincode || null,
+        country: editFormData.country || 'India',
         address_landmark: editFormData.addressLandmark,
         address_standard: editFormData.addressStandard,
         area_sq_ft: editFormData.areaSqFt,
@@ -397,27 +452,33 @@ export const Venues: React.FC = () => {
         no_of_stalls: editFormData.noOfStalls,
         facility_covered: editFormData.facilityCovered,
         no_of_flats: editFormData.noOfFlats,
-        
+
         // Google Maps fields
         latitude: editFormData.latitude,
         longitude: editFormData.longitude,
-                 formatted_address: editFormData.formattedAddress,
-         
-         // Files (final arrays with public URLs)
-         photos: finalPhotos,
-         documents: finalDocuments,
-         
-         // Custom Contact Information
-         custom_contacts: editFormData.customContacts,
-         
-         // Additional Settings
-         available_hours: editFormData.availableHours,
-         parking_spaces: editFormData.parkingSpaces,
-         catering_allowed: editFormData.cateringAllowed,
-         alcohol_allowed: editFormData.alcoholAllowed,
-         smoking_allowed: editFormData.smokingAllowed
+        formatted_address: editFormData.formattedAddress,
+
+        // Files (final arrays with public URLs)
+        photos: finalPhotos,
+        documents: finalDocuments,
+
+        // Custom Contact Information
+        custom_contacts: editFormData.customContacts,
+        // Bank
+        bank_name: editFormData.bankName || null,
+        bank_account_number: editFormData.bankAccountNumber || null,
+        bank_holder_name: editFormData.bankHolderName || null,
+        bank_ifsc: editFormData.bankIfsc || null,
+        bank_micr: editFormData.bankMicr || null,
+
+        // Additional Settings
+        available_hours: editFormData.availableHours,
+        parking_spaces: editFormData.parkingSpaces,
+        catering_allowed: editFormData.cateringAllowed,
+        alcohol_allowed: editFormData.alcoholAllowed,
+        smoking_allowed: editFormData.smokingAllowed
       };
-      
+
       console.log('Update data being sent:', updateData);
       console.log('Updating venue ID:', editFormData.id);
 
@@ -435,12 +496,12 @@ export const Venues: React.FC = () => {
           console.log('Update successful - returned data:', data);
           console.log('Number of rows updated:', data?.length || 0);
           console.log('Updated venue data:', data?.[0]);
-          
+
           showNotification('Venue updated successfully!', 'success');
           setShowEditModal(false);
           setEditFormData(null);
           setSelectedVenue(null);
-          
+
           // Force a refetch with a small delay to ensure database has updated
           setTimeout(() => {
             console.log('Refetching venue data...');
@@ -478,12 +539,11 @@ export const Venues: React.FC = () => {
   // Notification function
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${
-      type === 'success' ? 'bg-green-500 text-white' :
-      type === 'error' ? 'bg-red-500 text-white' :
-      'bg-blue-500 text-white'
-    }`;
-    
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+          'bg-blue-500 text-white'
+      }`;
+
     notification.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center">
@@ -495,14 +555,14 @@ export const Venues: React.FC = () => {
         </button>
       </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Animate in
     setTimeout(() => {
       notification.classList.remove('translate-x-full');
     }, 100);
-    
+
     // Auto remove after 5 seconds
     setTimeout(() => {
       if (notification.parentElement) {
@@ -528,7 +588,7 @@ export const Venues: React.FC = () => {
   // Custom Contact Management Functions
   const addCustomContact = () => {
     if (!editFormData) return;
-    
+
     const newContact = {
       id: Date.now().toString(),
       name: '',
@@ -536,7 +596,7 @@ export const Venues: React.FC = () => {
       phone: '',
       role: ''
     };
-    
+
     setEditFormData(prev => ({
       ...prev!,
       customContacts: [...(prev?.customContacts || []), newContact]
@@ -545,7 +605,7 @@ export const Venues: React.FC = () => {
 
   const updateCustomContact = (id: string, field: string, value: string) => {
     if (!editFormData) return;
-    
+
     setEditFormData(prev => ({
       ...prev!,
       customContacts: (prev?.customContacts || []).map(contact =>
@@ -556,7 +616,7 @@ export const Venues: React.FC = () => {
 
   const removeCustomContact = (id: string) => {
     if (!editFormData) return;
-    
+
     setEditFormData(prev => ({
       ...prev!,
       customContacts: (prev?.customContacts || []).filter(contact => contact.id !== id)
@@ -579,7 +639,7 @@ export const Venues: React.FC = () => {
       </div>
 
       {/* Venue Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -638,7 +698,7 @@ export const Venues: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       {/* Search and Filter */}
       <Card>
@@ -661,9 +721,8 @@ export const Venues: React.FC = () => {
               onChange={(e) => setFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
               <option value="pending">Pending</option>
+              <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
           </div>
@@ -672,20 +731,19 @@ export const Venues: React.FC = () => {
 
       {/* Filter Bar */}
       <div className="flex flex-wrap gap-2">
-        {['all', 'active', 'pending', 'inactive'].map((status) => (
+        {['active', 'pending', 'inactive'].map((status) => (
           <button
             key={status}
             onClick={() => setFilter(status)}
-            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-colors duration-200 ${
-              filter === status
+            className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-colors duration-200 ${filter === status
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+              }`}
           >
-            {status === 'all' ? 'All Venues' : status}
-            <span className="ml-1 sm:ml-2 text-xs">
+            {status === 'pending' ? 'Pending' : status === 'active' ? 'Active' : 'Inactive'}
+            {/* <span className="ml-1 sm:ml-2 text-xs">
               {status === 'all' ? venues.length : venues.filter(v => v.status === status).length}
-            </span>
+            </span> */}
           </button>
         ))}
       </div>
@@ -818,9 +876,9 @@ export const Venues: React.FC = () => {
               <TableRow>
                 <TableHead>Venue</TableHead>
                 <TableHead>Contact Person</TableHead>
-                <TableHead className="hidden md:table-cell">Capacity</TableHead>
-                <TableHead className="hidden lg:table-cell">Active Events</TableHead>
-                <TableHead>Revenue</TableHead>
+                {/* <TableHead className="hidden md:table-cell">Capacity</TableHead> */}
+                {/* <TableHead className="hidden lg:table-cell">Active Events</TableHead> */}
+                {/* <TableHead>Revenue</TableHead> */}
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -833,7 +891,8 @@ export const Venues: React.FC = () => {
                       <div className="font-medium text-gray-900 line-clamp-1">{venue.name}</div>
                       <div className="text-sm text-gray-500 flex items-center">
                         <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{venue.location}</span>
+                        {/* <span className="truncate">{venue.location}</span> */}
+                        <span className="truncate">{venue.location ? venue.location : venue.addressLine1 + ' ' + venue.addressLine2 + ' ' + venue.city + ' ' + venue.state + ' ' + venue.pincode}</span>
                       </div>
                       <div className="text-sm text-gray-500 md:hidden">
                         {venue.memberCount.toLocaleString()} capacity
@@ -846,14 +905,14 @@ export const Venues: React.FC = () => {
                       <div className="text-sm text-gray-500 truncate">{venue.email}</div>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell font-medium">{venue.memberCount.toLocaleString()}</TableCell>
-                  <TableCell className="hidden lg:table-cell">
+                  {/* <TableCell className="hidden md:table-cell font-medium">{venue.memberCount.toLocaleString()}</TableCell> */}
+                  {/* <TableCell className="hidden lg:table-cell">
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2 text-blue-500" />
                       {venue.activeEvents}
                     </div>
-                  </TableCell>
-                  <TableCell className="font-medium">₹{venue.totalRevenue.toLocaleString()}</TableCell>
+                  </TableCell> */}
+                  {/* <TableCell className="font-medium">₹{venue.totalRevenue.toLocaleString()}</TableCell> */}
                   <TableCell>
                     <Badge variant={getStatusVariant(venue.status)}>
                       {venue.status}
@@ -891,14 +950,43 @@ export const Venues: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             <div className="p-6 space-y-6">
+              {/* Photos Gallery */}
+              {selectedVenue.photos && selectedVenue.photos.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center"><ImageIcon className="h-4 w-4 mr-2" />Photos</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {selectedVenue.photos.map((p: any, idx: number) => (
+                      <a key={idx} href={p.url} target="_blank" rel="noopener noreferrer" className="block border rounded">
+                        <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Documents List */}
+              {selectedVenue.documents && selectedVenue.documents.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center"><FileText className="h-4 w-4 mr-2" />Documents</h4>
+                  <div className="space-y-2">
+                    {selectedVenue.documents.map((d: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-sm">
+                        <span className="truncate">{d.name}</span>
+                        <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View</a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Location</h4>
                   <div className="flex items-center text-sm">
                     <MapPin className="h-4 w-4 mr-2 text-blue-500" />
-                    <span>{selectedVenue.location}</span>
+                    <span>{selectedVenue.location ? selectedVenue.location : selectedVenue.addressLine1 + ' ' + selectedVenue.addressLine2 + ' ' + selectedVenue.city + ' ' + selectedVenue.state + ' ' + selectedVenue.pincode}</span>
                   </div>
                 </div>
 
@@ -911,7 +999,7 @@ export const Venues: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
+                {/* <div>
                   <h4 className="font-medium text-gray-900 mb-3">Capacity</h4>
                   <div className="flex items-center text-sm">
                     <Users className="h-4 w-4 mr-2 text-blue-500" />
@@ -925,14 +1013,14 @@ export const Venues: React.FC = () => {
                     <Calendar className="h-4 w-4 mr-2 text-blue-500" />
                     <span>{selectedVenue.activeEvents} events</span>
                   </div>
-                </div>
+                </div> 
 
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Total Revenue</h4>
                   <div className="text-2xl font-bold text-green-600">
                     ₹{selectedVenue.totalRevenue.toLocaleString()}
                   </div>
-                </div>
+                </div>*/}
 
                 <div>
                   <h4 className="font-medium text-gray-900 mb-3">Status</h4>
@@ -965,7 +1053,7 @@ export const Venues: React.FC = () => {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-900 mb-3">Joined Date</h4>
+                <h4 className="font-medium text-gray-900 mb-3">Created Date</h4>
                 <div className="text-sm text-gray-600">
                   {new Date(selectedVenue.joinedDate || '').toLocaleDateString()}
                 </div>
@@ -986,7 +1074,7 @@ export const Venues: React.FC = () => {
       {/* Edit Venue Modal */}
       {showEditModal && editFormData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <div>
@@ -1020,10 +1108,9 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.name}
-                            onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.name ? 'border-red-300' : 'border-gray-300'
-                            }`}
+                            onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.name ? 'border-red-300' : 'border-gray-300'
+                              }`}
                             placeholder="Enter venue name"
                           />
                           {editErrors.name && (
@@ -1041,10 +1128,9 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.addressLine1}
-                            onChange={(e) => setEditFormData({...editFormData, addressLine1: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.addressLine1 ? 'border-red-300' : 'border-gray-300'
-                            }`}
+                            onChange={(e) => setEditFormData({ ...editFormData, addressLine1: e.target.value })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine1 ? 'border-red-300' : 'border-gray-300'
+                              }`}
                             placeholder="Flat/Lane/Building..."
                           />
                           {editErrors.addressLine1 && (
@@ -1062,10 +1148,9 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.addressLine2}
-                            onChange={(e) => setEditFormData({...editFormData, addressLine2: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.addressLine2 ? 'border-red-300' : 'border-gray-300'
-                            }`}
+                            onChange={(e) => setEditFormData({ ...editFormData, addressLine2: e.target.value })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine2 ? 'border-red-300' : 'border-gray-300'
+                              }`}
                             placeholder="Apartment, Suite, Floor"
                           />
                           {editErrors.addressLine2 && (
@@ -1078,17 +1163,44 @@ export const Venues: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
+                            State *
+                          </label>
+                          <select
+                            value={editFormData.state}
+                            onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value, city: '' })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.state ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                          >
+                            <option value="">Select state</option>
+                            {statesData.map(state => (
+                              <option key={state.id} value={state.name}>{state.name}</option>
+                            ))}
+                          </select>
+                          {editErrors.state && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-1" />
+                              {editErrors.state}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
                             City *
                           </label>
-                          <input
-                            type="text"
+                          <select
                             value={editFormData.city}
-                            onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.city ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                            placeholder="Enter city"
-                          />
+                            onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                            disabled={!editFormData.state}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${editErrors.city ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                          >
+                            <option value="">Select city</option>
+                            {editFormData.state && statesData
+                              .find(s => s.name === editFormData.state)?.cities
+                              .map(city => (
+                                <option key={city} value={city}>{city}</option>
+                              ))}
+                          </select>
                           {editErrors.city && (
                             <p className="mt-1 text-sm text-red-600 flex items-center">
                               <AlertCircle className="h-4 w-4 mr-1" />
@@ -1097,25 +1209,22 @@ export const Venues: React.FC = () => {
                           )}
                         </div>
 
+
+
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            State *
+                            Country *
                           </label>
-                          <input
-                            type="text"
-                            value={editFormData.state}
-                            onChange={(e) => setEditFormData({...editFormData, state: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.state ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                            placeholder="Enter state"
-                          />
-                          {editErrors.state && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.state}
-                            </p>
-                          )}
+                          <select
+                            value={editFormData.country}
+                            onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.country ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                          >
+                            {COUNTRIES.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
                         </div>
 
                         <div>
@@ -1125,10 +1234,9 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.pincode}
-                            onChange={(e) => setEditFormData({...editFormData, pincode: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.pincode ? 'border-red-300' : 'border-gray-300'
-                            }`}
+                            onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value })}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.pincode ? 'border-red-300' : 'border-gray-300'
+                              }`}
                             placeholder="Enter pincode"
                           />
                           {editErrors.pincode && (
@@ -1166,7 +1274,7 @@ export const Venues: React.FC = () => {
                           </label>
                           <textarea
                             value={editFormData.description}
-                            onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
+                            onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                             rows={4}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Describe the venue..."
@@ -1192,10 +1300,9 @@ export const Venues: React.FC = () => {
                             <input
                               type="text"
                               value={editFormData.contactPerson}
-                              onChange={(e) => setEditFormData({...editFormData, contactPerson: e.target.value})}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                editErrors.contactPerson ? 'border-red-300' : 'border-gray-300'
-                              }`}
+                              onChange={(e) => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.contactPerson ? 'border-red-300' : 'border-gray-300'
+                                }`}
                               placeholder="Enter contact person name"
                             />
                             {editErrors.contactPerson && (
@@ -1213,10 +1320,9 @@ export const Venues: React.FC = () => {
                             <input
                               type="email"
                               value={editFormData.email}
-                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                editErrors.email ? 'border-red-300' : 'border-gray-300'
-                              }`}
+                              onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.email ? 'border-red-300' : 'border-gray-300'
+                                }`}
                               placeholder="Enter email address"
                             />
                             {editErrors.email && (
@@ -1234,10 +1340,9 @@ export const Venues: React.FC = () => {
                             <input
                               type="tel"
                               value={editFormData.phone}
-                              onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                editErrors.phone ? 'border-red-300' : 'border-gray-300'
-                              }`}
+                              onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.phone ? 'border-red-300' : 'border-gray-300'
+                                }`}
                               placeholder="Enter phone number"
                             />
                             {editErrors.phone && (
@@ -1289,7 +1394,7 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.facilities.join(', ')}
-                            onChange={(e) => setEditFormData({...editFormData, facilities: e.target.value.split(', ').map(f => f.trim()).filter(f => f)})}
+                            onChange={(e) => setEditFormData({ ...editFormData, facilities: e.target.value.split(', ').map(f => f.trim()).filter(f => f) })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Auditorium, Community Hall, Garden Area"
                           />
@@ -1302,7 +1407,7 @@ export const Venues: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.amenities.join(', ')}
-                            onChange={(e) => setEditFormData({...editFormData, amenities: e.target.value.split(', ').map(f => f.trim()).filter(f => f)})}
+                            onChange={(e) => setEditFormData({ ...editFormData, amenities: e.target.value.split(', ').map(f => f.trim()).filter(f => f) })}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Wi-Fi, Power Outlets, Lighting"
                           />
@@ -1455,114 +1560,175 @@ export const Venues: React.FC = () => {
                         </div>
                       </CardContent>
                     </Card>*/}
-                     {/* Photos & Documents */}
-                     <Card>
-                       <CardHeader>
-                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                                       <ImageIcon className="h-5 w-5 mr-2" />
-                           Photos & Documents
-                         </h3>
-                       </CardHeader>
-                       <CardContent className="space-y-6">
-                         {/* Photos uploader */}
-                         <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-2">Venue Photos</label>
-                           <div
-                             className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
-                             onDragOver={(e) => e.preventDefault()}
-                             onDrop={(e) => {
-                               e.preventDefault();
-                               const files = Array.from(e.dataTransfer.files).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
-                               if (files.length) {
-                                 setEditFormData({
-                                   ...editFormData,
-                                   photos: [
-                                     ...editFormData.photos,
-                                     ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
-                                   ] as any
-                                 });
-                               }
-                             }}
-                           >
-                             Drag & drop images here or
-                             <label className="text-blue-600 ml-1 underline cursor-pointer">
-                               browse
-                               <input type="file" accept="image/jpeg,image/jpg,image/png" multiple className="hidden" onChange={(e) => {
-                                 const files = Array.from(e.target.files || []).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
-                                 if (files.length) {
-                                   setEditFormData({
-                                     ...editFormData,
-                                     photos: [
-                                       ...editFormData.photos,
-                                       ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
-                                     ] as any
-                                   });
-                                 }
-                               }} />
-                             </label>
-                           </div>
-                           {editFormData.photos && editFormData.photos.length > 0 && (
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                               {editFormData.photos.map((p: any, idx: number) => (
-                                 <div key={idx} className="border rounded p-2 text-xs relative">
-                                   <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
-                                   <div className="truncate mt-1">{p.name}</div>
-                                   <div className="text-gray-500">{(p.size/1024/1024).toFixed(2)} MB</div>
-                                   <button type="button" onClick={() => setEditFormData({ ...editFormData, photos: editFormData.photos.filter((_, i) => i !== idx) })} className="absolute top-1 right-1 bg-white/80 rounded px-1 text-xs">✕</button>
-                                 </div>
-                               ))}
-                             </div>
-                           )}
-                         </div>
+                    {/* Photos & Documents */}
+                    {/* Bank Details */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900">Bank Details</h3>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name *</label>
+                            <input type="text" value={editFormData.bankName} onChange={(e) => setEditFormData({ ...editFormData, bankName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankName ? 'border-red-300' : 'border-gray-300'}`} />
+                            {editErrors.bankName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankName}</p>)}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                            <input type="text" value={editFormData.bankAccountNumber} onChange={(e) => setEditFormData({ ...editFormData, bankAccountNumber: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankAccountNumber ? 'border-red-300' : 'border-gray-300'}`} />
+                            {editErrors.bankAccountNumber && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankAccountNumber}</p>)}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Name in Bank *</label>
+                            <input type="text" value={editFormData.bankHolderName} onChange={(e) => setEditFormData({ ...editFormData, bankHolderName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankHolderName ? 'border-red-300' : 'border-gray-300'}`} />
+                            {editErrors.bankHolderName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankHolderName}</p>)}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC *</label>
+                            <input type="text" value={editFormData.bankIfsc} onChange={(e) => setEditFormData({ ...editFormData, bankIfsc: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankIfsc ? 'border-red-300' : 'border-gray-300'}`} />
+                            {editErrors.bankIfsc && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankIfsc}</p>)}
+                          </div>
+                          {/* <div>
+                             <label className="block text-sm font-medium text-gray-700 mb-1">MICR *</label>
+                             <input type="text" value={editFormData.bankMicr} onChange={(e)=>setEditFormData({...editFormData, bankMicr: e.target.value})} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankMicr ? 'border-red-300' : 'border-gray-300'}`} />
+                             {editErrors.bankMicr && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankMicr}</p>)}
+                           </div> */}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                         {/* Documents uploader */}
-                         <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-2">Venue Documents</label>
-                           <div className="space-y-2">
-                             <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={() => setEditFormData({ ...editFormData, documents: [ ...editFormData.documents, { name: '', url: '', type: '', size: 0, _file: null } as any ] })}>
-                               <Plus className="h-4 w-4" />
-                               <span>Add Document</span>
-                             </Button>
-                             {editFormData.documents && editFormData.documents.length > 0 && (
-                               <div className="space-y-2 text-sm">
-                                 {editFormData.documents.map((d: any, idx: number) => (
-                                   <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center border rounded p-2">
-                                     <input
-                                       type="text"
-                                       value={d.name}
-                                       onChange={(e) => {
-                                         const docs = [...editFormData.documents] as any[];
-                                         docs[idx] = { ...docs[idx], name: e.target.value };
-                                         setEditFormData({ ...editFormData, documents: docs as any });
-                                       }}
-                                       placeholder="Document name"
-                                       className="w-full px-3 py-2 border rounded-lg"
-                                     />
-                                     <input
-                                       type="file"
-                                       onChange={(e) => {
-                                         const f = e.target.files?.[0];
-                                         if (!f) return;
-                                         const allowed = f.type === 'application/pdf' || /image\/(jpeg|jpg|png)/i.test(f.type);
-                                         const valid = f.size <= 10 * 1024 * 1024;
-                                         if (!allowed || !valid) return;
-                                         const docs = [...editFormData.documents] as any[];
-                                         docs[idx] = { ...docs[idx], url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f };
-                                         setEditFormData({ ...editFormData, documents: docs as any });
-                                       }}
-                                     />
-                                     <div className="flex items-center justify-between">
-                                       <span className="text-gray-600">{d.size ? `${(d.size/1024/1024).toFixed(2)} MB` : 'No file selected'}</span>
-                                       <button type="button" onClick={() => setEditFormData({ ...editFormData, documents: editFormData.documents.filter((_, i) => i !== idx) })} className="text-red-600">Remove</button>
-                                     </div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                       </CardContent>
-                     </Card>
+                    {/* Photos & Documents */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <ImageIcon className="h-5 w-5 mr-2" />
+                          Photos & Documents
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* Photos uploader */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Venue Photos</label>
+                          <div
+                            className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const files = Array.from(e.dataTransfer.files).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
+                              if (files.length) {
+                                setEditFormData({
+                                  ...editFormData,
+                                  photos: [
+                                    ...editFormData.photos,
+                                    ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
+                                  ] as any
+                                });
+                              }
+                            }}
+                          >
+                            Drag & drop images here or
+                            <label className="text-blue-600 ml-1 underline cursor-pointer">
+                              browse
+                              <input type="file" accept="image/jpeg,image/jpg,image/png" multiple className="hidden" onChange={(e) => {
+                                const files = Array.from(e.target.files || []).filter((f) => /image\/(jpeg|jpg|png)/i.test(f.type) && f.size <= 5 * 1024 * 1024);
+                                if (files.length) {
+                                  setEditFormData({
+                                    ...editFormData,
+                                    photos: [
+                                      ...editFormData.photos,
+                                      ...files.map((f: any) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f }))
+                                    ] as any
+                                  });
+                                }
+                              }} />
+                            </label>
+                          </div>
+                          {editFormData.photos && editFormData.photos.length > 0 && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                              {editFormData.photos.map((p: any, idx: number) => (
+                                <div key={idx} className="border rounded p-2 text-xs relative">
+                                  <a href={p.url} target="_blank" rel="noopener noreferrer">
+                                    <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
+                                  </a>
+                                  <div className="truncate mt-1">{p.name}</div>
+                                  <div className="text-gray-500">{(p.size / 1024 / 1024).toFixed(2)} MB</div>
+                                  <div className="absolute top-1 right-1 flex items-center space-x-1">
+                                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white/80 rounded px-1 text-xs hover:underline">View</a>
+                                    <button type="button" onClick={() => setEditFormData({ ...editFormData, photos: editFormData.photos.filter((_, i) => i !== idx) })} className="bg-white/80 rounded px-1 text-xs">✕</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Documents uploader */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Venue Documents</label>
+                          <div className="space-y-2">
+                            <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={() => setEditFormData({ ...editFormData, documents: [...editFormData.documents, { name: '', url: '', type: '', size: 0, _file: null } as any] })}>
+                              <Plus className="h-4 w-4" />
+                              <span>Add Document</span>
+                            </Button>
+                            {editFormData.documents && editFormData.documents.length > 0 && (
+                              <div className="space-y-2 text-sm">
+                                {editFormData.documents.map((d: any, idx: number) => (
+                                  <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center border rounded p-2">
+                                    <input
+                                      type="text"
+                                      value={d.name}
+                                      onChange={(e) => {
+                                        const docs = [...editFormData.documents] as any[];
+                                        docs[idx] = { ...docs[idx], name: e.target.value };
+                                        setEditFormData({ ...editFormData, documents: docs as any });
+                                      }}
+                                      placeholder="Document name"
+                                      className="w-full px-3 py-2 border rounded-lg"
+                                    />
+                                    <input
+                                      type="file"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (!f) return;
+                                        const allowed = f.type === 'application/pdf' || f.type === 'application/octet-stream' || /image\/(jpeg|jpg|png)/i.test(f.type);
+                                        const valid = f.size <= 20 * 1024 * 1024;
+                                        if (!allowed || !valid) return;
+                                        const docs = [...editFormData.documents] as any[];
+                                        docs[idx] = { ...docs[idx], url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f };
+                                        setEditFormData({ ...editFormData, documents: docs as any });
+                                      }}
+                                    />
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-gray-600">{d.size ? `${(d.size / 1024 / 1024).toFixed(2)} MB` : 'No file selected'}</span>
+                                      <button type="button" onClick={() => setEditFormData({ ...editFormData, documents: editFormData.documents.filter((_, i) => i !== idx) })} className="text-red-600">Remove</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Status */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={editFormData.status}
+                        onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as 'active' | 'inactive' | 'pending' })}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                      {editErrors.status && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.status}</p>)}
+                    </div>
+
+
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -1573,7 +1739,7 @@ export const Venues: React.FC = () => {
                     <Save className="h-4 w-4" />
                     <span>Save Changes</span>
                   </Button>
-                  
+
                   <Button
                     type="button"
                     variant="outline"
@@ -1603,9 +1769,9 @@ export const Venues: React.FC = () => {
                   <p className="text-sm text-gray-600">This action cannot be undone</p>
                 </div>
               </div>
-              
+
               <p className="text-gray-700 mb-6">
-                Are you sure you want to delete "<strong>{selectedVenue.name}</strong>"? 
+                Are you sure you want to delete "<strong>{selectedVenue.name}</strong>"?
                 This will permanently remove the venue and all associated data.
               </p>
 

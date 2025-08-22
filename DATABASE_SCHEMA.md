@@ -25,7 +25,7 @@ This document outlines the complete database schema for the Event Management Sys
 | `city` | `text` | ✅ | Event city |
 | `max_capacity` | `integer` | ✅ | Maximum attendees |
 | `plan_type` | `text` | ❌ | Plan type (Plan A, Plan B, Plan C, Custom) |
-| `status` | `text` | ✅ | Event status (draft, published, ongoing, completed, cancelled) |
+| `status` | `text` | ✅ | Event status (draft, upcoming, ongoing, completed, cancelled) |
 | `attendees` | `integer` | ❌ | Current attendees count |
 | `total_revenue` | `numeric` | ❌ | Total revenue generated |
 | `created_by` | `uuid` | ❌ | Foreign key to users table |
@@ -199,7 +199,7 @@ This document outlines the complete database schema for the Event Management Sys
 
 **Event Status:**
 - `draft`
-- `published`
+- `upcoming`
 - `ongoing`
 - `completed`
 - `cancelled`

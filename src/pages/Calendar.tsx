@@ -79,7 +79,7 @@ const EventTooltip: React.FC<{
           )}
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-          <Badge variant={event.status === 'published' ? 'success' : 'info'} className="text-xs">
+          <Badge variant={event.status === 'upcoming' ? 'success' : 'info'} className="text-xs">
             {event.status}
           </Badge>
           <span className="text-xs text-gray-500">{event.attendees} attendees</span>
@@ -247,7 +247,7 @@ const EventModal: React.FC<{
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="draft">Draft</option>
-                <option value="published">Published</option>
+                <option value="upcoming">Upcoming</option>
                 <option value="ongoing">Ongoing</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
@@ -302,7 +302,7 @@ export const Calendar: React.FC = () => {
 
   function getEventColor(status: string): string {
     switch (status) {
-      case 'published': return 'bg-green-500';
+      case 'upcoming': return 'bg-green-500';
       case 'ongoing': return 'bg-blue-500';
       case 'completed': return 'bg-gray-500';
       case 'cancelled': return 'bg-red-500';
@@ -493,7 +493,29 @@ export const Calendar: React.FC = () => {
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  // Calculate the start of the calendar grid (including previous month's days)
+  const calendarStart = new Date(monthStart);
+  calendarStart.setDate(calendarStart.getDate() - monthStart.getDay()); // Start from Sunday of the week containing month start
+  
+  // Calculate the end of the calendar grid (including next month's days)
+  const calendarEnd = new Date(monthEnd);
+  const daysToAdd = 6 - monthEnd.getDay(); // Fill to Saturday
+  calendarEnd.setDate(calendarEnd.getDate() + daysToAdd);
+  
+    const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+  
+  // Debug: Log calendar dates
+  console.log('Calendar Debug:', {
+    currentDate: currentDate.toISOString(),
+    monthStart: monthStart.toISOString(),
+    monthEnd: monthEnd.toISOString(),
+    calendarStart: calendarStart.toISOString(),
+    calendarEnd: calendarEnd.toISOString(),
+    calendarDaysCount: calendarDays.length,
+    firstDayOfMonth: monthStart.getDay(), // 0 = Sunday, 1 = Monday, etc.
+    lastDayOfMonth: monthEnd.getDay()
+  });
 
   const getEventsForDate = (date: Date) => {
     const eventsForDate = events.filter(event => {
@@ -599,6 +621,9 @@ export const Calendar: React.FC = () => {
             <h2 className="text-lg sm:text-xl font-semibold text-gray-900 min-w-[150px] sm:min-w-[200px] text-center">
               {format(currentDate, 'MMMM yyyy')}
             </h2>
+            <div className="text-sm text-gray-600 text-center">
+              Today: {format(new Date(), 'EEEE, MMMM d, yyyy')}
+            </div>
             <Button variant="outline" size="sm" onClick={handleNextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -661,6 +686,9 @@ export const Calendar: React.FC = () => {
                       <div className={`text-xs sm:text-sm font-medium mb-1 ${
                         isToday(date) ? 'text-blue-600' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
                       }`}>
+                        <div className="text-xs text-gray-500 mb-1">
+                          {format(date, 'EEE')}
+                        </div>
                         {format(date, 'd')}
                       </div>
                       <div className="space-y-1">
@@ -759,7 +787,7 @@ export const Calendar: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { status: 'published', color: 'bg-green-500', label: 'Published' },
+                { status: 'upcoming', color: 'bg-green-500', label: 'Upcoming' },
                 { status: 'ongoing', color: 'bg-blue-500', label: 'Ongoing' },
                 { status: 'draft', color: 'bg-yellow-500', label: 'Draft' },
                 { status: 'completed', color: 'bg-gray-500', label: 'Completed' },
@@ -784,9 +812,9 @@ export const Calendar: React.FC = () => {
                 <span className="font-semibold text-gray-900">{events.length}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Published</span>
+                <span className="text-sm text-gray-600">Upcoming</span>
                 <span className="font-semibold text-green-600">
-                  {events.filter(e => e.status === 'published').length}
+                  {events.filter(e => e.status === 'upcoming').length}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -850,7 +878,7 @@ export const Calendar: React.FC = () => {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Status</label>
                   <div className="mt-1">
-                    <Badge variant={selectedEvent.status === 'published' ? 'success' : 'info'}>
+                    <Badge variant={selectedEvent.status === 'upcoming' ? 'success' : 'info'}>
                       {selectedEvent.status}
                     </Badge>
                   </div>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Input Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        
+        .phone-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        
+        .debug {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .error {
+            color: red;
+            font-size: 14px;
+        }
+        
+        .success {
+            color: green;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Phone Input Debug Test</h1>
+    
+    <div>
+        <label>Contact Number:</label>
+        <input type="tel" id="phoneInput" class="phone-input" placeholder="+91-9876543210" maxlength="15">
+    </div>
+    
+    <div class="debug">
+        <strong>Debug Info:</strong><br>
+        <div>Input Value: <span id="inputValue">-</span></div>
+        <div>Stored Value: <span id="storedValue">-</span></div>
+        <div>Validation: <span id="validation">-</span></div>
+    </div>
+
+    <script>
+        const phoneInput = document.getElementById('phoneInput');
+        const inputValueDisplay = document.getElementById('inputValue');
+        const storedValueDisplay = document.getElementById('storedValue');
+        const validationDisplay = document.getElementById('validation');
+        
+        let storedDigits = '';
+        
+        function updateDebug() {
+            inputValueDisplay.textContent = phoneInput.value;
+            storedValueDisplay.textContent = storedDigits;
+            
+            if (storedDigits.length === 0) {
+                validationDisplay.textContent = 'Empty';
+                validationDisplay.className = '';
+            } else if (storedDigits.length < 10) {
+                validationDisplay.textContent = `Need ${10 - storedDigits.length} more digits`;
+                validationDisplay.className = 'error';
+            } else if (storedDigits.length === 10) {
+                if (/^[6-9][0-9]{9}$/.test(storedDigits)) {
+                    validationDisplay.textContent = '✓ Valid Indian mobile number';
+                    validationDisplay.className = 'success';
+                } else {
+                    validationDisplay.textContent = '✗ Invalid Indian mobile number (must start with 6-9)';
+                    validationDisplay.className = 'error';
+                }
+            }
+        }
+        
+        phoneInput.addEventListener('input', function(e) {
+            let value = e.target.value;
+            console.log('Raw input:', value);
+            
+            // If user clears completely
+            if (value === '') {
+                storedDigits = '';
+                updateDebug();
+                return;
+            }
+            
+            // Extract all digits
+            const allDigits = value.replace(/\D/g, '');
+            console.log('All digits extracted:', allDigits);
+            
+            // Take only first 10 digits
+            const limitedDigits = allDigits.substring(0, 10);
+            console.log('Limited to 10 digits:', limitedDigits);
+            
+            // Store the digits
+            storedDigits = limitedDigits;
+            
+            // Format for display
+            const formatted = limitedDigits.length > 0 ? `+91-${limitedDigits}` : '';
+            console.log('Formatted display:', formatted);
+            
+            // Update input display
+            phoneInput.value = formatted;
+            
+            updateDebug();
+        });
+        
+        phoneInput.addEventListener('focus', function() {
+            if (!phoneInput.value) {
+                phoneInput.value = '+91-';
+            }
+        });
+        
+        phoneInput.addEventListener('blur', function() {
+            if (phoneInput.value === '+91-') {
+                phoneInput.value = '';
+                storedDigits = '';
+                updateDebug();
+            }
+        });
+        
+        // Only allow numbers and control keys
+        phoneInput.addEventListener('keypress', function(e) {
+            if (!/[0-9]/.test(e.key) && ![8, 9, 27, 13, 46, 37, 38, 39, 40].includes(e.keyCode)) {
+                e.preventDefault();
+            }
+        });
+        
+        updateDebug();
+    </script>
+</body>
+</html> 
