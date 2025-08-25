@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -953,7 +953,7 @@ export const Events: React.FC = () => {
                     <CalendarIcon className="h-4 w-4 inline mr-2" />
                     Event Details
                   </button>
-                  <button
+                  {/* <button
                     onClick={() => setViewActiveTab('exhibitor')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${viewActiveTab === 'exhibitor'
                       ? 'border-blue-500 text-blue-600'
@@ -962,7 +962,7 @@ export const Events: React.FC = () => {
                   >
                     <User className="h-4 w-4 inline mr-2" />
                     Exhibitors ({selectedEvent.exhibitors?.length || 0})
-                  </button>
+                  </button> */}
                 </nav>
               </div>
             </div>
@@ -970,179 +970,184 @@ export const Events: React.FC = () => {
             {/* Tab Content */}
             {viewActiveTab === 'event' && (
               <div className="p-6 space-y-6">
-                {/* Event Images */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {selectedEvent.eventImageUrl && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Event Image</h4>
-                      <img
-                        src={selectedEvent.eventImageUrl}
-                        alt="Event"
-                        className="w-full h-48 object-cover rounded-lg border border-gray-200"
-                      />
-                    </div>
-                  )}
-                  {selectedEvent.layoutImageUrl && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Layout Image</h4>
-                      <img
-                        src={selectedEvent.layoutImageUrl}
-                        alt="Layout"
-                        className="w-full h-48 object-cover rounded-lg border border-gray-200"
-                      />
-                    </div>
-                  )}
-                </div>
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <CalendarIcon className="h-5 w-5 mr-2" />
+                    Basic Information
+                  </h3>
 
-                {/* Basic Event Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Information</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Event Title</label>
+                    <p className="text-gray-900">{selectedEvent.title}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                    <p className="text-gray-900">{selectedEvent.description || 'No description provided'}</p>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Title</label>
-                      <p className="text-gray-900">{selectedEvent.title}</p>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event Start Date</label>
+                      <div className="flex items-center">
+                        <CalendarIcon className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-gray-900">{selectedEvent.date}</span>
+                      </div>
                     </div>
+
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Status</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event End Date</label>
+                      <div className="flex items-center">
+                        <CalendarIcon className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-gray-900">{selectedEvent.eventEndDate || 'Same day'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event Start Time</label>
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-gray-900">{selectedEvent.time}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event End Time</label>
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-gray-900">{selectedEvent.eventEndTime || 'Not specified'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Venue</label>
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-gray-900">{selectedEvent.venue}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                      <p className="text-gray-900">{selectedEvent.city || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Event Configuration */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Users className="h-5 w-5 mr-2" />
+                    Event Configuration
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Maximum Capacity</label>
+                      <p className="text-gray-900">{selectedEvent.maxCapacity} people</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Event Status</label>
                       <div className="mt-1">
                         <Badge variant={getStatusVariant(selectedEvent.status)} className="text-sm">
                           {selectedEvent.status.toUpperCase()}
                         </Badge>
                       </div>
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="text-sm font-medium text-gray-700">Description</label>
-                      <p className="text-gray-900">{selectedEvent.description}</p>
-                    </div>
                   </div>
                 </div>
 
-                {/* Schedule Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Schedule</h3>
+                {/* Event Images */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Image className="h-5 w-5 mr-2" />
+                    Event Images
+                  </h3>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Event Date</label>
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-blue-500" />
-                        <span className="text-gray-900">{selectedEvent.date}</span>
+                    {selectedEvent.eventImageUrl && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Event Image</label>
+                        <img
+                          src={selectedEvent.eventImageUrl}
+                          alt="Event"
+                          className="w-full h-48 object-cover rounded-lg border border-gray-200"
+                        />
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Event End Date</label>
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-blue-500" />
-                        <span className="text-gray-900">{selectedEvent.eventEndDate || 'Same day'}</span>
+                    )}
+                    {selectedEvent.layoutImageUrl && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Layout Image</label>
+                        <img
+                          src={selectedEvent.layoutImageUrl}
+                          alt="Layout"
+                          className="w-full h-48 object-cover rounded-lg border border-gray-200"
+                        />
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Start Time</label>
-                      <p className="text-gray-900">{selectedEvent.time}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">End Time</label>
-                      <p className="text-gray-900">{selectedEvent.eventEndTime || 'Not specified'}</p>
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Venue Information */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Venue</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Venue Name</label>
-                      <div className="flex items-center">
-                        <MapPin className="h-4 w-4 mr-2 text-blue-500" />
-                        <span className="text-gray-900">{selectedEvent.venue}</span>
+                {/* Vendors Selection */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Users className="h-5 w-5 mr-2" />
+                    Selected Vendors
+                  </h3>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                    {selectedEvent.vendors && selectedEvent.vendors.length > 0 ? (
+                      selectedEvent.vendors.map((vendorId: string, index: number) => (
+                        <div key={index} className="text-sm text-gray-900 bg-blue-50 px-3 py-2 rounded border border-blue-200">
+                          <span className="font-medium">{getVendorName(vendorId)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-full text-center py-4 text-gray-500">
+                        No vendors selected
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">City</label>
-                      <p className="text-gray-900">{selectedEvent.city}</p>
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Capacity & Attendance */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Capacity</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Max Capacity</label>
-                      <p className="text-gray-900">{selectedEvent.maxCapacity} people</p>
-                    </div>
-                    {/* <div>
-                    <label className="text-sm font-medium text-gray-700">Current Attendees</label>
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 text-blue-500" />
-                      <span className="text-gray-900">{selectedEvent.attendees} attendees</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${(selectedEvent.attendees / selectedEvent.maxCapacity) * 100}%` }}
-                      ></div>
-                    </div>
-                  </div> */}
+                {/* Selected Exhibitors Display */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Selected Exhibitors
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                    {selectedEvent.exhibitors && selectedEvent.exhibitors.length > 0 ? (
+                      selectedEvent.exhibitors.map((exhibitorId: string, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 text-sm truncate">
+                              {getExhibitorName(exhibitorId)}
+                            </div>
+                          </div>
+                          {/* <Badge variant="success" className="text-xs">
+                            <Check className="h-4 w-4" />
+                          </Badge> */}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-full text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
+                        <User className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600 mb-2">No exhibitors selected</p>
+                        <p className="text-xs text-gray-500">Exhibitors can be assigned when editing the event</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Plan & Pricing */}
-                {/* <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Plan & Pricing</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Plan Type</label>
-                    <p className="text-gray-900">{selectedEvent.planType}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Price per Hour</label>
-                    <p className="text-gray-900">₹{selectedEvent.pricePerHour || 0}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Available Hours</label>
-                    <p className="text-gray-900">{selectedEvent.availableHours || 'Not specified'}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Total Revenue</label>
-                    <div className="text-xl font-bold text-green-600">
-                      ₹{selectedEvent.totalRevenue?.toLocaleString() || 0}
-                    </div>
-                  </div>
-                </div>
-              </div> */}
 
-                {/* Facilities & Amenities */}
-                {/* <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Facilities & Amenities</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Parking Spaces</label>
-                    <p className="text-gray-900">{selectedEvent.parkingSpaces || 0} spaces</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Services Allowed</label>
-                    <div className="space-y-1">
-                      <p className="text-sm">
-                        <span className={selectedEvent.cateringAllowed ? 'text-green-600' : 'text-red-600'}>
-                          {selectedEvent.cateringAllowed ? '✓' : '✗'} Catering
-                        </span>
-                      </p>
-                      <p className="text-sm">
-                        <span className={selectedEvent.alcoholAllowed ? 'text-green-600' : 'text-red-600'}>
-                          {selectedEvent.alcoholAllowed ? '✓' : '✗'} Alcohol
-                        </span>
-                      </p>
-                      <p className="text-sm">
-                        <span className={selectedEvent.smokingAllowed ? 'text-green-600' : 'text-red-600'}>
-                          {selectedEvent.smokingAllowed ? '✓' : '✗'} Smoking
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div> */}
 
                 {/* Stalls Configuration */}
                 <div>
@@ -1269,7 +1274,7 @@ export const Events: React.FC = () => {
                 </div>
 
                 {/* Vendors & Exhibitors */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {selectedEvent.vendors && selectedEvent.vendors.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-3">Vendors</h3>
@@ -1295,16 +1300,16 @@ export const Events: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </div>
+                </div> */}
               </div>
             )}
 
           </div>
 
           {/* Exhibitor Tab */}
-          {viewActiveTab === 'exhibitor' && (
+          {/* {viewActiveTab === 'exhibitor' && (
             <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-              {/* Navigation Header */}
+              {/* Navigation Header 
               <div className="flex items-center justify-between pb-4 border-b border-gray-200">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Event Exhibitors</h3>
@@ -1314,7 +1319,7 @@ export const Events: React.FC = () => {
                 </div>
               </div>
 
-              {/* Search Bar */}
+              {/* Search Bar 
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-5 w-5 text-gray-400" />
@@ -1336,7 +1341,7 @@ export const Events: React.FC = () => {
                 )}
               </div>
 
-              {/* Selection Summary */}
+              {/* Selection Summary
               <div className="p-4 bg-blue-50 rounded-lg">
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-blue-700">
@@ -1357,12 +1362,12 @@ export const Events: React.FC = () => {
                           (exhibitor.category || '').toLowerCase().includes(searchLower)
                         );
                       }).length} of {exhibitors.filter(exhibitor => selectedEvent.exhibitors?.includes(exhibitor.id)).length} assigned exhibitors
-                    </p>
+                  </p>
                   )}
                 </div>
               </div>
 
-              {/* Exhibitors Table */}
+              {/* Exhibitors Table 
               <div className="overflow-x-auto">
                 {!exhibitors || exhibitors.length === 0 ? (
                   <div className="text-center py-8">
@@ -1452,15 +1457,15 @@ export const Events: React.FC = () => {
                 )}
               </div>
             </div>
-          )}
+          )} */}
 
-          <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+          {/* <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
             <Button variant="outline" onClick={closeModals}>Close</Button>
             <Button onClick={() => { closeModals(); handleEdit(selectedEvent); }}>
               <Edit className="h-4 w-4 mr-2" />
               Edit Event
             </Button>
-          </div>
+          </div> */}
         </div>
       )}
 
