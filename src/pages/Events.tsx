@@ -1303,86 +1303,152 @@ export const Events: React.FC = () => {
 
           {/* Exhibitor Tab */}
           {viewActiveTab === 'exhibitor' && (
-            <div className="p-6 space-y-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <User className="h-5 w-5 mr-2" />
-                  Event Exhibitors
-                </h3>
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Navigation Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Event Exhibitors</h3>
+                  <p className="text-sm text-gray-600">
+                    View all exhibitors for this event. Currently {exhibitors.filter(exhibitor => selectedEvent.exhibitors?.includes(exhibitor.id)).length} exhibitor(s) assigned.
+                  </p>
+                </div>
+              </div>
 
-                {selectedEvent.exhibitors && selectedEvent.exhibitors.length > 0 ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-gray-600">
-                        {selectedEvent.exhibitors.length} exhibitor(s) assigned to this event
-                      </p>
-                    </div>
+              {/* Search Bar */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search exhibitors by company, name, email, or phone..."
+                  value={exhibitorSearchTerm}
+                  onChange={(e) => setExhibitorSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {exhibitorSearchTerm && (
+                  <button
+                    onClick={() => setExhibitorSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <X className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Company
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Contact Person
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Email
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Phone
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Category
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {exhibitors
-                            .filter(exhibitor => selectedEvent.exhibitors?.includes(exhibitor.id))
-                            .map((exhibitor) => (
-                              <tr key={exhibitor.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="font-medium text-gray-900">
-                                    {exhibitor.companyName || 'N/A'}
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="text-gray-900">
-                                    {`${exhibitor.firstName || ''} ${exhibitor.lastName || ''}`.trim() || 'N/A'}
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="text-gray-900">{exhibitor.email || 'N/A'}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="text-gray-900">{exhibitor.phone || 'N/A'}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="text-gray-900">{exhibitor.category || 'N/A'}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <Badge variant={exhibitor.status === 'confirmed' || exhibitor.status === 'checked_in' ? 'success' : 'default'}>
-                                    {exhibitor.status === 'confirmed' || exhibitor.status === 'checked_in' ? 'Confirmed' : 'Pending'}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
+              {/* Selection Summary */}
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <p className="text-sm text-blue-700">
+                    <strong>{exhibitors.filter(exhibitor => selectedEvent.exhibitors?.includes(exhibitor.id)).length}</strong> exhibitor(s) assigned to this event
+                  </p>
+                  {exhibitorSearchTerm && (
+                    <p className="text-xs text-gray-600">
+                      Showing {exhibitors.filter((exhibitor) => {
+                        if (!selectedEvent.exhibitors?.includes(exhibitor.id)) return false;
+                        if (!exhibitorSearchTerm) return true;
+                        const searchLower = exhibitorSearchTerm.toLowerCase();
+                        return (
+                          (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
+                          (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
+                          (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
+                          (exhibitor.email || '').toLowerCase().includes(searchLower) ||
+                          (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
+                          (exhibitor.category || '').toLowerCase().includes(searchLower)
+                        );
+                      }).length} of {exhibitors.filter(exhibitor => selectedEvent.exhibitors?.includes(exhibitor.id)).length} assigned exhibitors
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Exhibitors Table */}
+              <div className="overflow-x-auto">
+                {!exhibitors || exhibitors.length === 0 ? (
                   <div className="text-center py-8">
                     <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No exhibitors assigned to this event</p>
-                    <p className="text-sm text-gray-500">Exhibitors can be assigned when editing the event</p>
+                    <p className="text-gray-600">No exhibitors found</p>
+                    <p className="text-sm text-gray-500">Add exhibitors to see them here</p>
                   </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Company
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Contact Person
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Email
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Phone
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Payment Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {exhibitors
+                        .filter((exhibitor) => {
+                          if (!selectedEvent.exhibitors?.includes(exhibitor.id)) return false;
+                          if (!exhibitorSearchTerm) return true;
+                          const searchLower = exhibitorSearchTerm.toLowerCase();
+                          return (
+                            (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.email || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.category || '').toLowerCase().includes(searchLower)
+                          );
+                        })
+                        .map((exhibitor) => (
+                          <tr key={exhibitor.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="font-medium text-gray-900">
+                                {exhibitor.companyName || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-gray-900">
+                                {`${exhibitor.firstName || ''} ${exhibitor.lastName || ''}`.trim() || 'N/A'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-gray-900">{exhibitor.email || 'N/A'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-gray-900">{exhibitor.phone || 'N/A'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-gray-900">{exhibitor.category || 'N/A'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge variant={exhibitor.status === 'confirmed' || exhibitor.status === 'checked_in' ? 'success' : 'default'}>
+                                {exhibitor.status === 'confirmed' || exhibitor.status === 'checked_in' ? 'Confirmed' : 'Pending'}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-gray-900">
+                                {exhibitor.paymentStatus === 'pending' ? 'Pending' :
+                                  exhibitor.paymentStatus === 'paid' ? 'Paid' :
+                                    exhibitor.paymentStatus === 'refunded' ? 'Refunded' : 'Pending'}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </div>
@@ -2431,13 +2497,13 @@ export const Events: React.FC = () => {
               </div>
             )}
 
-            {/* <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Cancel</Button>
               <Button onClick={handleSaveEdit} className="flex items-center space-x-2">
                 <Save className="h-4 w-4" />
                 <span>Save Changes</span>
               </Button>
-            </div> */}
+            </div>
           </div>
         </div>
       )}
