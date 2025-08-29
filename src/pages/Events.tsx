@@ -158,6 +158,15 @@ export const Events: React.FC = () => {
     }
   };
 
+  const getPaymentStatusVariant = (status: string) => {
+    switch (status) {
+      case 'paid': return 'success';
+      case 'pending': return 'warning';
+      case 'refunded': return 'error';
+      default: return 'default';
+    }
+  };
+
   const handleView = (event: Event) => {
     setSelectedEvent(event);
     setShowViewModal(true);
@@ -849,10 +858,10 @@ export const Events: React.FC = () => {
               <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                 Events Overview ({filteredEvents.length})
               </h3>
-              <Button size="sm" variant="outline">
+              {/* <Button size="sm" variant="outline">
                 <Filter className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Advanced Filter</span>
-              </Button>
+              </Button> */}
             </div>
           </CardHeader>
           <CardContent>
@@ -1510,7 +1519,7 @@ export const Events: React.FC = () => {
 
             {/* Tab Content */}
             {editActiveTab === 'event' && (
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="p-6 space-y-6 overflow-y-auto"> {/* max-h-[70vh] */}
                 {/* Selection Summary */}
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -2033,7 +2042,7 @@ export const Events: React.FC = () => {
                 </div>
 
                 {/* Selected Exhibitors Display */}
-                <div className="space-y-4">
+                {/* <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <User className="h-5 w-5 mr-2" />
                     Exhibitors
@@ -2091,7 +2100,7 @@ export const Events: React.FC = () => {
                       </Button>
                     </div>
                   )}
-                </div>
+                </div> */}
 
                 {/* Exhibitors Selection */}
                 {/* <div className="space-y-4">
@@ -2268,13 +2277,13 @@ export const Events: React.FC = () => {
 
             {/* Exhibitor Tab */}
             {editActiveTab === 'exhibitor' && (
-              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="p-6 space-y-6 overflow-y-auto"> {/* max-h-[70vh] */}
                 {/* Navigation Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-gray-200">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Manage Event Exhibitors</h3>
                     <p className="text-sm text-gray-600">
-                      Select and manage exhibitors for this event. Currently {selectedExhibitorsForEdit.length} exhibitor(s) selected.
+                      Select and manage interested exhibitors for this event. Currently {selectedExhibitorsForEdit.length} exhibitor(s) selected.
                     </p>
                   </div>
                   <Button
@@ -2318,107 +2327,11 @@ export const Events: React.FC = () => {
                     </p>
                     {exhibitorSearchTerm && (
                       <p className="text-xs text-gray-600">
-                        Showing {exhibitors.filter((exhibitor) => {
-                          const searchLower = exhibitorSearchTerm.toLowerCase();
-                          return (
-                            (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.category || '').toLowerCase().includes(searchLower)
+                        {(() => {
+                          const interestedExhibitors = exhibitors.filter(exhibitor => 
+                            (exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered') === 'interested'
                           );
-                        }).length} of {exhibitors.length} exhibitors
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Exhibitors Table */}
-                <div className="overflow-x-auto">
-                  {!exhibitors || exhibitors.length === 0 ? (
-                    <div className="text-center py-8">
-                      <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">No exhibitors found</p>
-                      <p className="text-sm text-gray-500">Add exhibitors to see them here</p>
-                    </div>
-                  ) : (
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <input
-                              type="checkbox"
-                              checked={(() => {
-                                const filteredExhibitors = exhibitors.filter((exhibitor) => {
-                                  if (!exhibitorSearchTerm) return true;
-                                  const searchLower = exhibitorSearchTerm.toLowerCase();
-                                  return (
-                                    (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.category || '').toLowerCase().includes(searchLower)
-                                  );
-                                });
-                                return filteredExhibitors.length > 0 &&
-                                  filteredExhibitors.every(ex => selectedExhibitorsForEdit.includes(ex.id));
-                              })()}
-                              onChange={(e) => {
-                                const filteredExhibitors = exhibitors.filter((exhibitor) => {
-                                  if (!exhibitorSearchTerm) return true;
-                                  const searchLower = exhibitorSearchTerm.toLowerCase();
-                                  return (
-                                    (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.category || '').toLowerCase().includes(searchLower)
-                                  );
-                                });
-                                if (e.target.checked) {
-                                  setSelectedExhibitorsForEdit(prev => [
-                                    ...new Set([...prev, ...filteredExhibitors.map(ex => ex.id)])
-                                  ]);
-                                } else {
-                                  setSelectedExhibitorsForEdit(prev =>
-                                    prev.filter(id => !filteredExhibitors.find(ex => ex.id === id))
-                                  );
-                                }
-                              }}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Company
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Contact Person
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Email
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Phone
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Category
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Payment Status
-                          </th>
-
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {exhibitors
-                          .filter((exhibitor) => {
-                            if (!exhibitorSearchTerm) return true;
+                          const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
                             const searchLower = exhibitorSearchTerm.toLowerCase();
                             return (
                               (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
@@ -2428,8 +2341,107 @@ export const Events: React.FC = () => {
                               (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
                               (exhibitor.category || '').toLowerCase().includes(searchLower)
                             );
-                          })
-                          .map((exhibitor) => (
+                          });
+                          return `Showing ${filteredExhibitors.length} of ${interestedExhibitors.length} interested exhibitors`;
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                  {/* <p className="text-xs text-blue-600 mt-2">
+                    Only exhibitors with "interested" status are displayed in this list
+                  </p> */}
+                </div>
+
+                {/* Exhibitors Table */}
+                <div className="overflow-x-auto">
+                  {(() => {
+                    // Filter exhibitors to only show those with "interested" status
+                    const interestedExhibitors = exhibitors.filter(exhibitor => 
+                      (exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered') === 'interested'
+                    );
+                    
+                    // Apply search filter on top of status filter
+                    const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
+                      if (!exhibitorSearchTerm) return true;
+                      const searchLower = exhibitorSearchTerm.toLowerCase();
+                      return (
+                        (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
+                        (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
+                        (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
+                        (exhibitor.email || '').toLowerCase().includes(searchLower) ||
+                        (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
+                        (exhibitor.category || '').toLowerCase().includes(searchLower)
+                      );
+                    });
+
+                    if (interestedExhibitors.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600">No interested exhibitors found</p>
+                          <p className="text-sm text-gray-500">Only exhibitors with "interested" status are shown here</p>
+                        </div>
+                      );
+                    }
+
+                    if (filteredExhibitors.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600">No exhibitors match your search</p>
+                          <p className="text-sm text-gray-500">Try adjusting your search terms</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <input
+                                type="checkbox"
+                                checked={filteredExhibitors.length > 0 &&
+                                  filteredExhibitors.every(ex => selectedExhibitorsForEdit.includes(ex.id))}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedExhibitorsForEdit(prev => [
+                                      ...new Set([...prev, ...filteredExhibitors.map(ex => ex.id)])
+                                    ]);
+                                  } else {
+                                    setSelectedExhibitorsForEdit(prev =>
+                                      prev.filter(id => !filteredExhibitors.find(ex => ex.id === id))
+                                    );
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Company
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Contact Person
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Email
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Phone
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Category
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Payment Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredExhibitors.map((exhibitor) => (
                             <tr key={exhibitor.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <input
@@ -2459,45 +2471,29 @@ export const Events: React.FC = () => {
                                 <div className="text-gray-900">{exhibitor.category || 'N/A'}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                {/* <select
-                                  value={exhibitor.status || 'pending'}
-                                  onChange={(e) => updateExhibitorStatusEdit(exhibitor.id, e.target.value)}
-                                  className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                  <option value="pending">Pending</option>
-                                  <option value="paid">Paid</option>
-                                  <option value="registered">Registered</option>
-                                  <option value="completed">Completed</option>
-                                  <option value="cancelled">Cancelled</option>
-                                </select> */}
                                 <select
                                   value={exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered'}
                                   onChange={(e) => updateExhibitorStatusEdit(exhibitor.id, e.target.value)}
                                   className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
-                                  <option value="registered">Registered</option>
-                                  <option value="confirmed">Confirmed</option>
-                                  <option value="checked_in">Checked In</option>
-                                  <option value="cancelled">Cancelled</option>
+                                  <option value="interested">Interested</option>
+                                  <option value="approved">Approved</option>
+                                  <option value="declined">Declined</option>
                                 </select>
                               </td>
-                              {/* <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">
-                                  {exhibitor.paymentStatus || 'Pending'}
-                                </div>
-                              </td> */}
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-gray-900">
-                                  {exhibitor.paymentStatus === 'pending' ? 'Pending' :
-                                    exhibitor.paymentStatus === 'paid' ? 'Paid' :
-                                      exhibitor.paymentStatus === 'refunded' ? 'Refunded' : 'Pending'}
+                                  <Badge variant={getPaymentStatusVariant(exhibitor.paymentStatus)} className="w-20 justify-center font-xs">
+                                    {exhibitor.paymentStatus || 'PENDING'}
+                                  </Badge>
                                 </div>
                               </td>
                             </tr>
                           ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
                 </div>
               </div>
             )}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { validateEmail, validatePhone, validatePinCode, validateRequiredText, validateNumber } from '../utils/validation';
 import {
   Save,
   ArrowLeft,
@@ -269,11 +270,39 @@ export const CreateEvent: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof FormData, value: any) => {
-
     setFormData(prev => ({ ...prev, [field]: value }));
 
-    // Clear error for the specific field only
-    if (errors[field]) {
+    // Real-time validation
+    let validationResult = null;
+    
+    switch (field) {
+      case 'title':
+        validationResult = validateRequiredText(value, 'Event title', 3, 100);
+        break;
+      case 'description':
+        validationResult = validateRequiredText(value, 'Event description', 10, 1000);
+        break;
+      case 'city':
+        validationResult = validateRequiredText(value, 'City', 2, 50);
+        break;
+      case 'maxCapacity':
+        validationResult = validateNumber(value, 'Maximum capacity', 10, 10000);
+        break;
+      case 'noOfStalls':
+        validationResult = validateNumber(value, 'Number of stalls', 0, 1000);
+        break;
+      case 'pricePerHour':
+        validationResult = validateNumber(value, 'Price per hour', 0, 100000);
+        break;
+      case 'parkingSpaces':
+        validationResult = validateNumber(value, 'Parking spaces', 0, 10000);
+        break;
+    }
+
+    // Update errors based on validation result
+    if (validationResult && !validationResult.isValid) {
+      setErrors(prev => ({ ...prev, [field]: validationResult.message }));
+    } else if (errors[field]) {
       setErrors(prev => {
         const newErrors = { ...prev };
         delete newErrors[field];

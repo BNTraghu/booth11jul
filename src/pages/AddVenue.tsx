@@ -6,6 +6,18 @@ declare global {
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { 
+  validateEmail, 
+  validatePhone, 
+  validatePinCode, 
+  validateBankAccountNumber, 
+  validateBankIFSC, 
+  validateBankMICR, 
+  validateBankHolderName, 
+  validateBankName,
+  validateRequiredText,
+  validateNumber
+} from '../utils/validation';
 import {
   Save,
   ArrowLeft,
@@ -712,7 +724,10 @@ export const AddVenue: React.FC = () => {
     const accountRegex = /^[0-9]{9,18}$/;
     if (!formData.bankAccountNumber.trim()) {
       newErrors.bankAccountNumber = 'Account number is required';
-    } else if (!accountRegex.test(formData.bankAccountNumber.trim())) {
+    } else if(formData.bankName.trim().length < 20) {
+      newErrors.bankName = 'Bank name must be at least 20 characters';
+    }
+    else if (!accountRegex.test(formData.bankAccountNumber.trim())) {
       newErrors.bankAccountNumber = 'Account number must be 9-18 digits';
     }
     if (!formData.bankHolderName.trim()) {
@@ -757,8 +772,70 @@ export const AddVenue: React.FC = () => {
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
-    // Clear error when user starts typing
-    if (errors[field]) {
+    // Real-time validation
+    let validationResult = null;
+    
+    switch (field) {
+      case 'name':
+        validationResult = validateRequiredText(value, 'Venue name', 3, 100);
+        break;
+      case 'contactPerson':
+        validationResult = validateRequiredText(value, 'Contact person', 2, 100);
+        break;
+      case 'email':
+        validationResult = validateEmail(value);
+        break;
+      case 'phone':
+        validationResult = validatePhone(value);
+        break;
+      case 'addressLine1':
+        validationResult = validateRequiredText(value, 'Address line 1', 5, 200);
+        break;
+      case 'city':
+        validationResult = validateRequiredText(value, 'City', 2, 50);
+        break;
+      case 'state':
+        validationResult = validateRequiredText(value, 'State', 2, 50);
+        break;
+      case 'pincode':
+        validationResult = validatePinCode(value);
+        break;
+      case 'pricingPerDay':
+        validationResult = validateNumber(value, 'Pricing per day', 0, 1000000);
+        break;
+      case 'areaSqFt':
+        validationResult = validateNumber(value, 'Area', 1, 1000000);
+        break;
+      case 'facilityAreaSqFt':
+        validationResult = validateNumber(value, 'Facility area', 0, 1000000);
+        break;
+      case 'noOfStalls':
+        validationResult = validateNumber(value, 'Number of stalls', 0, 10000);
+        break;
+      case 'noOfFlats':
+        validationResult = validateNumber(value, 'Number of flats', 0, 10000);
+        break;
+      case 'bankName':
+        validationResult = validateBankName(value);
+        break;
+      case 'bankAccountNumber':
+        validationResult = validateBankAccountNumber(value);
+        break;
+      case 'bankHolderName':
+        validationResult = validateBankHolderName(value);
+        break;
+      case 'bankIfsc':
+        validationResult = validateBankIFSC(value);
+        break;
+      case 'bankMicr':
+        validationResult = validateBankMICR(value);
+        break;
+    }
+
+    // Update errors based on validation result
+    if (validationResult && !validationResult.isValid) {
+      setErrors(prev => ({ ...prev, [field]: validationResult.message }));
+    } else if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
 
@@ -1673,14 +1750,15 @@ export const AddVenue: React.FC = () => {
                       Phone Number *
                     </label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      {/* <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /> */}
+                      <span className="absolute left-1 h-4 w-4 translate-y-1/2 text-gray-400">+91 &nbsp;</span>
                       <input
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => handleInputChange('phone', e.target.value)}
                         className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.phone ? 'border-red-300' : 'border-gray-300'
                           }`}
-                        placeholder="+91-9876543210"
+                        placeholder="9876543210"
                       />
                     </div>
                     {errors.phone && (

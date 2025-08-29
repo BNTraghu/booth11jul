@@ -864,10 +864,10 @@ export const Venues: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900">
               Venues Overview ({filteredVenues.length})
             </h3>
-            <Button size="sm" variant="outline">
+            {/* <Button size="sm" variant="outline">
               <Filter className="h-4 w-4 mr-1" />
               <span className="hidden sm:inline">Advanced Filter</span>
-            </Button>
+            </Button> */}
           </div>
         </CardHeader>
         <CardContent>

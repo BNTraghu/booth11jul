@@ -88,7 +88,8 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         </label>
       )}
       <div className="relative">
-        <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        {/* <Phone className="absolute left-1 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" /> */}
+        <span className="absolute left-1 top-1/3 h-3 w-3 -translate-y-1/2 text-gray-400">+91-&nbsp;</span>
         <input
           type="tel"
           name={name}

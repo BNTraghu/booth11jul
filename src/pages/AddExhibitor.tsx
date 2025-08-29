@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  validateEmail, 
+  validatePhone, 
+  validatePinCode, 
+  validateRequiredText,
+  validateNumber
+} from '../utils/validation';
 import {
   Save,
   ArrowLeft,
@@ -301,8 +308,68 @@ export const AddExhibitor: React.FC = () => {
       return { ...prev, [field]: value };
     });
 
-    // Clear error when user starts typing
-    if (errors[field]) {
+    // Real-time validation
+    let validationResult = null;
+    
+    switch (field) {
+      case 'firstName':
+        validationResult = validateRequiredText(value, 'First name', 2, 50);
+        break;
+      case 'lastName':
+        validationResult = validateRequiredText(value, 'Last name', 2, 50);
+        break;
+      case 'email':
+        validationResult = validateEmail(value);
+        break;
+      case 'phone':
+        validationResult = validatePhone(value);
+        break;
+      case 'alternatePhone':
+        if (value.trim()) {
+          validationResult = validatePhone(value);
+        }
+        break;
+      case 'address1':
+        validationResult = validateRequiredText(value, 'Address', 5, 200);
+        break;
+      case 'city':
+        validationResult = validateRequiredText(value, 'City', 2, 50);
+        break;
+      case 'state':
+        validationResult = validateRequiredText(value, 'State', 2, 50);
+        break;
+      case 'pincode':
+        validationResult = validatePinCode(value);
+        break;
+      case 'companyName':
+        validationResult = validateRequiredText(value, 'Company name', 2, 100);
+        break;
+      case 'panNumber':
+        if (value.trim()) {
+          if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.trim())) {
+            validationResult = { isValid: false, message: 'PAN must be in format: ABCDE1234F' };
+          }
+        }
+        break;
+      case 'gstNumber':
+        if (value.trim()) {
+          if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[A-Z0-9]{1}$/.test(value.trim())) {
+            validationResult = { isValid: false, message: 'GST must be in format: 22AAAAA0000A1Z5' };
+          }
+        }
+        break;
+      case 'boothSize':
+        validationResult = validateRequiredText(value, 'Booth size', 2, 50);
+        break;
+      case 'businessDescription':
+        validationResult = validateRequiredText(value, 'Business description', 10, 500);
+        break;
+    }
+
+    // Update errors based on validation result
+    if (validationResult && !validationResult.isValid) {
+      setErrors(prev => ({ ...prev, [field]: validationResult.message }));
+    } else if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -888,7 +955,7 @@ export const AddExhibitor: React.FC = () => {
                       required={true}
                       error={errors.phone}
                       name="phone"
-                      placeholder="+91 9876543210"
+                      placeholder="9876543210"
                     />
                   </div>
                 </div>
@@ -901,7 +968,7 @@ export const AddExhibitor: React.FC = () => {
                     required={false}
                     error={errors.alternatePhone}
                     name="alternatePhone"
-                    placeholder="+91 9876543210"
+                    placeholder="9876543210"
                   />
                 </div>
               </CardContent>

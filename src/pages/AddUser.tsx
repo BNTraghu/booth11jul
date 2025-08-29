@@ -133,8 +133,10 @@ export const AddUser: React.FC = () => {
     // Phone validation
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (formData.phone.length !== 10) {
-      newErrors.phone = 'Phone number must be exactly 10 digits';
+    } else if (formData.phone.length > 10) {
+      newErrors.phone = 'Phone number must be less than 10 digits';
+    } else if (formData.phone.length < 10) {
+      newErrors.phone = 'Phone number must be at least 10 digits';
     } else if (!/^[0-9]{10}$/.test(formData.phone)) {
       newErrors.phone = 'Phone number must contain only digits';
     }

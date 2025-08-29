@@ -90,8 +90,8 @@ interface ExhibitorFormData {
   imageUrls?: string[];
   
   // Status
-  status: 'registered' | 'confirmed' | 'pending_approval';
-  paymentStatus: 'pending' | 'paid' | 'partial';
+  status: 'interested' | 'approved' | 'declined';
+  paymentStatus: 'pending' | 'paid' | 'refunded';
 }
 
 interface ExhibitorFilters {
@@ -242,7 +242,7 @@ export const Exhibitors: React.FC = () => {
       licence: null
     },
     images: [],
-    status: 'registered',
+    status: 'interested',
     paymentStatus: 'pending'
   });
   const [editErrors, setEditErrors] = useState<{[key: string]: string}>({});
@@ -288,10 +288,9 @@ export const Exhibitors: React.FC = () => {
 
   const getStatusVariant = (status: string) => {
     switch (status) {
-      case 'confirmed': return 'success';
-      case 'registered': return 'info';
-      case 'checked_in': return 'success';
-      case 'cancelled': return 'error';
+      case 'interested': return 'info';
+      case 'approved': return 'success';
+      case 'declined': return 'error';
       default: return 'warning';
     }
   };
@@ -307,23 +306,21 @@ export const Exhibitors: React.FC = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'confirmed': return <CheckCircle className="h-4 w-4" />;
-      case 'registered': return <Clock className="h-4 w-4" />;
-      case 'checked_in': return <CheckCircle className="h-4 w-4" />;
-      case 'cancelled': return <XCircle className="h-4 w-4" />;
+      case 'interested': return <Clock className="h-4 w-4" />;
+      case 'approved': return <CheckCircle className="h-4 w-4" />;
+      case 'declined': return <XCircle className="h-4 w-4" />;
       default: return <Clock className="h-4 w-4" />;
     }
   };
 
-  const stats = {
-    total: exhibitors.length,
-    confirmed: exhibitors.filter(e => e.status === 'confirmed').length,
-    registered: exhibitors.filter(e => e.status === 'registered').length,
-    checkedIn: exhibitors.filter(e => e.status === 'checked_in').length,
-    cancelled: exhibitors.filter(e => e.status === 'cancelled').length,
-    paidAmount: exhibitors.filter(e => e.paymentStatus === 'paid').length * 15000,
-    pendingAmount: exhibitors.filter(e => e.paymentStatus === 'pending').length * 15000
-  };
+  // const stats = {
+  //   total: exhibitors.length,
+  //   interested: exhibitors.filter(e => e.status === 'interested').length,
+  //   approved: exhibitors.filter(e => e.status === 'approved').length,
+  //   declined: exhibitors.filter(e => e.status === 'declined').length,
+  //   paidAmount: exhibitors.filter(e => e.paymentStatus === 'paid').length * 15000,
+  //   pendingAmount: exhibitors.filter(e => e.paymentStatus === 'pending').length * 15000
+  // };
 
   const categories = [...new Set(exhibitors.map(e => e.category))];
   const cities = [...new Set(exhibitors.map(e => e.city))];
@@ -432,7 +429,7 @@ export const Exhibitors: React.FC = () => {
       imageUrls: exhibitor.imageUrls || [],
       
       // Settings
-      status: exhibitor.status || 'registered',
+      status: exhibitor.status || 'interested',
       paymentStatus: exhibitor.paymentStatus || 'pending',
       sendConfirmationEmail: exhibitor.sendConfirmationEmail === true,
       allowMarketingEmails: exhibitor.allowMarketingEmails === true,
@@ -792,8 +789,8 @@ export const Exhibitors: React.FC = () => {
             <div className="flex items-center justify-center mb-2">
               <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-blue-600">{stats.registered}</div>
-            <div className="text-xs sm:text-sm text-gray-600">Registered</div>
+            <div className="text-xl sm:text-2xl font-bold text-blue-600">{stats.interested}</div>
+            <div className="text-xs sm:text-sm text-gray-600">Interested</div>
           </CardContent>
         </Card>
         <Card>
@@ -856,10 +853,9 @@ export const Exhibitors: React.FC = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">All Status</option>
-              <option value="registered">Registered</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="checked_in">Checked In</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="interested">Interested</option>
+              <option value="approved">Approved</option>
+              <option value="declined">Declined</option>
             </select>
             <select
               value={filters.paymentStatus}
@@ -1354,15 +1350,15 @@ export const Exhibitors: React.FC = () => {
                     <div>
                     <label className="text-sm font-medium text-gray-700">Registration Status</label>
                     <div className="mt-1">
-                      <Badge variant={selectedExhibitor.status === 'confirmed' ? 'success' : selectedExhibitor.status === 'pending_approval' ? 'warning' : 'default'}>
-                        {selectedExhibitor.status?.toUpperCase() || 'REGISTERED'}
+                      <Badge variant={selectedExhibitor.status === 'interested' ? 'info' : selectedExhibitor.status === 'approved' ? 'success' : 'error'}>
+                        {selectedExhibitor.status?.toUpperCase() || 'INTERESTED'}
                       </Badge>
                     </div>
                   </div>
                     <div>
                       <label className="text-sm font-medium text-gray-700">Payment Status</label>
                     <div className="mt-1">
-                      <Badge variant={selectedExhibitor.paymentStatus === 'paid' ? 'success' : selectedExhibitor.paymentStatus === 'partial' ? 'warning' : 'default'}>
+                      <Badge variant={selectedExhibitor.paymentStatus === 'paid' ? 'success' : selectedExhibitor.paymentStatus === 'pending' ? 'warning' : 'default'}>
                         {selectedExhibitor.paymentStatus?.toUpperCase() || 'PENDING'}
                         </Badge>
                       </div>
