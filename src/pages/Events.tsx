@@ -92,6 +92,10 @@ export const Events: React.FC = () => {
   const [viewActiveTab, setViewActiveTab] = useState<'event' | 'exhibitor'>('event');
   const [selectedExhibitorsForEdit, setSelectedExhibitorsForEdit] = useState<string[]>([]);
   const [exhibitorSearchTerm, setExhibitorSearchTerm] = useState('');
+  
+  // Stall removal modal state
+  const [showDeleteStallModal, setShowDeleteStallModal] = useState(false);
+  const [stallToRemove, setStallToRemove] = useState<{ index: number; stallNumber: string } | null>(null);
 
   // Vendors/Exhibitors selection
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
@@ -106,6 +110,66 @@ export const Events: React.FC = () => {
   };
 
   // Stalls management functions
+  const validateStallCountChange = (newCount: number, currentCount: number): { isValid: boolean; message: string } => {
+    const MIN_STALLS = 1;
+    const MAX_STALLS = 100; // Reasonable maximum
+    
+    // Check minimum stalls
+    if (newCount < MIN_STALLS) {
+      return { 
+        isValid: false, 
+        message: `Minimum ${MIN_STALLS} stall required. Cannot set to ${newCount}.` 
+      };
+    }
+    
+    // Check maximum stalls
+    if (newCount > MAX_STALLS) {
+      return { 
+        isValid: false, 
+        message: `Maximum ${MAX_STALLS} stalls allowed. Cannot set to ${newCount}.` 
+      };
+    }
+    
+    // Check if reducing stalls when there are configured stalls
+    if (newCount < currentCount) {
+      return { 
+        isValid: false, 
+        message: `Cannot reduce stalls from ${currentCount} to ${newCount}. You have ${currentCount} configured stalls. Please remove excess stalls first, then reduce the count.` 
+      };
+    }
+    
+    return { isValid: true, message: '' };
+  };
+
+  const handleStallCountChange = (newCount: number) => {
+    if (!editFormData) return;
+    
+    const currentConfiguredStalls = editFormData.allStalls.length;
+    const validation = validateStallCountChange(newCount, currentConfiguredStalls);
+    
+    if (!validation.isValid) {
+      showNotification(validation.message, 'error');
+      return;
+    }
+    
+    // If reducing stalls and there are excess stalls, show error and don't allow the change
+    if (newCount < currentConfiguredStalls) {
+      const excessStalls = currentConfiguredStalls - newCount;
+      showNotification(
+        `Cannot reduce stalls to ${newCount}. You have ${currentConfiguredStalls} configured stalls. ` +
+        `Please manually remove ${excessStalls} excess stall(s) first, then reduce the count.`, 
+        'error'
+      );
+      return; // Don't update the count
+    }
+    
+    // Normal case - just update the count
+    setEditFormData(prev => prev ? ({
+      ...prev,
+      noOfStalls: newCount
+    }) : null);
+  };
+
   const addStall = () => {
     if (!editFormData) return;
 
@@ -113,7 +177,7 @@ export const Events: React.FC = () => {
     const maxStalls = editFormData.noOfStalls || editFormData.allStalls.length;
 
     if (maxStalls > 0 && currentStallCount >= maxStalls) {
-      alert(`Cannot add more stalls. Maximum limit is ${maxStalls} stalls. You have already configured ${currentStallCount} stalls.`);
+      showNotification(`Cannot add more stalls. Maximum limit is ${maxStalls} stalls. You have already configured ${currentStallCount} stalls.`, 'error');
       return;
     }
 
@@ -135,7 +199,28 @@ export const Events: React.FC = () => {
 
   const removeStall = (index: number) => {
     if (!editFormData) return;
-    setEditFormData(prev => prev ? ({ ...prev, allStalls: prev.allStalls.filter((_, i) => i !== index) }) : null);
+    
+    const stallToRemove = editFormData.allStalls[index];
+    const stallNumber = stallToRemove.stallNo || `Stall ${index + 1}`;
+    
+    // Set the stall to be removed and show confirmation modal
+    setStallToRemove({ index, stallNumber });
+    setShowDeleteStallModal(true);
+  };
+
+  const confirmRemoveStall = () => {
+    if (stallToRemove && editFormData) {
+      const { index, stallNumber } = stallToRemove;
+      
+      setEditFormData(prev => prev ? ({ 
+        ...prev, 
+        allStalls: prev.allStalls.filter((_, i) => i !== index) 
+      }) : null);
+      
+      showNotification(`Removed ${stallNumber} successfully.`, 'success');
+      setShowDeleteStallModal(false);
+      setStallToRemove(null);
+    }
   };
 
   const filteredEvents = events.filter(event => {
@@ -325,6 +410,18 @@ export const Events: React.FC = () => {
       errors.maxCapacity = 'Maximum capacity must be at least 10';
     }
 
+    // Stalls validation
+    const configuredStalls = editFormData.allStalls.length;
+    const plannedStalls = editFormData.noOfStalls || configuredStalls;
+    
+    if (plannedStalls < 1) {
+      errors.noOfStalls = 'At least 1 stall is required';
+    } else if (plannedStalls > 100) {
+      errors.noOfStalls = 'Maximum 100 stalls allowed';
+    } else if (configuredStalls > plannedStalls) {
+      errors.noOfStalls = `You have ${configuredStalls} configured stalls but limit is set to ${plannedStalls}. Please manually remove ${configuredStalls - plannedStalls} excess stall(s) using the delete buttons below, then reduce the limit.`;
+    }
+
     // Image validation - Make image optional for updates
     // Only require image if both current image and new image are missing
     if (!editFormData.eventImage && !editFormData.eventImageUrl) {
@@ -483,6 +580,7 @@ export const Events: React.FC = () => {
     setShowViewModal(false);
     setShowEditModal(false);
     setShowDeleteModal(false);
+    setShowDeleteStallModal(false);
     setSelectedEvent(null);
     setEditFormData(null);
     setEditErrors({});
@@ -490,6 +588,7 @@ export const Events: React.FC = () => {
     setViewActiveTab('event');
     setSelectedExhibitorsForEdit([]);
     setExhibitorSearchTerm('');
+    setStallToRemove(null);
   };
 
   // Exhibitor selection handlers for edit modal
@@ -2133,25 +2232,125 @@ export const Events: React.FC = () => {
                     <Building2 className="h-5 w-5 mr-2" />
                     Stalls Configuration
                   </h3>
+                  
+                  {/* Mismatch Warning Banner */}
+                  {editFormData.allStalls.length > 0 && (editFormData.noOfStalls || editFormData.allStalls.length) !== editFormData.allStalls.length && (
+                    <div className="p-4 bg-red-100 border-l-4 border-red-500 rounded-r-lg">
+                      <div className="flex items-start">
+                        <AlertCircle className="h-5 w-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-red-800 mb-1">
+                            Stall Count Mismatch Detected
+                          </h4>
+                          <div className="text-sm text-red-700 mb-2">
+                            <strong>Configured:</strong> {editFormData.allStalls.length} stalls | 
+                            <strong> Planned:</strong> {editFormData.noOfStalls || editFormData.allStalls.length} stalls
+                          </div>
+                          <div className="text-sm text-red-600">
+                            {editFormData.allStalls.length > (editFormData.noOfStalls || editFormData.allStalls.length) 
+                              ? `⚠️ You have ${editFormData.allStalls.length - (editFormData.noOfStalls || editFormData.allStalls.length)} excess stall(s). Please remove them manually using the delete buttons below, then reduce the planned count.`
+                              : `⚠️ You need ${(editFormData.noOfStalls || editFormData.allStalls.length) - editFormData.allStalls.length} more stall(s). Please add them or reduce the planned count.`
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Number of Stalls</label>
                     <input
                       type="number"
                       value={editFormData.noOfStalls || editFormData.allStalls.length}
-                      onChange={(e) => setEditFormData({ ...editFormData, noOfStalls: parseInt(e.target.value) || 0 })}
-                      className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="0"
+                      onChange={(e) => handleStallCountChange(parseInt(e.target.value) || 0)}
+                      className={`w-1/2 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        editErrors.noOfStalls ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      min="1"
+                      max="100"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Configured stalls: {editFormData.allStalls.length} / {editFormData.noOfStalls || editFormData.allStalls.length}
-                    </p>
+                    {editErrors.noOfStalls && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertTriangle className="h-4 w-4 mr-1" />
+                        {editErrors.noOfStalls}
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-500">
+                        Configured stalls: {editFormData.allStalls.length} / {editFormData.noOfStalls || editFormData.allStalls.length}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Min: 1 | Max: 100
+                      </p>
+                    </div>
+                    
+                    {/* Validation warning */}
+                    {editFormData.allStalls.length > 0 && (editFormData.noOfStalls || editFormData.allStalls.length) !== editFormData.allStalls.length && (
+                      <div className="flex items-center p-3 bg-red-50 border border-red-200 rounded-lg mt-2">
+                        <AlertCircle className="h-5 w-5 text-red-600 mr-3 flex-shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-red-800 mb-1">
+                            ⚠️ Stall Count Mismatch
+                          </div>
+                          <div className="text-sm text-red-700">
+                            <strong>Configured Stalls:</strong> {editFormData.allStalls.length} | 
+                            <strong> Planned Stalls:</strong> {editFormData.noOfStalls || editFormData.allStalls.length}
+                          </div>
+                          <div className="text-xs text-red-600 mt-1">
+                            {editFormData.allStalls.length > (editFormData.noOfStalls || editFormData.allStalls.length) 
+                              ? `You have ${editFormData.allStalls.length - (editFormData.noOfStalls || editFormData.allStalls.length)} excess stall(s). Please remove them manually using the delete buttons below.`
+                              : `You need ${(editFormData.noOfStalls || editFormData.allStalls.length) - editFormData.allStalls.length} more stall(s). Add them or reduce the limit.`
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
+                    {/* Stall Status Summary */}
+                    <div className={`p-3 border rounded-lg ${
+                      editFormData.allStalls.length > 0 && (editFormData.noOfStalls || editFormData.allStalls.length) !== editFormData.allStalls.length
+                        ? 'bg-red-50 border-red-200' 
+                        : 'bg-blue-50 border-blue-200'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className={`text-sm font-semibold ${
+                            editFormData.allStalls.length > 0 && (editFormData.noOfStalls || editFormData.allStalls.length) !== editFormData.allStalls.length
+                              ? 'text-red-900'
+                              : 'text-blue-900'
+                          }`}>
+                            Stalls Status
+                          </h4>
+                          <div className={`text-xs mt-1 ${
+                            editFormData.allStalls.length > 0 && (editFormData.noOfStalls || editFormData.allStalls.length) !== editFormData.allStalls.length
+                              ? 'text-red-700'
+                              : 'text-blue-700'
+                          }`}>
+                            <span className="font-medium">{editFormData.allStalls.length}</span> configured / 
+                            <span className="font-medium"> {editFormData.noOfStalls || editFormData.allStalls.length}</span> planned
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs">
+                            {editFormData.allStalls.length === 0 ? (
+                              <span className="text-orange-600">⚠️ No stalls configured</span>
+                            ) : editFormData.allStalls.length === (editFormData.noOfStalls || editFormData.allStalls.length) ? (
+                              <span className="text-green-600">✅ All stalls configured</span>
+                            ) : editFormData.allStalls.length > (editFormData.noOfStalls || editFormData.allStalls.length) ? (
+                              <span className="text-red-600">❌ {editFormData.allStalls.length - (editFormData.noOfStalls || editFormData.allStalls.length)} excess stalls</span>
+                            ) : (
+                              <span className="text-blue-600">📝 {((editFormData.noOfStalls || editFormData.allStalls.length) - editFormData.allStalls.length)} more needed</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-semibold text-gray-800">
-                        Stalls ({editFormData.allStalls.length}/{editFormData.noOfStalls || editFormData.allStalls.length})
+                        Configure Stalls
                       </h4>
                       <Button
                         type="button"
@@ -2329,18 +2528,18 @@ export const Events: React.FC = () => {
                       <p className="text-xs text-gray-600">
                         {(() => {
                           const interestedExhibitors = exhibitors.filter(exhibitor => 
-                            (exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered') === 'interested'
+                            (exhibitorUpdates[exhibitor.id] || exhibitor.status) === 'interested'
                           );
                           const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
-                            const searchLower = exhibitorSearchTerm.toLowerCase();
-                            return (
-                              (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                              (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                              (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                              (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                              (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                              (exhibitor.category || '').toLowerCase().includes(searchLower)
-                            );
+                          const searchLower = exhibitorSearchTerm.toLowerCase();
+                          return (
+                            (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.email || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
+                            (exhibitor.category || '').toLowerCase().includes(searchLower)
+                          );
                           });
                           return `Showing ${filteredExhibitors.length} of ${interestedExhibitors.length} interested exhibitors`;
                         })()}
@@ -2357,25 +2556,25 @@ export const Events: React.FC = () => {
                   {(() => {
                     // Filter exhibitors to only show those with "interested" status
                     const interestedExhibitors = exhibitors.filter(exhibitor => 
-                      (exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered') === 'interested'
+                      (exhibitorUpdates[exhibitor.id] || exhibitor.status) === 'interested'
                     );
                     
                     // Apply search filter on top of status filter
                     const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
-                      if (!exhibitorSearchTerm) return true;
-                      const searchLower = exhibitorSearchTerm.toLowerCase();
-                      return (
-                        (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                        (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                        (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                        (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                        (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                        (exhibitor.category || '').toLowerCase().includes(searchLower)
-                      );
-                    });
+                                  if (!exhibitorSearchTerm) return true;
+                                  const searchLower = exhibitorSearchTerm.toLowerCase();
+                                  return (
+                                    (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
+                                    (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
+                                    (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
+                                    (exhibitor.email || '').toLowerCase().includes(searchLower) ||
+                                    (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
+                                    (exhibitor.category || '').toLowerCase().includes(searchLower)
+                                  );
+                                });
 
                     if (interestedExhibitors.length === 0) {
-                      return (
+                                  return (
                         <div className="text-center py-8">
                           <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                           <p className="text-gray-600">No interested exhibitors found</p>
@@ -2404,43 +2603,43 @@ export const Events: React.FC = () => {
                                 checked={filteredExhibitors.length > 0 &&
                                   filteredExhibitors.every(ex => selectedExhibitorsForEdit.includes(ex.id))}
                                 onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedExhibitorsForEdit(prev => [
-                                      ...new Set([...prev, ...filteredExhibitors.map(ex => ex.id)])
-                                    ]);
-                                  } else {
-                                    setSelectedExhibitorsForEdit(prev =>
-                                      prev.filter(id => !filteredExhibitors.find(ex => ex.id === id))
-                                    );
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Company
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Contact Person
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Email
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Phone
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Category
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Status
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Payment Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                                if (e.target.checked) {
+                                  setSelectedExhibitorsForEdit(prev => [
+                                    ...new Set([...prev, ...filteredExhibitors.map(ex => ex.id)])
+                                  ]);
+                                } else {
+                                  setSelectedExhibitorsForEdit(prev =>
+                                    prev.filter(id => !filteredExhibitors.find(ex => ex.id === id))
+                                  );
+                                }
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Company
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Contact Person
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Email
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Phone
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Category
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Payment Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
                           {filteredExhibitors.map((exhibitor) => (
                             <tr key={exhibitor.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
@@ -2472,7 +2671,7 @@ export const Events: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <select
-                                  value={exhibitorUpdates[exhibitor.id] || exhibitor.status || 'registered'}
+                                  value={exhibitorUpdates[exhibitor.id] || exhibitor.status}
                                   onChange={(e) => updateExhibitorStatusEdit(exhibitor.id, e.target.value)}
                                   className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
@@ -2490,8 +2689,8 @@ export const Events: React.FC = () => {
                               </td>
                             </tr>
                           ))}
-                        </tbody>
-                      </table>
+                      </tbody>
+                    </table>
                     );
                   })()}
                 </div>
@@ -2534,6 +2733,50 @@ export const Events: React.FC = () => {
                 <Button variant="danger" onClick={handleConfirmDelete} className="flex items-center space-x-2">
                   <Trash2 className="h-4 w-4" />
                   <span>Delete Event</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Stall Confirmation Modal */}
+      {showDeleteStallModal && stallToRemove && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Remove Stall</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to remove "<strong>{stallToRemove.stallNumber}</strong>"?
+                This will permanently remove the stall configuration.
+              </p>
+
+              <div className="flex justify-end space-x-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowDeleteStallModal(false);
+                    setStallToRemove(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="danger" 
+                  onClick={confirmRemoveStall} 
+                  className="flex items-center space-x-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Remove Stall</span>
                 </Button>
               </div>
             </div>

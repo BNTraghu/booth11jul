@@ -167,7 +167,7 @@ WHERE table_name = 'exhibitors'
 ORDER BY ordinal_position;
 ```
 
-### Test Insert (Optional):
+### Test Insert :
 ```sql
 -- Test events table
 INSERT INTO events (title, event_date, event_time, city, max_capacity, address_line1, area_sq_ft, kind_of_space)

@@ -148,19 +148,37 @@ const boothSizes = ['3x3 meters', '3x6 meters', '6x6 meters', '6x9 meters', '9x9
 // File handling functions (stores placeholder data since no storage exists)
 const handleDocumentUpload = async (file: File, fileName: string): Promise<string | null> => {
   try {
-    // Since no storage exists, create a placeholder URL
-    const timestamp = Date.now();
-    const placeholderUrl = `placeholder://documents/${fileName}_${timestamp}.${file.name.split('.').pop()}`;
-    console.log(`📄 Document ${fileName} processed as placeholder:`, placeholderUrl);
-    
-    // In a real implementation, you would upload the file to your file service here
-    // and return the actual URL
-    
-    return placeholderUrl;
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${fileName}.${fileExt}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('exhibitor-documents')
+      .upload(filePath, file, {
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Error uploading document:', error);
+      return null;
+    }
+
+    // Get signed URL since bucket is not public
+    const { data: signedUrl, error: signedError } = await supabase.storage
+      .from('exhibitor-documents')
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+    if (signedError) {
+      console.error('Error creating signed URL for document:', signedError);
+      return null;
+    }
+
+    console.log(`📄 Document uploaded successfully:`, signedUrl.signedUrl);
+    return signedUrl.signedUrl;
   } catch (error) {
-    console.error('Error processing document:', error);
+    console.error('Error uploading document:', error);
     return null;
-  }
+    }
 };
 
 const handleImageUploads = async (images: File[], exhibitorName: string): Promise<string[]> => {
@@ -168,18 +186,36 @@ const handleImageUploads = async (images: File[], exhibitorName: string): Promis
   
   for (let i = 0; i < images.length; i++) {
     const file = images[i];
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${exhibitorName.replace(/\s+/g, '_')}_image_${i + 1}.${fileExt}`;
+
     try {
-      // Since no storage exists, create a placeholder URL
-      const timestamp = Date.now();
-      const placeholderUrl = `placeholder://images/${exhibitorName}_image_${i + 1}_${timestamp}.${file.name.split('.').pop()}`;
-      console.log(`🖼️ Image ${i + 1} processed as placeholder:`, placeholderUrl);
-      
-      // In a real implementation, you would upload the file to your file service here
-      // and return the actual URL
-      
-      uploadedUrls.push(placeholderUrl);
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('exhibitor-images')
+        .upload(fileName, file, {
+          upsert: true
+        });
+
+      if (error) {
+        console.error('Error uploading image:', error);
+        continue;
+      }
+
+      // Get signed URL since bucket is not public
+      const { data: signedUrl, error: signedError } = await supabase.storage
+        .from('exhibitor-images')
+        .createSignedUrl(fileName, 3600); // 1 hour expiry
+
+      if (signedError) {
+        console.error('Error creating signed URL for image:', signedError);
+        continue;
+      }
+
+      console.log(`🖼️ Image ${i + 1} uploaded successfully:`, signedUrl.signedUrl);
+      uploadedUrls.push(signedUrl.signedUrl);
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error('Error uploading image:', error);
       continue;
     }
   }
@@ -538,10 +574,12 @@ export const Exhibitors: React.FC = () => {
         gst_number: editFormData.gstNumber,
         booth_size: editFormData.boothSize,
         business_description: editFormData.businessDescription,
-        facebook_url: editFormData.socialMediaLinks.facebook,
-        linkedin_url: editFormData.socialMediaLinks.linkedin,
-        instagram_url: editFormData.socialMediaLinks.instagram,
-        twitter_url: editFormData.socialMediaLinks.twitter,
+        social_media_links: {
+          facebook: editFormData.socialMediaLinks.facebook,
+          linkedin: editFormData.socialMediaLinks.linkedin,
+          instagram: editFormData.socialMediaLinks.instagram,
+          twitter: editFormData.socialMediaLinks.twitter
+        },
         
         // Document URLs (NEW - matching AddExhibitor)
         document_urls: documentUrls,
@@ -1306,7 +1344,7 @@ export const Exhibitors: React.FC = () => {
                       </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700">Licence (Optional)</label>
+                    <label className="text-sm font-medium text-gray-700">Licence </label>
                     <div className="mt-1">
                       {selectedExhibitor.documentUrls?.licence ? (
                         <a href={selectedExhibitor.documentUrls.licence} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
@@ -1334,6 +1372,18 @@ export const Exhibitors: React.FC = () => {
                           src={imageUrl}
                           alt={`Company image ${index + 1}`}
                           className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                          onLoad={() => {
+                            console.log('✅ Exhibitor image loaded successfully:', imageUrl);
+                          }}
+                          onError={(e) => {
+                            console.log('❌ Exhibitor image failed to load:', imageUrl);
+                            // Try converting to signed URL
+                            if (imageUrl.includes('/storage/v1/object/public/')) {
+                              const signedUrl = imageUrl.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
+                              console.log('🔄 Trying signed URL for exhibitor image:', signedUrl);
+                              e.currentTarget.src = signedUrl;
+                            }
+                          }}
                         />
                       </div>
                     ))}
@@ -1564,7 +1614,7 @@ export const Exhibitors: React.FC = () => {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Address Line 2 (Optional)
+                          Address Line 2 
                         </label>
                         <input
                           type="text"
@@ -1790,7 +1840,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            GST Number (Optional)
+                            GST Number 
                           </label>
                           <input
                             type="text"
@@ -1804,7 +1854,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Preferred Booth Size (Optional)
+                          Preferred Booth Size 
                         </label>
                           <select
                             value={editFormData.boothSize || ''}
@@ -1822,7 +1872,7 @@ export const Exhibitors: React.FC = () => {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Business Description (Optional)
+                          Business Description 
                         </label>
                         <textarea
                           value={editFormData.businessDescription || ''}
@@ -1835,7 +1885,7 @@ export const Exhibitors: React.FC = () => {
 
                       {/* Social Media Links */}
                         <div>
-                        <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links (Optional)</h4>
+                        <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2025,7 +2075,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Licence (Optional)
+                            Licence 
                           </label>
                           <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                             <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -2116,6 +2166,18 @@ export const Exhibitors: React.FC = () => {
                                     src={imageUrl}
                                     alt={`Preview ${index + 1}`}
                                     className="w-full h-full object-cover rounded-lg"
+                                    onLoad={() => {
+                                      console.log('✅ Edit modal exhibitor image loaded successfully:', imageUrl);
+                                    }}
+                                    onError={(e) => {
+                                      console.log('❌ Edit modal exhibitor image failed to load:', imageUrl);
+                                      // Try converting to signed URL
+                                      if (imageUrl.includes('/storage/v1/object/public/')) {
+                                        const signedUrl = imageUrl.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
+                                        console.log('🔄 Trying signed URL for edit modal exhibitor image:', signedUrl);
+                                        e.currentTarget.src = signedUrl;
+                                      }
+                                    }}
                                   />
                                 </div>
                               </div>

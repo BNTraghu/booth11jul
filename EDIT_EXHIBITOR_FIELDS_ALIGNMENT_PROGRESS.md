@@ -41,7 +41,7 @@ Successfully aligned Edit Exhibitor form fields and structure to match Add Exhib
 
 **NEW Fields (Address only - matching AddExhibitor):**
 - Address Line 1 *
-- Address Line 2 (Optional)
+- Address Line 2 
 - City * (dropdown from cities array)
 - State * (dropdown from states array) 
 - Pincode *
@@ -67,9 +67,9 @@ Currently: "Location & Exhibition" with mixed fields
 - Category * 
 - Sub Category
 - PAN Number *
-- GST Number (Optional)
-- Preferred Booth Size (Optional)
-- Business Description (Optional)
+- GST Number 
+- Preferred Booth Size 
+- Business Description 
 - Social Media Links (Facebook, LinkedIn, Instagram, Twitter)
 
 ### ⚠️ **Step 4: Upload Images - PENDING**

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   validateEmail, 
   validatePhone, 
   validatePinCode, 
@@ -103,7 +103,7 @@ interface FormData {
   images: File[];
 
   // Settings
-  status: 'registered' | 'confirmed' | 'pending_approval';
+  status: 'interested' | 'approved' | 'declined';
   paymentStatus: 'pending' | 'paid' | 'partial';
   sendConfirmationEmail: boolean;
   allowMarketingEmails: boolean;
@@ -205,7 +205,7 @@ export const AddExhibitor: React.FC = () => {
     images: [],
 
     // Settings
-    status: 'registered',
+    status: 'interested',
     paymentStatus: 'pending',
 
     // Add all missing fields to match FormData type
@@ -531,12 +531,17 @@ export const AddExhibitor: React.FC = () => {
         return null;
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
+      // Get signed URL since bucket is not public
+      const { data: signedUrl, error: signedError } = await supabase.storage
         .from('exhibitor-documents')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 3600); // 1 hour expiry
 
-      return urlData.publicUrl;
+      if (signedError) {
+        console.error('Error creating signed URL for document:', signedError);
+        return null;
+      }
+
+      return signedUrl.signedUrl;
     } catch (error) {
       console.error('Error uploading file:', error);
       return null;
@@ -563,12 +568,17 @@ export const AddExhibitor: React.FC = () => {
           continue;
         }
 
-        // Get public URL
-        const { data: urlData } = supabase.storage
+        // Get signed URL since bucket is not public
+        const { data: signedUrl, error: signedError } = await supabase.storage
           .from('exhibitor-images')
-          .getPublicUrl(fileName);
+          .createSignedUrl(fileName, 3600); // 1 hour expiry
 
-        uploadedUrls.push(urlData.publicUrl);
+        if (signedError) {
+          console.error('Error creating signed URL for image:', signedError);
+          continue;
+        }
+
+        uploadedUrls.push(signedUrl.signedUrl);
       } catch (error) {
         console.error('Error uploading image:', error);
         continue;
@@ -678,10 +688,12 @@ export const AddExhibitor: React.FC = () => {
         gst_number: formData.gstNumber,
         booth_size: formData.boothSize,
         business_description: formData.businessDescription,
-        facebook_url: formData.socialMediaLinks.facebook,
-        linkedin_url: formData.socialMediaLinks.linkedin,
-        instagram_url: formData.socialMediaLinks.instagram,
-        twitter_url: formData.socialMediaLinks.twitter,
+        social_media_links: {
+          facebook: formData.socialMediaLinks.facebook,
+          linkedin: formData.socialMediaLinks.linkedin,
+          instagram: formData.socialMediaLinks.instagram,
+          twitter: formData.socialMediaLinks.twitter
+        },
 
         // Address
         address1: formData.address1,
@@ -1007,7 +1019,7 @@ export const AddExhibitor: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address Line 2 (Optional)
+                    Address Line 2 
                   </label>
                   <input
                     type="text"
@@ -1230,7 +1242,7 @@ export const AddExhibitor: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      GST Number (Optional)
+                      GST Number 
                     </label>
                     <input
                       type="text"
@@ -1244,7 +1256,7 @@ export const AddExhibitor: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Preferred Booth Size (Optional)
+                    Preferred Booth Size 
                   </label>
                   <select
                     value={formData.boothSize}
@@ -1262,7 +1274,7 @@ export const AddExhibitor: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Business Description (Optional)
+                    Business Description 
                   </label>
                   <textarea
                     value={formData.businessDescription}
@@ -1275,7 +1287,7 @@ export const AddExhibitor: React.FC = () => {
 
                 {/* Social Media Links */}
                 <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links (Optional)</h4>
+                  <h4 className="text-md font-medium text-gray-900 mb-4">Social Media Links </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1419,7 +1431,7 @@ export const AddExhibitor: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Licence (Optional)
+                      Licence 
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                       <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />

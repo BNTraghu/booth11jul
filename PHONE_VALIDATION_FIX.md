@@ -24,7 +24,7 @@
 4. **Indian Mobile**: Must start with 6, 7, 8, or 9
 5. **Pattern**: `^[6-9][0-9]{9}$`
 
-### Alternate Contact Number (Optional):
+### Alternate Contact Number :
 1. **Optional**: Can be left empty
 2. **If provided**: Same validation as primary contact
 3. **Length**: Must be exactly 10 digits

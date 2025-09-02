@@ -60,7 +60,7 @@ Added complete document upload functionality matching AddExhibitor:
 ### 🎯 **Document Upload Features:**
 - **PAN Card** (Required) - File upload with preview
 - **Aadhar Card** (Required) - File upload with preview  
-- **Licence** (Optional) - File upload with preview
+- **Licence**  - File upload with preview
 - **File Types**: PDF, JPG, JPEG, PNG
 - **Size Limit**: 100KB per document
 - **Compression**: Automatic image compression guidance

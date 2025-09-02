@@ -102,15 +102,223 @@ export const Venues: React.FC = () => {
     }
   };
 
-  const handleView = (venue: Venue) => {
+  const handleView = async (venue: Venue) => {
     setSelectedVenue(venue);
+
+    // Fetch photos and documents from storage buckets for view modal
+    const [photos, documents] = await Promise.all([
+      fetchPhotosFromBucket(venue.name),
+      fetchDocumentsFromBucket(venue.name)
+    ]);
+
+    // Update the venue object with fetched photos and documents
+    const venueWithFiles = {
+      ...venue,
+      photos: photos,
+      documents: documents
+    };
+
+    setSelectedVenue(venueWithFiles);
     setShowViewModal(true);
   };
 
-  const handleEdit = (venue: Venue) => {
+  // Helper function to fetch photos from venue-photos bucket
+  const fetchPhotosFromBucket = async (venueName: string): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
+    try {
+      console.log('🔍 Fetching photos for venue:', venueName);
+      
+      // Generate multiple possible slug variations to match your Supabase folder structure
+      const possibleSlugs = [
+        venueName.toLowerCase().replace(/\s+/g, '-'),           // crystal-ball
+        venueName.toLowerCase().replace(/\s+/g, '_'),           // crystal_ball
+        venueName.toLowerCase().replace(/\s+/g, ''),            // crystalball
+        venueName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''), // crystal.ball (clean)
+        slugifyVenue(venueName)                                // crystal-ball (original function)
+      ];
+      
+      console.log('🔍 Possible slugs:', possibleSlugs);
+      
+      // First, check if we can access the bucket at all
+      const { data: bucketTest, error: bucketError } = await supabase.storage
+        .from('venue-photos')
+        .list('', { limit: 1 });
+
+      if (bucketError) {
+        console.error('❌ Cannot access venue-photos bucket:', bucketError);
+        return [];
+      }
+
+      console.log('✅ Bucket access successful');
+
+      // Try all possible slug variations to find photos
+      let photoFiles = null;
+      let foundSlug = null;
+
+      for (const trySlug of possibleSlugs) {
+        console.log(`🔍 Trying slug: ${trySlug}`);
+        
+        const { data: tryFiles, error: tryError } = await supabase.storage
+          .from('venue-photos')
+          .list(trySlug);
+        
+        if (!tryError && tryFiles && tryFiles.length > 0) {
+          console.log(`✅ Found ${tryFiles.length} photos in slug: ${trySlug}`);
+          photoFiles = tryFiles;
+          foundSlug = trySlug;
+          break;
+        } else {
+          console.log(`⚠️ No photos found in slug: ${trySlug}`);
+        }
+      }
+
+      // If no photos found with any slug, try to list all folders and find a match
+      if (!photoFiles) {
+        console.log('🔍 No photos found with any slug, checking all folders...');
+        
+        const { data: allFolders, error: folderError } = await supabase.storage
+          .from('venue-photos')
+          .list('', { limit: 100 });
+
+        if (!folderError && allFolders) {
+          console.log('📁 Available folders:', allFolders.map(f => f.name));
+          
+          // Try fuzzy matching
+          const possibleMatch = allFolders.find(f =>
+            f.name.toLowerCase().includes(venueName.toLowerCase()) ||
+            venueName.toLowerCase().includes(f.name.toLowerCase())
+          );
+
+          if (possibleMatch) {
+            console.log('🎯 Found fuzzy matching folder:', possibleMatch.name);
+            const { data: matchedFiles, error: matchedError } = await supabase.storage
+              .from('venue-photos')
+              .list(possibleMatch.name);
+
+            if (!matchedError && matchedFiles && matchedFiles.length > 0) {
+              console.log('✅ Found photos in fuzzy matched folder:', possibleMatch.name);
+              photoFiles = matchedFiles;
+              foundSlug = possibleMatch.name;
+            }
+          }
+        }
+      }
+
+      if (!photoFiles || photoFiles.length === 0) {
+        console.log('❌ No photos found for venue:', venueName);
+        return [];
+      }
+
+                    // Convert bucket files to photo objects
+       const photoPromises = photoFiles.map(async (file) => {
+         const filePath = `${foundSlug}/${file.name}`;
+
+         // Get signed URL since bucket is not public
+         const { data: signedUrl, error: signedError } = await supabase.storage
+           .from('venue-photos')
+           .createSignedUrl(filePath, 3600); // 1 hour expiry
+         
+         if (signedError) {
+           console.error('❌ Error creating signed URL:', signedError);
+           return null;
+         }
+         
+         // Clean up the filename: remove timestamp, replace underscores with spaces, remove extension
+         const cleanName = file.name
+           .replace(/^\d+_/, '') // Remove timestamp prefix
+           .replace(/\.(jpg|jpeg|png|gif|webp)$/i, '') // Remove file extension
+           .replace(/_+/g, ' ') // Replace multiple underscores with single space
+           .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+           .trim(); // Remove leading/trailing spaces
+
+         const photoObj = {
+           name: cleanName || 'Untitled Image',
+           url: signedUrl?.signedUrl || '',
+           type: `image/${file.name.split('.').pop()?.toLowerCase() || 'jpeg'}`,
+           size: file.metadata?.size || 0
+         };
+         
+         // Log the URL generation process
+         console.log(`🔗 Generated signed URL for ${file.name}:`, {
+           filePath,
+           signedUrl: signedUrl?.signedUrl,
+           finalUrl: photoObj.url
+         });
+
+         console.log(`📸 Photo: ${cleanName} -> ${photoObj.url}`);
+         return photoObj;
+       });
+
+       const photos = await Promise.all(photoPromises);
+       console.log('📸 Total photos fetched:', photos.length);
+       return photos.filter((p): p is { name: string; url: string; type: string; size: number } => p !== null && p.url !== ''); // Only return valid photos
+
+    } catch (error) {
+      console.error('❌ Error fetching photos:', error);
+      return [];
+    }
+  };
+
+  // Helper function to fetch documents from venue-documents bucket
+  const fetchDocumentsFromBucket = async (venueName: string): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
+    try {
+      const slug = slugifyVenue(venueName);
+
+      // List all files in the venue-documents bucket for this venue
+      const { data: docFiles, error: docError } = await supabase.storage
+        .from('venue-documents')
+        .list(slug);
+
+      if (docError) {
+        return [];
+      }
+
+      if (!docFiles || docFiles.length === 0) {
+        return [];
+      }
+
+      // Convert bucket files to document objects
+      const docPromises = docFiles.map(async (file) => {
+        const filePath = `${slug}/${file.name}`;
+
+        // Get signed URL since bucket is likely not public
+        const { data: signedUrl, error: signedError } = await supabase.storage
+          .from('venue-documents')
+          .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+        if (signedError) {
+          console.error('❌ Error creating signed URL for document:', signedError);
+          return null;
+        }
+
+        const docObj = {
+          name: file.name.replace(/^\d+_/, '').replace(/\.(pdf|doc|docx|txt|jpg|jpeg|png)$/i, ''),
+          url: signedUrl.signedUrl,
+          type: file.metadata?.mimetype || `application/${file.name.split('.').pop()?.toLowerCase() || 'octet-stream'}`,
+          size: file.metadata?.size || 0
+        };
+
+        return docObj;
+      });
+
+      const documents = await Promise.all(docPromises);
+      return documents.filter((d): d is { name: string; url: string; type: string; size: number } => d !== null);
+
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const handleEdit = async (venue: Venue) => {
     setSelectedVenue(venue);
+
+    // Fetch photos and documents from storage buckets
+    const [photos, documents] = await Promise.all([
+      fetchPhotosFromBucket(venue.name),
+      fetchDocumentsFromBucket(venue.name)
+    ]);
+
     // Map Venue to ExtendedVenueFormData with existing values
-    setEditFormData({
+    const editData = {
       id: venue.id,
       name: venue.name || '',
       location: venue.location || '',
@@ -143,9 +351,9 @@ export const Venues: React.FC = () => {
       latitude: venue.latitude || 0,
       longitude: venue.longitude || 0,
       formattedAddress: venue.formattedAddress || '',
-      // Files
-      photos: (venue as any).photos || [],
-      documents: (venue as any).documents || [],
+      // Files - fetched from storage buckets
+      photos: photos,
+      documents: documents,
       // Custom Contact Information
       customContacts: venue.customContacts || [],
       // Additional Settings (matching AddVenue)
@@ -160,7 +368,11 @@ export const Venues: React.FC = () => {
       bankHolderName: (venue as any).bankHolderName || (venue as any).bank_holder_name || '',
       bankIfsc: (venue as any).bankIfsc || (venue as any).bank_ifsc || '',
       bankMicr: (venue as any).bankMicr || (venue as any).bank_micr || ''
-    });
+    };
+
+
+
+    setEditFormData(editData);
     setShowEditModal(true);
   };
 
@@ -358,9 +570,15 @@ export const Venues: React.FC = () => {
     return { url: pub.publicUrl };
   }
 
+
+
+
+
+
+
   const handleSaveEdit = async () => {
     if (editFormData) {
-      console.log('Starting venue update with data:', editFormData);
+
 
       // Validate the final form
       if (!validateEditForm()) {
@@ -375,31 +593,20 @@ export const Venues: React.FC = () => {
         return;
       }
 
-      // Prepare photos/documents: upload new files (marked by _file), keep existing URLs
-      let finalPhotos: Array<{ name: string; url: string; type: string; size: number }> = [];
-      let finalDocuments: Array<{ name: string; url: string; type: string; size: number }> = [];
-
+      // Upload new files to bucket, don't store URLs in venue table
       try {
         const slug = slugifyVenue(editFormData.name);
-        // Existing photos
-        const existingPhotos = (editFormData.photos as any[] || []).filter(p => p && typeof p.url === 'string' && /^https?:\/\//.test(p.url));
-        finalPhotos.push(...existingPhotos.map(p => ({ name: p.name, url: p.url, type: p.type, size: p.size })));
 
-        // New photos
+        // Upload new photos to venue-photos bucket
         const newPhotoFiles = (editFormData.photos as any[] || []).filter(p => p && p._file instanceof File).map(p => p._file as File);
         for (const raw of newPhotoFiles) {
           const optimized = await compressImage(raw, 1600, 0.85);
-          const safeName = optimized.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const safeName = raw.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
           const path = `${slug}/${Date.now()}_${safeName}`;
-          const { url } = await uploadToBucket('venue-photos', path, optimized);
-          finalPhotos.push({ name: `${editFormData.name} - ${optimized.name}`, url, type: optimized.type, size: optimized.size });
+          await uploadToBucket('venue-photos', path, optimized);
         }
 
-        // Existing documents
-        const existingDocs = (editFormData.documents as any[] || []).filter(d => d && typeof d.url === 'string' && /^https?:\/\//.test(d.url));
-        finalDocuments.push(...existingDocs.map(d => ({ name: d.name, url: d.url, type: d.type, size: d.size })));
-
-        // New documents
+        // Upload new documents to venue-documents bucket
         const newDocEntries = (editFormData.documents as any[] || []).filter(d => d && d._file && typeof d._file !== 'string');
         for (const d of newDocEntries) {
           const file = d._file as File;
@@ -409,8 +616,7 @@ export const Venues: React.FC = () => {
           }
           const safeName = toUpload.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
           const path = `${slug}/${Date.now()}_${safeName}`;
-          const { url } = await uploadToBucket('venue-documents', path, toUpload);
-          finalDocuments.push({ name: d.name ? `${editFormData.name} - ${d.name}` : `${editFormData.name} - ${toUpload.name}`, url, type: toUpload.type, size: toUpload.size });
+          await uploadToBucket('venue-documents', path, toUpload);
         }
       } catch (uploadErr: any) {
         console.error('Upload error:', uploadErr);
@@ -458,9 +664,9 @@ export const Venues: React.FC = () => {
         longitude: editFormData.longitude,
         formatted_address: editFormData.formattedAddress,
 
-        // Files (final arrays with public URLs)
-        photos: finalPhotos,
-        documents: finalDocuments,
+        // Files are stored in bucket, not in venue table
+        photos: [],
+        documents: [],
 
         // Custom Contact Information
         custom_contacts: editFormData.customContacts,
@@ -479,8 +685,7 @@ export const Venues: React.FC = () => {
         smoking_allowed: editFormData.smokingAllowed
       };
 
-      console.log('Update data being sent:', updateData);
-      console.log('Updating venue ID:', editFormData.id);
+
 
       try {
         const { data, error } = await supabase
@@ -493,9 +698,7 @@ export const Venues: React.FC = () => {
           console.error('Supabase update error:', error);
           showNotification('Failed to update venue: ' + error.message, 'error');
         } else {
-          console.log('Update successful - returned data:', data);
-          console.log('Number of rows updated:', data?.length || 0);
-          console.log('Updated venue data:', data?.[0]);
+
 
           showNotification('Venue updated successfully!', 'success');
           setShowEditModal(false);
@@ -504,7 +707,7 @@ export const Venues: React.FC = () => {
 
           // Force a refetch with a small delay to ensure database has updated
           setTimeout(() => {
-            console.log('Refetching venue data...');
+
             refetch();
           }, 500);
         }
@@ -540,8 +743,8 @@ export const Venues: React.FC = () => {
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const notification = document.createElement('div');
     notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
-        type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-500 text-white'
+      type === 'error' ? 'bg-red-500 text-white' :
+        'bg-blue-500 text-white'
       }`;
 
     notification.innerHTML = `
@@ -736,8 +939,8 @@ export const Venues: React.FC = () => {
             key={status}
             onClick={() => setFilter(status)}
             className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-medium capitalize transition-colors duration-200 ${filter === status
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
           >
             {status === 'pending' ? 'Pending' : status === 'active' ? 'Active' : 'Inactive'}
@@ -953,16 +1156,305 @@ export const Venues: React.FC = () => {
 
             <div className="p-6 space-y-6">
               {/* Photos Gallery */}
-              {selectedVenue.photos && selectedVenue.photos.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3 flex items-center"><ImageIcon className="h-4 w-4 mr-2" />Photos</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {selectedVenue.photos.map((p: any, idx: number) => (
-                      <a key={idx} href={p.url} target="_blank" rel="noopener noreferrer" className="block border rounded">
-                        <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
-                      </a>
+              <div className="mb-4">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <ImageIcon className="h-4 w-4 mr-2" />
+                  Photos ({selectedVenue.photos?.length || 0})
+                </h4>
+
+                                  {/* Debug section */}
+                  <div className="space-y-2">
+                                         {/* Debug button to check bucket contents */}
+                     <button
+                       onClick={async () => {
+                         console.log('🔍 Checking bucket contents for venue:', selectedVenue.name);
+                         
+                         // List all folders with metadata
+                         const { data: allFolders, error: folderError } = await supabase.storage
+                           .from('venue-photos')
+                           .list('', { limit: 100 });
+                         
+                         if (folderError) {
+                           console.error('❌ Error listing folders:', folderError);
+                           return;
+                         }
+                         
+                         console.log('📁 All folders in bucket:', allFolders);
+                         console.log('📁 Folder details:', allFolders?.map(f => ({
+                           name: f.name,
+                           size: f.metadata?.size,
+                           updated_at: f.updated_at,
+                           created_at: f.created_at
+                         })));
+                         
+                         // Try different slug variations
+                         const possibleSlugs = [
+                           selectedVenue.name.toLowerCase().replace(/\s+/g, '-'),
+                           selectedVenue.name.toLowerCase().replace(/\s+/g, '_'),
+                           selectedVenue.name.toLowerCase().replace(/\s+/g, ''),
+                           selectedVenue.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''),
+                           slugifyVenue(selectedVenue.name)
+                         ];
+                         
+                         console.log('🔗 Possible slugs:', possibleSlugs);
+                         
+                         // Test each slug
+                         for (const slug of possibleSlugs) {
+                           console.log(`🔍 Testing slug: ${slug}`);
+                           const { data: photos, error: photoError } = await supabase.storage
+                             .from('venue-photos')
+                             .list(slug);
+                           
+                           if (photoError) {
+                             console.log(`❌ Error with slug ${slug}:`, photoError);
+                           } else if (photos && photos.length > 0) {
+                             console.log(`✅ Found ${photos.length} photos in slug ${slug}:`, photos);
+                           } else {
+                             console.log(`⚠️ No photos found in slug ${slug}`);
+                           }
+                         }
+                         
+                         // Test bucket permissions
+                         console.log('🔒 Testing bucket permissions...');
+                         try {
+                           const testFile = allFolders?.[0];
+                           if (testFile) {
+                             const { data: testUrl } = supabase.storage
+                               .from('venue-photos')
+                               .getPublicUrl(testFile.name);
+                             console.log('🔗 Test public URL:', testUrl.publicUrl);
+                             
+                             // Try to fetch the test URL
+                             const response = await fetch(testUrl.publicUrl, { method: 'HEAD' });
+                             console.log('📡 Test URL response:', response.status, response.statusText);
+                           }
+                         } catch (error) {
+                           console.log('❌ Bucket permission test error:', error);
+                         }
+                       }}
+                       className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                     >
+                       Debug: Check Bucket
+                     </button>
+                    
+                    {/* Manual folder test */}
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Enter folder name to test"
+                        className="text-xs px-2 py-1 border rounded"
+                        onKeyPress={async (e) => {
+                          if (e.key === 'Enter') {
+                            const folderName = e.currentTarget.value.trim();
+                            if (folderName) {
+                              console.log(`🔍 Manually testing folder: ${folderName}`);
+                              const { data: photos, error: photoError } = await supabase.storage
+                                .from('venue-photos')
+                                .list(folderName);
+                              
+                              if (photoError) {
+                                console.log(`❌ Error with folder ${folderName}:`, photoError);
+                              } else if (photos && photos.length > 0) {
+                                console.log(`✅ Found ${photos.length} photos in folder ${folderName}:`, photos);
+                              } else {
+                                console.log(`⚠️ No photos found in folder ${folderName}`);
+                              }
+                            }
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-gray-500">Press Enter to test</span>
+                    </div>
+                    
+                    {/* Test Image URLs button */}
+                    <button
+                      onClick={async () => {
+                        if (selectedVenue.photos && selectedVenue.photos.length > 0) {
+                          console.log('🧪 Testing all image URLs...');
+                          for (const photo of selectedVenue.photos) {
+                            try {
+                              const response = await fetch(photo.url, { method: 'HEAD' });
+                              console.log(`🔗 ${photo.name}: ${response.status} ${response.statusText}`);
+                              if (response.ok) {
+                                console.log(`✅ ${photo.name} is accessible`);
+                              } else {
+                                console.log(`❌ ${photo.name} failed: ${response.status}`);
+                              }
+                            } catch (error) {
+                              console.log(`❌ ${photo.name} error:`, error);
+                            }
+                          }
+                        } else {
+                          console.log('⚠️ No photos to test');
+                        }
+                      }}
+                      className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
+                    >
+                      Test Image URLs
+                    </button>
+                    
+                    {/* Simple URL test */}
+                    <button
+                      onClick={() => {
+                        if (selectedVenue.photos && selectedVenue.photos.length > 0) {
+                          const firstPhoto = selectedVenue.photos[0];
+                          console.log('🔗 Testing URL:', firstPhoto.url);
+                          console.log('📸 Photo object:', firstPhoto);
+                          
+                          // Try to open in new tab
+                          window.open(firstPhoto.url, '_blank');
+                        }
+                      }}
+                      className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
+                    >
+                      Open First Image
+                    </button>
+                    
+                                         {/* Direct URL test */}
+                     <button
+                       onClick={async () => {
+                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
+                           const firstPhoto = selectedVenue.photos[0];
+                           console.log('🧪 Testing direct URL access...');
+                           console.log('🔗 Photo URL:', firstPhoto.url);
+                           
+                           // Try to open the URL in a new tab
+                           window.open(firstPhoto.url, '_blank');
+                           
+                           // Also test with fetch
+                           try {
+                             const response = await fetch(firstPhoto.url);
+                             console.log('📡 Fetch response:', response.status, response.statusText);
+                             if (response.ok) {
+                               console.log('✅ URL is accessible via fetch');
+                             }
+                           } catch (error) {
+                             console.log('❌ Fetch error:', error);
+                           }
+                         }
+                       }}
+                       className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200"
+                     >
+                       Test Direct URL
+                     </button>
+                     
+                     {/* Test signed URL */}
+                     <button
+                       onClick={async () => {
+                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
+                           const firstPhoto = selectedVenue.photos[0];
+                           console.log('🧪 Testing signed URL...');
+                           
+                           // Try to get a signed URL
+                           try {
+                             const { data: signedUrl, error } = await supabase.storage
+                               .from('venue-photos')
+                               .createSignedUrl(firstPhoto.url.split('/venue-photos/')[1], 3600);
+                             
+                             if (error) {
+                               console.log('❌ Signed URL error:', error);
+                             } else {
+                               console.log('✅ Signed URL:', signedUrl.signedUrl);
+                               window.open(signedUrl.signedUrl, '_blank');
+                             }
+                           } catch (error) {
+                             console.log('❌ Signed URL creation error:', error);
+                           }
+                         }
+                       }}
+                       className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
+                     >
+                       Test Signed URL
+                     </button>
+                     
+                     {/* Test direct image access */}
+                     <button
+                       onClick={async () => {
+                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
+                           const firstPhoto = selectedVenue.photos[0];
+                           console.log('🧪 Testing direct image access...');
+                           
+                           // Create a test img element
+                           const testImg = document.createElement('img');
+                           testImg.onload = () => {
+                             console.log('✅ Test image loaded successfully!');
+                             document.body.appendChild(testImg);
+                           };
+                           testImg.onerror = () => {
+                             console.log('❌ Test image failed to load');
+                           };
+                           testImg.src = firstPhoto.url;
+                         }
+                       }}
+                       className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded hover:bg-pink-200"
+                     >
+                       Test Image Element
+                     </button>
+                  </div>
+                </div>
+
+              {/* Debug: Show photo data */}
+              {selectedVenue.photos && (
+                <div className="mb-4 p-3 bg-blue-50 rounded border">
+                  <div className="text-xs text-blue-700">
+                    <strong>Debug Info:</strong> Found {selectedVenue.photos.length} photos
+                    {selectedVenue.photos.map((p, idx) => (
+                      <div key={idx} className="mt-1">
+                        • {p.name}: {p.url.substring(0, 80)}...
+                      </div>
                     ))}
                   </div>
+                </div>
+              )}
+              
+                             {selectedVenue.photos && selectedVenue.photos.length > 0 ? (
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                   {selectedVenue.photos.map((p: any, idx: number) => (
+                     <div key={idx} className="group relative bg-gray-50 rounded-lg overflow-hidden">
+                       <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+                         <img
+                           src={p.url}
+                           alt={p.name}
+                           className="w-full h-40 object-cover hover:scale-105 transition-transform duration-200"
+                           onLoad={() => {
+                             console.log('✅ Image loaded successfully:', p.url);
+                           }}
+                           onError={(e) => {
+                             console.log('❌ Image failed to load:', p.url);
+                             console.log('❌ Image error details:', e);
+                             console.log('❌ Photo object:', p);
+                             // Try alternative URL construction
+                             const altUrl = p.url.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
+                             console.log('🔄 Trying alternative URL:', altUrl);
+                             e.currentTarget.src = altUrl;
+                           }}
+                         />
+                       </a>
+
+                      {/* Image info overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
+                          <div className="font-medium text-sm truncate mb-1">{p.name}</div>
+                          <div className="text-xs text-gray-200 flex items-center justify-between">
+                            <span>{p.type.split('/')[1]?.toUpperCase() || 'IMAGE'}</span>
+                            <span>{p.size > 0 ? `${(p.size / 1024 / 1024).toFixed(2)} MB` : 'Size unknown'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Click indicator */}
+                      <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        Click to view
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-2">No photos found</p>
+                  <p className="text-sm text-gray-500">Images will appear here once uploaded to the venue-photos bucket</p>
+                  <p className="text-xs text-gray-400 mt-2">Check console for debugging info</p>
                 </div>
               )}
 
@@ -1062,7 +1554,7 @@ export const Venues: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Close</Button>
-              <Button onClick={() => { closeModals(); handleEdit(selectedVenue); }}>
+              <Button className="flex items-center space-x-2" onClick={() => { closeModals(); handleEdit(selectedVenue); }}>
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Venue
               </Button>
@@ -1088,6 +1580,9 @@ export const Venues: React.FC = () => {
             </div>
 
             <div className="p-6">
+
+
+
               <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-6">
                 <div className="grid grid-cols-1 gap-6">
                   {/* Main Form */}
@@ -1609,6 +2104,9 @@ export const Venues: React.FC = () => {
                         {/* Photos uploader */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Venue Photos</label>
+
+
+
                           <div
                             className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
                             onDragOver={(e) => e.preventDefault()}
@@ -1643,21 +2141,68 @@ export const Venues: React.FC = () => {
                               }} />
                             </label>
                           </div>
-                          {editFormData.photos && editFormData.photos.length > 0 && (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+
+
+
+                          {editFormData.photos && editFormData.photos.length > 0 ? (
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3">
+                              {/* {console.log('🔍 Photos in editFormData:', editFormData.photos)} */}
                               {editFormData.photos.map((p: any, idx: number) => (
-                                <div key={idx} className="border rounded p-2 text-xs relative">
-                                  <a href={p.url} target="_blank" rel="noopener noreferrer">
-                                    <img src={p.url} alt={p.name} className="w-full h-24 object-cover rounded" />
-                                  </a>
-                                  <div className="truncate mt-1">{p.name}</div>
-                                  <div className="text-gray-500">{(p.size / 1024 / 1024).toFixed(2)} MB</div>
-                                  <div className="absolute top-1 right-1 flex items-center space-x-1">
-                                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="bg-white/80 rounded px-1 text-xs hover:underline">View</a>
-                                    <button type="button" onClick={() => setEditFormData({ ...editFormData, photos: editFormData.photos.filter((_, i) => i !== idx) })} className="bg-white/80 rounded px-1 text-xs">✕</button>
+                                <div key={idx} className="relative group bg-gray-50 rounded-lg overflow-hidden">
+                                  <img
+                                    src={p.url}
+                                    alt={p.name}
+                                    className="w-full h-36 object-cover hover:scale-105 transition-transform duration-200"
+                                    onLoad={() => {
+                                      console.log('✅ Edit modal image loaded successfully:', p.url);
+                                    }}
+                                    onError={(e) => {
+                                      console.log('❌ Edit modal image failed to load:', p.url);
+                                      console.log('❌ Photo object:', p);
+                                      // Try alternative URL construction
+                                      const altUrl = p.url.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
+                                      console.log('🔄 Trying alternative URL in edit modal:', altUrl);
+                                      e.currentTarget.src = altUrl;
+                                    }}
+                                  />
+
+                                  {/* Remove button */}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const photoToRemove = editFormData.photos[idx];
+
+
+                                      // Remove from local state
+                                      setEditFormData({
+                                        ...editFormData,
+                                        photos: editFormData.photos.filter((_, i) => i !== idx)
+                                      });
+
+
+                                    }}
+                                    className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+
+                                  {/* Image info overlay */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    <div className="absolute bottom-0 left-0 right-0 p-2 text-white">
+                                      <div className="text-xs font-medium truncate mb-1">{p.name}</div>
+                                      <div className="text-xs text-gray-200">
+                                        {p.type.split('/')[1]?.toUpperCase() || 'IMAGE'} • {p.size > 0 ? `${(p.size / 1024 / 1024).toFixed(2)} MB` : 'Size unknown'}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               ))}
+                            </div>
+                          ) : (
+                            <div className="mt-3 p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                              <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                              <p className="text-sm text-gray-600">No photos uploaded yet</p>
+                              <p className="text-xs text-gray-500">Upload photos to showcase your venue</p>
                             </div>
                           )}
                         </div>
@@ -1670,7 +2215,7 @@ export const Venues: React.FC = () => {
                               <Plus className="h-4 w-4" />
                               <span>Add Document</span>
                             </Button>
-                            {editFormData.documents && editFormData.documents.length > 0 && (
+                            {editFormData.documents && editFormData.documents.length > 0 ? (
                               <div className="space-y-2 text-sm">
                                 {editFormData.documents.map((d: any, idx: number) => (
                                   <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center border rounded p-2">
@@ -1700,10 +2245,34 @@ export const Venues: React.FC = () => {
                                     />
                                     <div className="flex items-center justify-between">
                                       <span className="text-gray-600">{d.size ? `${(d.size / 1024 / 1024).toFixed(2)} MB` : 'No file selected'}</span>
-                                      <button type="button" onClick={() => setEditFormData({ ...editFormData, documents: editFormData.documents.filter((_, i) => i !== idx) })} className="text-red-600">Remove</button>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const docToRemove = editFormData.documents[idx];
+
+
+                                          // Remove from local state
+                                          setEditFormData({
+                                            ...editFormData,
+                                            documents: editFormData.documents.filter((_, i) => i !== idx)
+                                          });
+
+                                          // TODO: Optionally delete from storage bucket if needed
+
+                                        }}
+                                        className="text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded"
+                                      >
+                                        Remove
+                                      </button>
                                     </div>
                                   </div>
                                 ))}
+                              </div>
+                            ) : (
+                              <div className="mt-3 p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+                                <FileText className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-600">No documents uploaded yet</p>
+                                <p className="text-xs text-gray-500">Upload documents like permits, licenses, etc.</p>
                               </div>
                             )}
                           </div>

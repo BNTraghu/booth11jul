@@ -191,7 +191,7 @@ WHERE table_name = 'exhibitors'
 ORDER BY ordinal_position;
 
 -- =====================================================
--- SAMPLE DATA INSERTION (Optional)
+-- SAMPLE DATA INSERTION 
 -- =====================================================
 
 -- Insert sample venue for testing
