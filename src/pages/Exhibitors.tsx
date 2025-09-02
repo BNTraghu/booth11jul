@@ -511,6 +511,13 @@ export const Exhibitors: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (editFormData) {
+      // Validate all steps before saving
+      const allStepsValid = [1, 2, 3, 4, 5, 6].every(step => validateEditStep(step));
+      
+      if (!allStepsValid) {
+        showNotification('Please fill in all required fields before saving.', 'error');
+        return;
+      }
       console.log('Starting exhibitor update with data:', editFormData);
       
       try {
@@ -770,8 +777,196 @@ export const Exhibitors: React.FC = () => {
     }
   };
 
+  const validateEditStep = (step: number): boolean => {
+    if (!editFormData) {
+      console.log('❌ editFormData is null');
+      return false;
+    }
+    
+    const errors: { [key: string]: string } = {};
+    console.log(`🔍 Validating step ${step} with data:`, editFormData);
+
+    switch (step) {
+      case 1: // Personal Information
+        if (!editFormData.firstName?.trim()) {
+          errors.firstName = 'First name is required';
+        }
+        if (!editFormData.lastName?.trim()) {
+          errors.lastName = 'Last name is required';
+        }
+        if (!editFormData.email?.trim()) {
+          errors.email = 'Email is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)) {
+          errors.email = 'Please enter a valid email address';
+        }
+        if (!editFormData.phone?.trim()) {
+          errors.phone = 'Phone number is required';
+        }
+        break;
+
+      case 2: // Address Information
+        if (!editFormData.address1?.trim()) {
+          errors.address1 = 'Address line 1 is required';
+        }
+        if (!editFormData.city?.trim()) {
+          errors.city = 'City is required';
+        }
+        if (!editFormData.state?.trim()) {
+          errors.state = 'State is required';
+        }
+        if (!editFormData.pincode?.trim()) {
+          errors.pincode = 'Pincode is required';
+        }
+        if (!editFormData.country?.trim()) {
+          errors.country = 'Country is required';
+        }
+        break;
+
+      case 3: // Business Information
+        if (!editFormData.companyName?.trim()) {
+          errors.companyName = 'Company name is required';
+        }
+        if (!editFormData.category?.trim()) {
+          errors.category = 'Category is required';
+        }
+        if (!editFormData.subCategory?.trim()) {
+          errors.subCategory = 'Sub-category is required';
+        }
+        if (!editFormData.boothSize?.trim()) {
+          errors.boothSize = 'Booth size is required';
+        }
+        
+        // PAN Number validation (if provided)
+        if (editFormData.panNumber?.trim()) {
+          const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+          if (!panRegex.test(editFormData.panNumber.trim())) {
+            errors.panNumber = 'PAN number must be in format: ABCDE1234F';
+          }
+        }
+        
+        // GST Number validation (if provided)
+        if (editFormData.gstNumber?.trim()) {
+          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+          if (!gstRegex.test(editFormData.gstNumber.trim())) {
+            errors.gstNumber = 'GST number must be in format: 22AAAAA0000A1Z5';
+          }
+        }
+        break;
+
+      case 4: // Documents
+        // Documents are optional for updates, so no validation needed
+        break;
+
+      case 5: // Images
+        // Images are optional for updates, so no validation needed
+        break;
+
+      case 6: // Review
+        // All previous validations should be passed
+        break;
+    }
+
+    console.log(`📊 Step ${step} validation results:`, errors);
+    setEditErrors(errors);
+    const isValid = Object.keys(errors).length === 0;
+    console.log(`✅ Step ${step} is valid:`, isValid);
+    return isValid;
+  };
+
+  const clearFieldError = (fieldName: string) => {
+    setEditErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[fieldName];
+      return newErrors;
+    });
+  };
+
+  const validateField = (fieldName: string, value: string, validationType?: string) => {
+    let isValid = true;
+    let errorMessage = '';
+
+    // Handle empty or null values
+    const trimmedValue = value?.trim() || '';
+
+    switch (fieldName) {
+      case 'firstName':
+      case 'lastName':
+      case 'address1':
+      case 'city':
+      case 'state':
+      case 'pincode':
+      case 'country':
+      case 'companyName':
+      case 'category':
+      case 'subCategory':
+      case 'boothSize':
+        if (!trimmedValue) {
+          isValid = false;
+          errorMessage = `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required`;
+        }
+        break;
+
+      case 'email':
+        if (!trimmedValue) {
+          isValid = false;
+          errorMessage = 'Email is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedValue)) {
+          isValid = false;
+          errorMessage = 'Please enter a valid email address';
+        }
+        break;
+
+      case 'phone':
+        if (!trimmedValue) {
+          isValid = false;
+          errorMessage = 'Phone number is required';
+        }
+        break;
+
+      case 'panNumber':
+        if (trimmedValue) {
+          const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+          if (!panRegex.test(trimmedValue)) {
+            isValid = false;
+            errorMessage = 'PAN number must be in format: ABCDE1234F';
+          }
+        }
+        break;
+
+      case 'gstNumber':
+        if (trimmedValue) {
+          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+          if (!gstRegex.test(trimmedValue)) {
+            isValid = false;
+            errorMessage = 'GST number must be in format: 22AAAAA0000A1Z5';
+          }
+        }
+        break;
+    }
+
+    if (isValid) {
+      clearFieldError(fieldName);
+    } else {
+      setEditErrors(prev => ({ ...prev, [fieldName]: errorMessage }));
+    }
+
+    return isValid;
+  };
+
   const nextEditStep = () => {
-    setEditStep((prev: any) => Math.min(prev + 1, 6));
+    console.log('🔍 Validating step:', editStep);
+    console.log('📝 Current form data:', editFormData);
+    
+    if (validateEditStep(editStep)) {
+      console.log('✅ Step validation passed');
+      setEditStep((prev: any) => Math.min(prev + 1, 6));
+      setEditErrors({}); // Clear errors when moving to next step
+    } else {
+      console.log('❌ Step validation failed');
+      console.log('🚨 Current errors:', editErrors);
+      // Show error notification
+      showNotification('Please fill in all required fields before proceeding to the next step.', 'error');
+    }
   };
 
   const prevEditStep = () => {
@@ -1490,7 +1685,10 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.firstName || ''}
-                            onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, firstName: e.target.value});
+                              validateField('firstName', e.target.value);
+                            }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.firstName ? 'border-red-300' : 'border-gray-300'
                             }`}
@@ -1511,7 +1709,10 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.lastName || ''}
-                            onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, lastName: e.target.value});
+                              validateField('lastName', e.target.value);
+                            }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.lastName ? 'border-red-300' : 'border-gray-300'
                             }`}
@@ -1536,7 +1737,10 @@ export const Exhibitors: React.FC = () => {
                             <input
                               type="email"
                               value={editFormData.email || ''}
-                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                              onChange={(e) => {
+                                setEditFormData({...editFormData, email: e.target.value});
+                                validateField('email', e.target.value);
+                              }}
                               className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                 editErrors.email ? 'border-red-300' : 'border-gray-300'
                               }`}
@@ -1555,7 +1759,10 @@ export const Exhibitors: React.FC = () => {
                           <PhoneInput
                             label="Contact Number"
                             value={editFormData.phone || ''}
-                            onChange={(value) => setEditFormData({...editFormData, phone: value})}
+                            onChange={(value) => {
+                              setEditFormData({...editFormData, phone: value});
+                              validateField('phone', value);
+                            }}
                             required={true}
                             error={editErrors.phone}
                             name="phone"
@@ -1598,7 +1805,10 @@ export const Exhibitors: React.FC = () => {
                         <input
                           type="text"
                           value={editFormData.address1 || ''}
-                          onChange={(e) => setEditFormData({...editFormData, address1: e.target.value})}
+                          onChange={(e) => {
+                            setEditFormData({...editFormData, address1: e.target.value});
+                            validateField('address1', e.target.value);
+                          }}
                           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                             editErrors.address1 ? 'border-red-300' : 'border-gray-300'
                           }`}
@@ -1635,6 +1845,7 @@ export const Exhibitors: React.FC = () => {
                             value={editFormData.state || ''}
                             onChange={(e) => {
                               setEditFormData({...editFormData, state: e.target.value, city: ''}); // Clear city when state changes
+                              validateField('state', e.target.value);
                             }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.state ? 'border-red-300' : 'border-gray-300'
@@ -1660,7 +1871,10 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <select
                             value={editFormData.city || ''}
-                            onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, city: e.target.value});
+                              validateField('city', e.target.value);
+                            }}
                             disabled={!editFormData.state}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${
                               editErrors.city ? 'border-red-300' : 'border-gray-300'
@@ -1688,7 +1902,10 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.pincode || ''}
-                            onChange={(e) => setEditFormData({...editFormData, pincode: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, pincode: e.target.value});
+                              validateField('pincode', e.target.value);
+                            }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.pincode ? 'border-red-300' : 'border-gray-300'
                             }`}
@@ -1708,11 +1925,22 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <select
                             value={editFormData.country || 'India'}
-                            onChange={(e) => setEditFormData({...editFormData, country: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, country: e.target.value});
+                              validateField('country', e.target.value);
+                            }}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.country ? 'border-red-300' : 'border-gray-300'
+                            }`}
                           >
                             <option value="India">India</option>
                           </select>
+                          {editErrors.country && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.country}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -1739,7 +1967,10 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.companyName || ''}
-                            onChange={(e) => setEditFormData({...editFormData, companyName: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, companyName: e.target.value});
+                              validateField('companyName', e.target.value);
+                            }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.companyName ? 'border-red-300' : 'border-gray-300'
                             }`}
@@ -1776,6 +2007,7 @@ export const Exhibitors: React.FC = () => {
                             value={editFormData.category || ''}
                             onChange={(e) => {
                               setEditFormData({...editFormData, category: e.target.value, subCategory: ''});
+                              validateField('category', e.target.value);
                             }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.category ? 'border-red-300' : 'border-gray-300'
@@ -1802,9 +2034,14 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <select
                             value={editFormData.subCategory || ''}
-                            onChange={(e) => setEditFormData({...editFormData, subCategory: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, subCategory: e.target.value});
+                              validateField('subCategory', e.target.value);
+                            }}
                             disabled={!editFormData.category}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${
+                              editErrors.subCategory ? 'border-red-300' : 'border-gray-300'
+                            }`}
                           >
                             <option value="">Select sub-category</option>
                             {editFormData.category && subCategories[editFormData.category as keyof typeof subCategories]?.map((subCat) => (
@@ -1813,6 +2050,12 @@ export const Exhibitors: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                          {editErrors.subCategory && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.subCategory}
+                            </p>
+                          )}
                         </div>
                         </div>
 
@@ -1824,11 +2067,14 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.panNumber || ''}
-                            onChange={(e) => setEditFormData({...editFormData, panNumber: e.target.value})}
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, panNumber: e.target.value});
+                              validateField('panNumber', e.target.value);
+                            }}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                               editErrors.panNumber ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            placeholder="AAAAA0000A"
+                            placeholder="ABCDE1234F"
                           />
                           {editErrors.panNumber && (
                             <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -1845,10 +2091,21 @@ export const Exhibitors: React.FC = () => {
                           <input
                             type="text"
                             value={editFormData.gstNumber || ''}
-                            onChange={(e) => setEditFormData({...editFormData, gstNumber: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="27AAAAA0000A1Z5"
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, gstNumber: e.target.value});
+                              validateField('gstNumber', e.target.value);
+                            }}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.gstNumber ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            placeholder="22AAAAA0000A1Z5"
                           />
+                          {editErrors.gstNumber && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.gstNumber}
+                            </p>
+                          )}
                         </div>
                         </div>
 
@@ -1858,8 +2115,13 @@ export const Exhibitors: React.FC = () => {
                         </label>
                           <select
                             value={editFormData.boothSize || ''}
-                            onChange={(e) => setEditFormData({...editFormData, boothSize: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => {
+                              setEditFormData({...editFormData, boothSize: e.target.value});
+                              validateField('boothSize', e.target.value);
+                            }}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                              editErrors.boothSize ? 'border-red-300' : 'border-gray-300'
+                            }`}
                           >
                             <option value="">Select booth size</option>
                           {boothSizes.map((size) => (
@@ -1868,6 +2130,12 @@ export const Exhibitors: React.FC = () => {
                             </option>
                             ))}
                           </select>
+                          {editErrors.boothSize && (
+                            <p className="mt-1 text-sm text-red-600 flex items-center">
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              {editErrors.boothSize}
+                            </p>
+                          )}
                       </div>
 
                       <div>
