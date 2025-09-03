@@ -984,10 +984,10 @@ export const Exhibitors: React.FC = () => {
           <p className="text-gray-600">Manage exhibitor registrations, booth assignments, and payments</p>
         </div>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-          <Button variant="outline" className="flex items-center space-x-2 w-full sm:w-auto justify-center">
+          {/* <Button variant="outline" className="flex items-center space-x-2 w-full sm:w-auto justify-center">
             <Download className="h-4 w-4" />
             <span>Export</span>
-          </Button>
+          </Button> */}
           <Link to="/exhibitors/add">
             <Button className="flex items-center space-x-2 w-full sm:w-auto justify-center">
               <Plus className="h-4 w-4" />
@@ -1357,11 +1357,11 @@ export const Exhibitors: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                     <label className="text-sm font-medium text-gray-700">First Name</label>
-                    <p className="text-gray-900">{selectedExhibitor.firstName || 'N/A'}</p>
+                    <p className="text-gray-900">{selectedExhibitor.firstName || selectedExhibitor.companyName.split(' ')[0]}</p>
                     </div>
                     <div>
                     <label className="text-sm font-medium text-gray-700">Last Name</label>
-                    <p className="text-gray-900">{selectedExhibitor.lastName || 'N/A'}</p>
+                    <p className="text-gray-900">{selectedExhibitor.lastName || selectedExhibitor.companyName.split(' ')[1]}</p>
                     </div>
                     <div>
                     <label className="text-sm font-medium text-gray-700">Email ID</label>
@@ -1684,7 +1684,7 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <input
                             type="text"
-                            value={editFormData.firstName || ''}
+                            value={editFormData.firstName ? editFormData.firstName : editFormData?.companyName?.split(' ')[0]}
                             onChange={(e) => {
                               setEditFormData({...editFormData, firstName: e.target.value});
                               validateField('firstName', e.target.value);
@@ -1708,7 +1708,7 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <input
                             type="text"
-                            value={editFormData.lastName || ''}
+                            value={editFormData.lastName ? editFormData.lastName : editFormData?.companyName?.split(' ')[1]}
                             onChange={(e) => {
                               setEditFormData({...editFormData, lastName: e.target.value});
                               validateField('lastName', e.target.value);
