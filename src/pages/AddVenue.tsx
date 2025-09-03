@@ -724,13 +724,13 @@ export const AddVenue: React.FC = () => {
     const accountRegex = /^[0-9]{9,18}$/;
     if (!formData.bankAccountNumber.trim()) {
       newErrors.bankAccountNumber = 'Account number is required';
-    } else if(formData.bankName.trim().length < 20) {
-      newErrors.bankName = 'Bank name must be at least 20 characters';
+    } else if(formData.bankName.trim().length < 4) {
+      newErrors.bankName = 'Bank name must be at least 4 characters';
     }
     else if (!accountRegex.test(formData.bankAccountNumber.trim())) {
       newErrors.bankAccountNumber = 'Account number must be 9-18 digits';
     }
-    if (!formData.bankHolderName.trim()) {
+    if (!formData.bankHolderName.trim()) {  
       newErrors.bankHolderName = 'Account holder name is required';
     }
     const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;

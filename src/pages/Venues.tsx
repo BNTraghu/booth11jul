@@ -17,6 +17,7 @@ interface ExtendedVenueFormData {
   name: string;
   location: string;
   contactPerson: string;
+  contactRole: string;
   email: string;
   phone: string;
   memberCount: number;
@@ -126,7 +127,7 @@ export const Venues: React.FC = () => {
   const fetchPhotosFromBucket = async (venueName: string): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
     try {
       console.log('🔍 Fetching photos for venue:', venueName);
-      
+
       // Generate multiple possible slug variations to match your Supabase folder structure
       const possibleSlugs = [
         venueName.toLowerCase().replace(/\s+/g, '-'),           // crystal-ball
@@ -135,9 +136,9 @@ export const Venues: React.FC = () => {
         venueName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''), // crystal.ball (clean)
         slugifyVenue(venueName)                                // crystal-ball (original function)
       ];
-      
+
       console.log('🔍 Possible slugs:', possibleSlugs);
-      
+
       // First, check if we can access the bucket at all
       const { data: bucketTest, error: bucketError } = await supabase.storage
         .from('venue-photos')
@@ -156,11 +157,11 @@ export const Venues: React.FC = () => {
 
       for (const trySlug of possibleSlugs) {
         console.log(`🔍 Trying slug: ${trySlug}`);
-        
+
         const { data: tryFiles, error: tryError } = await supabase.storage
           .from('venue-photos')
           .list(trySlug);
-        
+
         if (!tryError && tryFiles && tryFiles.length > 0) {
           console.log(`✅ Found ${tryFiles.length} photos in slug: ${trySlug}`);
           photoFiles = tryFiles;
@@ -174,14 +175,14 @@ export const Venues: React.FC = () => {
       // If no photos found with any slug, try to list all folders and find a match
       if (!photoFiles) {
         console.log('🔍 No photos found with any slug, checking all folders...');
-        
+
         const { data: allFolders, error: folderError } = await supabase.storage
           .from('venue-photos')
           .list('', { limit: 100 });
 
         if (!folderError && allFolders) {
           console.log('📁 Available folders:', allFolders.map(f => f.name));
-          
+
           // Try fuzzy matching
           const possibleMatch = allFolders.find(f =>
             f.name.toLowerCase().includes(venueName.toLowerCase()) ||
@@ -208,49 +209,49 @@ export const Venues: React.FC = () => {
         return [];
       }
 
-                    // Convert bucket files to photo objects
-       const photoPromises = photoFiles.map(async (file) => {
-         const filePath = `${foundSlug}/${file.name}`;
+      // Convert bucket files to photo objects
+      const photoPromises = photoFiles.map(async (file) => {
+        const filePath = `${foundSlug}/${file.name}`;
 
-         // Get signed URL since bucket is not public
-         const { data: signedUrl, error: signedError } = await supabase.storage
-           .from('venue-photos')
-           .createSignedUrl(filePath, 3600); // 1 hour expiry
-         
-         if (signedError) {
-           console.error('❌ Error creating signed URL:', signedError);
-           return null;
-         }
-         
-         // Clean up the filename: remove timestamp, replace underscores with spaces, remove extension
-         const cleanName = file.name
-           .replace(/^\d+_/, '') // Remove timestamp prefix
-           .replace(/\.(jpg|jpeg|png|gif|webp)$/i, '') // Remove file extension
-           .replace(/_+/g, ' ') // Replace multiple underscores with single space
-           .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-           .trim(); // Remove leading/trailing spaces
+        // Get signed URL since bucket is not public
+        const { data: signedUrl, error: signedError } = await supabase.storage
+          .from('venue-photos')
+          .createSignedUrl(filePath, 3600); // 1 hour expiry
 
-         const photoObj = {
-           name: cleanName || 'Untitled Image',
-           url: signedUrl?.signedUrl || '',
-           type: `image/${file.name.split('.').pop()?.toLowerCase() || 'jpeg'}`,
-           size: file.metadata?.size || 0
-         };
-         
-         // Log the URL generation process
-         console.log(`🔗 Generated signed URL for ${file.name}:`, {
-           filePath,
-           signedUrl: signedUrl?.signedUrl,
-           finalUrl: photoObj.url
-         });
+        if (signedError) {
+          console.error('❌ Error creating signed URL:', signedError);
+          return null;
+        }
 
-         console.log(`📸 Photo: ${cleanName} -> ${photoObj.url}`);
-         return photoObj;
-       });
+        // Clean up the filename: remove timestamp, replace underscores with spaces, remove extension
+        const cleanName = file.name
+          .replace(/^\d+_/, '') // Remove timestamp prefix
+          .replace(/\.(jpg|jpeg|png|gif|webp)$/i, '') // Remove file extension
+          .replace(/_+/g, ' ') // Replace multiple underscores with single space
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .trim(); // Remove leading/trailing spaces
 
-       const photos = await Promise.all(photoPromises);
-       console.log('📸 Total photos fetched:', photos.length);
-       return photos.filter((p): p is { name: string; url: string; type: string; size: number } => p !== null && p.url !== ''); // Only return valid photos
+        const photoObj = {
+          name: cleanName || 'Untitled Image',
+          url: signedUrl?.signedUrl || '',
+          type: `image/${file.name.split('.').pop()?.toLowerCase() || 'jpeg'}`,
+          size: file.metadata?.size || 0
+        };
+
+        // Log the URL generation process
+        console.log(`🔗 Generated signed URL for ${file.name}:`, {
+          filePath,
+          signedUrl: signedUrl?.signedUrl,
+          finalUrl: photoObj.url
+        });
+
+        console.log(`📸 Photo: ${cleanName} -> ${photoObj.url}`);
+        return photoObj;
+      });
+
+      const photos = await Promise.all(photoPromises);
+      console.log('📸 Total photos fetched:', photos.length);
+      return photos.filter((p): p is { name: string; url: string; type: string; size: number } => p !== null && p.url !== ''); // Only return valid photos
 
     } catch (error) {
       console.error('❌ Error fetching photos:', error);
@@ -323,6 +324,7 @@ export const Venues: React.FC = () => {
       name: venue.name || '',
       location: venue.location || '',
       contactPerson: venue.contactPerson || '',
+      contactRole: (venue as any).contactRole || (venue as any).contact_role || '',
       email: venue.email || '',
       phone: venue.phone || '',
       memberCount: venue.memberCount || 0,
@@ -464,9 +466,9 @@ export const Venues: React.FC = () => {
     if (!editFormData.addressLine1.trim()) {
       errors.addressLine1 = 'Address line 1 is required';
     }
-    if (!editFormData.city.trim()) {
-      errors.city = 'City is required';
-    }
+    // if (!editFormData.city.trim()) {
+    //   errors.city = 'City is required';
+    // }
     if (!editFormData.state.trim()) {
       errors.state = 'State is required';
     }
@@ -633,6 +635,7 @@ export const Venues: React.FC = () => {
 
         // Contact Information
         contact_person: editFormData.contactPerson,
+        contact_role: editFormData.contactRole,
         email: editFormData.email,
         phone: editFormData.phone,
 
@@ -1162,274 +1165,32 @@ export const Venues: React.FC = () => {
                   Photos ({selectedVenue.photos?.length || 0})
                 </h4>
 
-                                  {/* Debug section */}
-                  <div className="space-y-2">
-                                         {/* Debug button to check bucket contents */}
-                     <button
-                       onClick={async () => {
-                         console.log('🔍 Checking bucket contents for venue:', selectedVenue.name);
-                         
-                         // List all folders with metadata
-                         const { data: allFolders, error: folderError } = await supabase.storage
-                           .from('venue-photos')
-                           .list('', { limit: 100 });
-                         
-                         if (folderError) {
-                           console.error('❌ Error listing folders:', folderError);
-                           return;
-                         }
-                         
-                         console.log('📁 All folders in bucket:', allFolders);
-                         console.log('📁 Folder details:', allFolders?.map(f => ({
-                           name: f.name,
-                           size: f.metadata?.size,
-                           updated_at: f.updated_at,
-                           created_at: f.created_at
-                         })));
-                         
-                         // Try different slug variations
-                         const possibleSlugs = [
-                           selectedVenue.name.toLowerCase().replace(/\s+/g, '-'),
-                           selectedVenue.name.toLowerCase().replace(/\s+/g, '_'),
-                           selectedVenue.name.toLowerCase().replace(/\s+/g, ''),
-                           selectedVenue.name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, ''),
-                           slugifyVenue(selectedVenue.name)
-                         ];
-                         
-                         console.log('🔗 Possible slugs:', possibleSlugs);
-                         
-                         // Test each slug
-                         for (const slug of possibleSlugs) {
-                           console.log(`🔍 Testing slug: ${slug}`);
-                           const { data: photos, error: photoError } = await supabase.storage
-                             .from('venue-photos')
-                             .list(slug);
-                           
-                           if (photoError) {
-                             console.log(`❌ Error with slug ${slug}:`, photoError);
-                           } else if (photos && photos.length > 0) {
-                             console.log(`✅ Found ${photos.length} photos in slug ${slug}:`, photos);
-                           } else {
-                             console.log(`⚠️ No photos found in slug ${slug}`);
-                           }
-                         }
-                         
-                         // Test bucket permissions
-                         console.log('🔒 Testing bucket permissions...');
-                         try {
-                           const testFile = allFolders?.[0];
-                           if (testFile) {
-                             const { data: testUrl } = supabase.storage
-                               .from('venue-photos')
-                               .getPublicUrl(testFile.name);
-                             console.log('🔗 Test public URL:', testUrl.publicUrl);
-                             
-                             // Try to fetch the test URL
-                             const response = await fetch(testUrl.publicUrl, { method: 'HEAD' });
-                             console.log('📡 Test URL response:', response.status, response.statusText);
-                           }
-                         } catch (error) {
-                           console.log('❌ Bucket permission test error:', error);
-                         }
-                       }}
-                       className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
-                     >
-                       Debug: Check Bucket
-                     </button>
-                    
-                    {/* Manual folder test */}
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        placeholder="Enter folder name to test"
-                        className="text-xs px-2 py-1 border rounded"
-                        onKeyPress={async (e) => {
-                          if (e.key === 'Enter') {
-                            const folderName = e.currentTarget.value.trim();
-                            if (folderName) {
-                              console.log(`🔍 Manually testing folder: ${folderName}`);
-                              const { data: photos, error: photoError } = await supabase.storage
-                                .from('venue-photos')
-                                .list(folderName);
-                              
-                              if (photoError) {
-                                console.log(`❌ Error with folder ${folderName}:`, photoError);
-                              } else if (photos && photos.length > 0) {
-                                console.log(`✅ Found ${photos.length} photos in folder ${folderName}:`, photos);
-                              } else {
-                                console.log(`⚠️ No photos found in folder ${folderName}`);
-                              }
-                            }
-                          }
-                        }}
-                      />
-                      <span className="text-xs text-gray-500">Press Enter to test</span>
-                    </div>
-                    
-                    {/* Test Image URLs button */}
-                    <button
-                      onClick={async () => {
-                        if (selectedVenue.photos && selectedVenue.photos.length > 0) {
-                          console.log('🧪 Testing all image URLs...');
-                          for (const photo of selectedVenue.photos) {
-                            try {
-                              const response = await fetch(photo.url, { method: 'HEAD' });
-                              console.log(`🔗 ${photo.name}: ${response.status} ${response.statusText}`);
-                              if (response.ok) {
-                                console.log(`✅ ${photo.name} is accessible`);
-                              } else {
-                                console.log(`❌ ${photo.name} failed: ${response.status}`);
-                              }
-                            } catch (error) {
-                              console.log(`❌ ${photo.name} error:`, error);
-                            }
-                          }
-                        } else {
-                          console.log('⚠️ No photos to test');
-                        }
-                      }}
-                      className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
-                    >
-                      Test Image URLs
-                    </button>
-                    
-                    {/* Simple URL test */}
-                    <button
-                      onClick={() => {
-                        if (selectedVenue.photos && selectedVenue.photos.length > 0) {
-                          const firstPhoto = selectedVenue.photos[0];
-                          console.log('🔗 Testing URL:', firstPhoto.url);
-                          console.log('📸 Photo object:', firstPhoto);
-                          
-                          // Try to open in new tab
-                          window.open(firstPhoto.url, '_blank');
-                        }
-                      }}
-                      className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
-                    >
-                      Open First Image
-                    </button>
-                    
-                                         {/* Direct URL test */}
-                     <button
-                       onClick={async () => {
-                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
-                           const firstPhoto = selectedVenue.photos[0];
-                           console.log('🧪 Testing direct URL access...');
-                           console.log('🔗 Photo URL:', firstPhoto.url);
-                           
-                           // Try to open the URL in a new tab
-                           window.open(firstPhoto.url, '_blank');
-                           
-                           // Also test with fetch
-                           try {
-                             const response = await fetch(firstPhoto.url);
-                             console.log('📡 Fetch response:', response.status, response.statusText);
-                             if (response.ok) {
-                               console.log('✅ URL is accessible via fetch');
-                             }
-                           } catch (error) {
-                             console.log('❌ Fetch error:', error);
-                           }
-                         }
-                       }}
-                       className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200"
-                     >
-                       Test Direct URL
-                     </button>
-                     
-                     {/* Test signed URL */}
-                     <button
-                       onClick={async () => {
-                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
-                           const firstPhoto = selectedVenue.photos[0];
-                           console.log('🧪 Testing signed URL...');
-                           
-                           // Try to get a signed URL
-                           try {
-                             const { data: signedUrl, error } = await supabase.storage
-                               .from('venue-photos')
-                               .createSignedUrl(firstPhoto.url.split('/venue-photos/')[1], 3600);
-                             
-                             if (error) {
-                               console.log('❌ Signed URL error:', error);
-                             } else {
-                               console.log('✅ Signed URL:', signedUrl.signedUrl);
-                               window.open(signedUrl.signedUrl, '_blank');
-                             }
-                           } catch (error) {
-                             console.log('❌ Signed URL creation error:', error);
-                           }
-                         }
-                       }}
-                       className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200"
-                     >
-                       Test Signed URL
-                     </button>
-                     
-                     {/* Test direct image access */}
-                     <button
-                       onClick={async () => {
-                         if (selectedVenue.photos && selectedVenue.photos.length > 0) {
-                           const firstPhoto = selectedVenue.photos[0];
-                           console.log('🧪 Testing direct image access...');
-                           
-                           // Create a test img element
-                           const testImg = document.createElement('img');
-                           testImg.onload = () => {
-                             console.log('✅ Test image loaded successfully!');
-                             document.body.appendChild(testImg);
-                           };
-                           testImg.onerror = () => {
-                             console.log('❌ Test image failed to load');
-                           };
-                           testImg.src = firstPhoto.url;
-                         }
-                       }}
-                       className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded hover:bg-pink-200"
-                     >
-                       Test Image Element
-                     </button>
-                  </div>
-                </div>
+              </div>
 
-              {/* Debug: Show photo data */}
-              {selectedVenue.photos && (
-                <div className="mb-4 p-3 bg-blue-50 rounded border">
-                  <div className="text-xs text-blue-700">
-                    <strong>Debug Info:</strong> Found {selectedVenue.photos.length} photos
-                    {selectedVenue.photos.map((p, idx) => (
-                      <div key={idx} className="mt-1">
-                        • {p.name}: {p.url.substring(0, 80)}...
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-                             {selectedVenue.photos && selectedVenue.photos.length > 0 ? (
-                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                   {selectedVenue.photos.map((p: any, idx: number) => (
-                     <div key={idx} className="group relative bg-gray-50 rounded-lg overflow-hidden">
-                       <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
-                         <img
-                           src={p.url}
-                           alt={p.name}
-                           className="w-full h-40 object-cover hover:scale-105 transition-transform duration-200"
-                           onLoad={() => {
-                             console.log('✅ Image loaded successfully:', p.url);
-                           }}
-                           onError={(e) => {
-                             console.log('❌ Image failed to load:', p.url);
-                             console.log('❌ Image error details:', e);
-                             console.log('❌ Photo object:', p);
-                             // Try alternative URL construction
-                             const altUrl = p.url.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
-                             console.log('🔄 Trying alternative URL:', altUrl);
-                             e.currentTarget.src = altUrl;
-                           }}
-                         />
-                       </a>
+
+              {selectedVenue.photos && selectedVenue.photos.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {selectedVenue.photos.map((p: any, idx: number) => (
+                    <div key={idx} className="group relative bg-gray-50 rounded-lg overflow-hidden">
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+                        <img
+                          src={p.url}
+                          alt={p.name}
+                          className="w-full h-40 object-cover hover:scale-105 transition-transform duration-200"
+                          onLoad={() => {
+                            console.log('✅ Image loaded successfully:', p.url);
+                          }}
+                          onError={(e) => {
+                            console.log('❌ Image failed to load:', p.url);
+                            console.log('❌ Image error details:', e);
+                            console.log('❌ Photo object:', p);
+                            // Try alternative URL construction
+                            const altUrl = p.url.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
+                            console.log('🔄 Trying alternative URL:', altUrl);
+                            e.currentTarget.src = altUrl;
+                          }}
+                        />
+                      </a>
 
                       {/* Image info overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -1486,10 +1247,48 @@ export const Venues: React.FC = () => {
                   <h4 className="font-medium text-gray-900 mb-3">Contact Person</h4>
                   <div className="space-y-1">
                     <div className="text-sm font-medium">{selectedVenue.contactPerson}</div>
+                    {(selectedVenue as any).contactRole && (
+                      <div className="text-sm text-gray-600">
+                        <Badge variant="default" className="text-xs mr-2">
+                          {(selectedVenue as any).contactRole}
+                        </Badge>
+                      </div>
+                    )}
                     <div className="text-sm text-gray-600">{selectedVenue.email}</div>
                     <div className="text-sm text-gray-600">{selectedVenue.phone}</div>
                   </div>
                 </div>
+
+                {/* Additional Contact Information */}
+                {selectedVenue.customContacts && selectedVenue.customContacts.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                      <Users className="h-4 w-4 mr-2" />
+                      Additional Contact Information
+                    </h4>
+                    <div className="space-y-3">
+                      {selectedVenue.customContacts.map((contact, index) => (
+                        <div key={contact.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-sm font-medium text-gray-900">
+                              Contact Person {index + 1}
+                            </h5>
+                            {contact.role && (
+                              <Badge variant="default" className="text-xs">
+                                {contact.role}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900">{contact.name}</div>
+                            <div className="text-sm text-gray-600">{contact.email}</div>
+                            <div className="text-sm text-gray-600">{contact.phone}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* <div>
                   <h4 className="font-medium text-gray-900 mb-3">Capacity</h4>
@@ -1810,6 +1609,21 @@ export const Venues: React.FC = () => {
 
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Role
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.contactRole}
+                              onChange={(e) => setEditFormData({ ...editFormData, contactRole: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Manager, Coordinator, etc."
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
                               Email *
                             </label>
                             <input
@@ -2056,6 +1870,119 @@ export const Venues: React.FC = () => {
                       </CardContent>
                     </Card>*/}
                     {/* Photos & Documents */}
+                    {/* Additional Contact Information */}
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                            <Users className="h-5 w-5 mr-2" />
+                            Additional Contact Information
+                          </h3>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addCustomContact}
+                            className="flex items-center space-x-2"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>Add Contact</span>
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {editFormData.customContacts.length === 0 ? (
+                          <div className="text-center text-gray-500">
+                            <p className="text-sm">Click "Add Contact" to add multiple contact persons</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {editFormData.customContacts.map((contact, index) => (
+                              <div key={contact.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div className="flex items-center justify-between mb-4">
+                                  <h4 className="text-sm font-medium text-gray-900">
+                                    Contact Person {index + 1}
+                                  </h4>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => removeCustomContact(contact.id)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Name
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={contact.name}
+                                      onChange={(e) => updateCustomContact(contact.id, 'name', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      placeholder="Enter contact name"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Role
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={contact.role}
+                                      onChange={(e) => updateCustomContact(contact.id, 'role', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      placeholder="Manager, Coordinator, etc."
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Email
+                                    </label>
+                                    <input
+                                      type="email"
+                                      value={contact.email}
+                                      onChange={(e) => updateCustomContact(contact.id, 'email', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      placeholder="Enter email address"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Phone
+                                    </label>
+                                    <input
+                                      type="tel"
+                                      value={contact.phone}
+                                      onChange={(e) => updateCustomContact(contact.id, 'phone', e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      placeholder="+91-9876543210"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {editFormData.customContacts.length > 0 && (
+                          <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                            <p className="flex items-center">
+                              <AlertCircle className="h-4 w-4 mr-2" />
+                              Additional contacts will be stored with the venue and can be used for event coordination.
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
                     {/* Bank Details */}
                     <Card>
                       <CardHeader>

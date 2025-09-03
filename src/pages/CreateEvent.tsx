@@ -52,7 +52,7 @@ interface FormData {
   city: string;
   maxCapacity: number;
   planType: 'Plan A' | 'Plan B' | 'Plan C' | 'Custom';
-  status: 'draft' | 'upcoming' | 'published' | 'ongoing' | 'completed' | 'cancelled';
+  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
   attendees: number;
   totalRevenue: number;
   // Image Field
@@ -99,6 +99,9 @@ export const CreateEvent: React.FC = () => {
   const { venues, loading: venuesLoading } = useVenues();
   const { vendors, loading: vendorsLoading } = useVendors();
   // const { exhibitors, loading: exhibitorsLoading } = useExhibitors();
+  
+  // Debug vendor data
+  console.log('🔍 CreateEvent - Vendors loaded:', vendors.length, vendors);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -234,19 +237,19 @@ export const CreateEvent: React.FC = () => {
     }
 
     // City validation
-    if (!formData.city.trim()) {
-      newErrors.city = 'City is required';
-    }
+    // if (!formData.city.trim()) {
+    //   newErrors.city = 'City is required';
+    // }
 
     // Capacity validation
     if (formData.maxCapacity < 10) {
       newErrors.maxCapacity = 'Maximum capacity must be at least 10';
     }
 
-    // Image validation
-    if (!formData.eventImage && !formData.eventImageUrl) {
-      newErrors.eventImage = 'Event Flyers is required';
-    }
+    // Image validation - Make optional for now
+    // if (!formData.eventImage && !formData.eventImageUrl) {
+    //   newErrors.eventImage = 'Event Flyers is required';
+    // }
 
     // Pricing validation
     if (formData.pricePerHour < 0) {
@@ -319,7 +322,7 @@ export const CreateEvent: React.FC = () => {
 
         const updatedData = {
           venueName: selectedVenue.name,
-          city: selectedVenue.location?.split(',').pop()?.trim() || '',
+          city: selectedVenue.city?selectedVenue.city:selectedVenue.location?.split(',').pop()?.trim() || '',
           maxCapacity: selectedVenue.memberCount || 100,
           venueFacilities: selectedVenue.facilities || [],
           venueAmenities: selectedVenue.amenities || [],
@@ -430,12 +433,16 @@ export const CreateEvent: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    console.log('🚀 Event creation started...');
+    console.log('📋 Form data:', formData);
 
     if (!validateForm()) {
+      console.log('❌ Form validation failed');
+      console.log('🔍 Validation errors:', errors);
       return;
     }
 
-
+    console.log('✅ Form validation passed');
     setIsSubmitting(true);
 
     try {
@@ -443,56 +450,75 @@ export const CreateEvent: React.FC = () => {
 
       // Upload image to Supabase storage if a new image is selected
       if (formData.eventImage) {
+        try {
+          const fileExt = formData.eventImage.name.split('.').pop();
+          const fileName = `${Date.now()}.${fileExt}`;
+          const filePath = `event-images/${fileName}`;
 
-        const fileExt = formData.eventImage.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `event-images/${fileName}`;
+          console.log('📤 Attempting image upload:', filePath);
 
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('event-images')
+            .upload(filePath, formData.eventImage);
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(filePath, formData.eventImage);
-
-        if (uploadError) {
-          throw new Error(`Image upload failed: ${uploadError.message}`);
+          if (uploadError) {
+            console.error('❌ Image upload failed:', uploadError);
+            // Continue without image upload for now
+            imageUrl = formData.eventImageUrl || '';
+          } else {
+            console.log('✅ Image upload successful:', uploadData.path);
+            const { data: urlData } = supabase.storage
+              .from('event-images')
+              .getPublicUrl(filePath);
+            imageUrl = urlData.publicUrl;
+          }
+        } catch (error) {
+          console.error('❌ Image upload error:', error);
+          // Continue without image upload
+          imageUrl = formData.eventImageUrl || '';
         }
-
-
-        const { data: urlData } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(filePath);
-
-        imageUrl = urlData.publicUrl;
       } else {
-
+        imageUrl = formData.eventImageUrl || '';
       }
 
       let layoutImageUrl = formData.layoutImageUrl;
 
       // Upload layout image to Supabase storage if a new layout image is selected
       if (formData.layoutImage) {
-        const fileExt = formData.layoutImage.name.split('.').pop();
-        const fileName = `layout_${Date.now()}.${fileExt}`;
-        const filePath = `event-images/${fileName}`;
+        try {
+          const fileExt = formData.layoutImage.name.split('.').pop();
+          const fileName = `layout_${Date.now()}.${fileExt}`;
+          const filePath = `event-images/${fileName}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(filePath, formData.layoutImage);
+          console.log('📤 Attempting layout image upload:', filePath);
 
-        if (uploadError) {
-          throw new Error(`Layout image upload failed: ${uploadError.message}`);
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('event-images')
+            .upload(filePath, formData.layoutImage);
+
+          if (uploadError) {
+            console.error('❌ Layout image upload failed:', uploadError);
+            // Continue without layout image upload for now
+            layoutImageUrl = formData.layoutImageUrl || '';
+          } else {
+            console.log('✅ Layout image upload successful:', uploadData.path);
+            const { data: urlData } = supabase.storage
+              .from('event-images')
+              .getPublicUrl(filePath);
+            layoutImageUrl = urlData.publicUrl;
+          }
+        } catch (error) {
+          console.error('❌ Layout image upload error:', error);
+          // Continue without layout image upload
+          layoutImageUrl = formData.layoutImageUrl || '';
         }
-
-        const { data: urlData } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(filePath);
-
-        layoutImageUrl = urlData.publicUrl;
+      } else {
+        layoutImageUrl = formData.layoutImageUrl || '';
       }
 
       // Sanitize status to match DB constraint
       const allowedStatuses = ['draft', 'published', 'ongoing', 'completed', 'cancelled'];
-      const normalizedStatus = formData.status === 'upcoming'
+      const normalizedStatus = formData.status === 'published'
         ? 'published'
         : (allowedStatuses.includes(formData.status as any) ? formData.status : 'draft');
 
@@ -511,7 +537,7 @@ export const CreateEvent: React.FC = () => {
         status: normalizedStatus,
         attendees: formData.attendees,
         total_revenue: formData.totalRevenue,
-        created_by: user?.id,
+        created_by: user?.id || null, // Allow null for unauthenticated users
         vendor_ids: selectedVendors,
         exhibitor_ids: selectedExhibitors,
         // Image field
@@ -532,6 +558,8 @@ export const CreateEvent: React.FC = () => {
       };
 
 
+      console.log('📤 Inserting event data:', insertData);
+      
       const { data, error } = await supabase
         .from('events')
         .insert(insertData)
@@ -539,10 +567,11 @@ export const CreateEvent: React.FC = () => {
         .single();
 
       if (error) {
+        console.error('❌ Database error:', error);
         throw new Error(error.message);
       }
 
-
+      console.log('✅ Event created successfully:', data);
       setSubmitSuccess(true);
       showNotification('Event created successfully!', 'success');
 
@@ -1121,13 +1150,18 @@ export const CreateEvent: React.FC = () => {
                 )}
 
                 {/* Vendors Section */}
-                <div className="mt-4">
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Vendors ({selectedVendors.length} selected)</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-32 overflow-auto p-2 border rounded-lg">
+                <div className="mt-4 border-2 border-blue-200 bg-blue-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                    <Users className="h-4 w-4 mr-2" />
+                    Vendors ({selectedVendors.length} selected) - {vendors.length} available
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-32 overflow-auto p-2 border rounded-lg bg-white">
                     {vendorsLoading ? (
                       <div className="text-sm text-gray-500">Loading vendors...</div>
+                    ) : vendors.length === 0 ? (
+                      <div className="text-sm text-gray-500">No vendors available</div>
                     ) : vendors.map(v => (
-                      <label key={v.id} className="flex items-center justify-between px-3 py-2 border rounded">
+                      <label key={v.id} className="flex items-center justify-between px-3 py-2 border rounded hover:bg-gray-50">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-gray-900 truncate">{v.name}</div>
                           <div className="text-xs text-gray-600 truncate">{v.category} • {v.city || 'N/A'}</div>
@@ -1136,6 +1170,9 @@ export const CreateEvent: React.FC = () => {
                       </label>
                     ))}
                   </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Select vendors to associate with this event
+                  </p>
                 </div>
 
                 {/* Exhibitors Section */}

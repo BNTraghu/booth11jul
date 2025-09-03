@@ -30,7 +30,7 @@ interface ExtendedEventFormData {
   city: string;
   maxCapacity: number;
   planType: 'Plan A' | 'Plan B' | 'Plan C' | 'Custom';
-  status: 'draft' | 'upcoming' | 'published' | 'ongoing' | 'completed' | 'cancelled';
+  status: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
   attendees: number;
   totalRevenue: number;
   // Image Field
@@ -65,6 +65,9 @@ export const Events: React.FC = () => {
   const { venues } = useVenues();
   const { vendors } = useVendors();
   const { exhibitors } = useExhibitors();
+  
+  // Debug vendor data
+  console.log('🔍 Vendors loaded:', vendors.length, vendors);
   const [exhibitorUpdates, setExhibitorUpdates] = useState<Record<string, string>>({});
 
   // Helper functions to get names from IDs
@@ -235,11 +238,12 @@ export const Events: React.FC = () => {
 
   const getStatusVariant = (status: string) => {
     switch (status) {
-      case 'upcoming': return 'success';
+      case 'published': return 'success';
+      case 'draft': return 'warning';
       case 'ongoing': return 'info';
       case 'completed': return 'default';
       case 'cancelled': return 'error';
-      default: return 'warning';
+      default: return 'default';
     }
   };
 
@@ -323,7 +327,7 @@ export const Events: React.FC = () => {
 
     console.log('📝 Mapped stalls data:', editData.allStalls);
 
-    // Set selected vendors and exhibitors
+    // Set selected vendors and exhibitors (pre-select existing ones)
     setSelectedVendors(event.vendors || []);
     setSelectedExhibitors(event.exhibitors || []);
     setSelectedExhibitorsForEdit(event.exhibitors || []);
@@ -401,9 +405,9 @@ export const Events: React.FC = () => {
     }
 
     // City validation
-    if (!editFormData.city.trim()) {
-      errors.city = 'City is required';
-    }
+    // if (!editFormData.city.trim()) {
+    //   errors.city = 'City is required';
+    // }
 
     // Capacity validation
     if (editFormData.maxCapacity < 10) {
@@ -447,61 +451,81 @@ export const Events: React.FC = () => {
 
       // Upload image to Supabase storage if a new image is selected
       if (editFormData.eventImage) {
-        console.log('📤 Uploading new image...');
-        const fileExt = editFormData.eventImage.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `event-images/${fileName}`;
+        try {
+          console.log('📤 Uploading new image...');
+          const fileExt = editFormData.eventImage.name.split('.').pop();
+          const fileName = `${Date.now()}.${fileExt}`;
+          const filePath = `event-images/${fileName}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(filePath, editFormData.eventImage);
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('event-images')
+            .upload(filePath, editFormData.eventImage);
 
-        if (uploadError) {
-          console.error('❌ Image upload failed:', uploadError);
-          showNotification(`Image upload failed: ${uploadError.message}`, 'error');
-          return;
+          if (uploadError) {
+            console.error('❌ Image upload failed:', uploadError);
+            // Continue without image upload for now
+            imageUrl = editFormData.eventImageUrl || '';
+            console.log('⚠️ Continuing without new image upload');
+          } else {
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from('event-images')
+              .getPublicUrl(filePath);
+
+            imageUrl = urlData.publicUrl;
+            console.log('✅ Image uploaded successfully:', imageUrl);
+          }
+        } catch (error) {
+          console.error('❌ Image upload error:', error);
+          // Continue without image upload
+          imageUrl = editFormData.eventImageUrl || '';
+          console.log('⚠️ Continuing without new image upload due to error');
         }
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(filePath);
-
-        imageUrl = urlData.publicUrl;
-        console.log('✅ Image uploaded successfully:', imageUrl);
+      } else {
+        imageUrl = editFormData.eventImageUrl || '';
       }
 
       let layoutImageUrl = editFormData.layoutImageUrl;
 
       // Upload layout image to Supabase storage if a new layout image is selected
       if (editFormData.layoutImage) {
-        console.log('📤 Uploading new layout image...');
-        const fileExt = editFormData.layoutImage.name.split('.').pop();
-        const fileName = `layout_${Date.now()}.${fileExt}`;
-        const filePath = `event-images/${fileName}`;
+        try {
+          console.log('📤 Uploading new layout image...');
+          const fileExt = editFormData.layoutImage.name.split('.').pop();
+          const fileName = `layout_${Date.now()}.${fileExt}`;
+          const filePath = `event-images/${fileName}`;
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('event-images')
-          .upload(filePath, editFormData.layoutImage);
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('event-images')
+            .upload(filePath, editFormData.layoutImage);
 
-        if (uploadError) {
-          console.error('❌ Layout image upload failed:', uploadError);
-          showNotification(`Layout image upload failed: ${uploadError.message}`, 'error');
-          return;
+          if (uploadError) {
+            console.error('❌ Layout image upload failed:', uploadError);
+            // Continue without layout image upload for now
+            layoutImageUrl = editFormData.layoutImageUrl || '';
+            console.log('⚠️ Continuing without new layout image upload');
+          } else {
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from('event-images')
+              .getPublicUrl(filePath);
+
+            layoutImageUrl = urlData.publicUrl;
+            console.log('✅ Layout image uploaded successfully:', layoutImageUrl);
+          }
+        } catch (error) {
+          console.error('❌ Layout image upload error:', error);
+          // Continue without layout image upload
+          layoutImageUrl = editFormData.layoutImageUrl || '';
+          console.log('⚠️ Continuing without new layout image upload due to error');
         }
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('event-images')
-          .getPublicUrl(filePath);
-
-        layoutImageUrl = urlData.publicUrl;
-        console.log('✅ Layout image uploaded successfully:', layoutImageUrl);
+      } else {
+        layoutImageUrl = editFormData.layoutImageUrl || '';
       }
 
       // Sanitize status to match DB constraint
       const allowedStatuses = ['draft', 'published', 'ongoing', 'completed', 'cancelled'];
-      const normalizedStatus = editFormData.status === 'upcoming'
+      const normalizedStatus = editFormData.status === 'published'
         ? 'published'
         : (allowedStatuses.includes(editFormData.status as any) ? editFormData.status : 'draft');
 
@@ -539,6 +563,8 @@ export const Events: React.FC = () => {
         all_stalls: editFormData.allStalls.map(stall => stall.stallNo) // Store stall numbers as string array
       };
 
+      console.log('📤 Updating event data:', updateData);
+      
       const { error } = await supabase
         .from('events')
         .update(updateData)
@@ -560,14 +586,18 @@ export const Events: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (selectedEvent) {
+      console.log('🗑️ Deleting event:', selectedEvent.id);
+      
       const { error } = await supabase
         .from('events')
         .delete()
         .eq('id', selectedEvent.id);
 
       if (error) {
+        console.error('❌ Delete failed:', error);
         showNotification('Failed to delete event: ' + error.message, 'error');
       } else {
+        console.log('✅ Delete successful');
         showNotification('Event deleted successfully!', 'success');
         setShowDeleteModal(false);
         setSelectedEvent(null);
@@ -836,7 +866,7 @@ export const Events: React.FC = () => {
             >
               <option value="all">All Status</option>
               <option value="draft">Draft</option>
-              <option value="upcoming">Upcoming</option>
+              <option value="published">Published</option>
               <option value="ongoing">Ongoing</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
@@ -848,7 +878,7 @@ export const Events: React.FC = () => {
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
         <div className="flex flex-wrap gap-2">
-          {['all', 'draft', 'upcoming', 'ongoing', 'completed', 'cancelled'].map((status) => (
+          {['all', 'draft','published', 'ongoing', 'completed', 'cancelled'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -1142,7 +1172,7 @@ export const Events: React.FC = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                      <p className="text-gray-900">{selectedEvent.city || 'Not specified'}</p>
+                      <p className="text-gray-900">{selectedEvent.city ? selectedEvent.city : 'Not specified'}</p>
                     </div>
                   </div>
                 </div>
@@ -1809,7 +1839,7 @@ export const Events: React.FC = () => {
                             ...editFormData,
                             venueId: e.target.value,
                             venueName: selectedVenue?.name || '',
-                            city: selectedVenue?.location?.split(',').pop()?.trim() || ''
+                            city: selectedVenue?.city?selectedVenue.city:selectedVenue?.location?.split(',').pop()?.trim() || ''
                           });
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1817,7 +1847,7 @@ export const Events: React.FC = () => {
                         <option value="">Select a venue</option>
                         {venues.map((venue) => (
                           <option key={venue.id} value={venue.id}>
-                            {venue.name} - {venue.location ? venue.location : venue.city}
+                            {venue.name} - {venue.location ? venue.location : venue.city?venue.city:''}
                           </option>
                         ))}
                       </select>
@@ -1853,7 +1883,7 @@ export const Events: React.FC = () => {
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="draft">Draft</option>
-                          <option value="upcoming">Upcoming</option>
+                          <option value="published">Published</option>
                           <option value="ongoing">Ongoing</option>
                           <option value="completed">Completed</option>
                           <option value="cancelled">Cancelled</option>
@@ -2116,14 +2146,16 @@ export const Events: React.FC = () => {
                 </div>
 
                 {/* Vendors Selection */}
-                <div className="space-y-4">
+                <div className="space-y-4 border-2 border-blue-200 bg-blue-50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <Users className="h-5 w-5 mr-2" />
-                    Select Vendors
+                    Select Vendors ({vendors.length} available)
                   </h3>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4">
-                    {vendors.map(vendor => (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-white">
+                    {vendors.length === 0 ? (
+                      <div className="text-sm text-gray-500 col-span-full">No vendors available</div>
+                    ) : vendors.map(vendor => (
                       <label key={vendor.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
                         <input
                           type="checkbox"
@@ -2131,12 +2163,20 @@ export const Events: React.FC = () => {
                           onChange={() => toggleVendor(vendor.id)}
                           className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm text-gray-700 truncate">{vendor.name}</span>
+                        <span className="text-sm text-gray-700 truncate">
+                          {vendor.name}
+                          {selectedVendors.includes(vendor.id) && (
+                            <span className="text-xs text-green-600 ml-1">✓</span>
+                          )}
+                        </span>
                       </label>
                     ))}
                   </div>
                   <p className="text-sm text-gray-500">
                     Selected: {selectedVendors.length} vendor(s)
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Select vendors to associate with this event
                   </p>
                 </div>
 
