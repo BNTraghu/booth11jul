@@ -832,9 +832,7 @@ export const Exhibitors: React.FC = () => {
         if (!editFormData.subCategory?.trim()) {
           errors.subCategory = 'Sub-category is required';
         }
-        if (!editFormData.boothSize?.trim()) {
-          errors.boothSize = 'Booth size is required';
-        }
+        // Booth size is not mandatory, so no validation error for empty field
         
         // PAN Number validation (if provided)
         if (editFormData.panNumber?.trim()) {
@@ -900,10 +898,7 @@ export const Exhibitors: React.FC = () => {
       case 'category':
       case 'subCategory':
       case 'boothSize':
-        if (!trimmedValue) {
-          isValid = false;
-          errorMessage = `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} is required`;
-        }
+        // Booth size is not mandatory, so no validation error for empty field
         break;
 
       case 'email':
@@ -2111,7 +2106,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Preferred Booth Size 
+                          Preferred Booth Size <span className="text-gray-500">(Optional)</span>
                         </label>
                           <select
                             value={editFormData.boothSize || ''}

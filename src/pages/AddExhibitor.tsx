@@ -274,18 +274,36 @@ export const AddExhibitor: React.FC = () => {
         if (!formData.city) newErrors.city = 'City is required';
         if (!formData.state) newErrors.state = 'State is required';
         if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
+        else if (!/^[0-9]{6}$/.test(formData.pincode.trim())) newErrors.pincode = 'Pincode must be exactly 6 digits';
+        if (!formData.country) newErrors.country = 'Country is required';
         break;
 
       case 3: // Business Information
         if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
         if (!formData.category) newErrors.category = 'Category is required';
+        if (!formData.subCategory) newErrors.subCategory = 'Sub-category is required';
         if (!formData.panNumber.trim()) newErrors.panNumber = 'PAN number is required';
+        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber.trim())) {
+          newErrors.panNumber = 'PAN must be in format: ABCDE1234F';
+        }
+        if (!formData.gstNumber.trim()) {
+          // GST is not mandatory, so no error for empty field
+        } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[A-Z0-9]{1}$/.test(formData.gstNumber.trim())) {
+          newErrors.gstNumber = 'GST must be in format: 22AAAAA0000A1Z5';
+        }
+        // Booth size is not mandatory, so no validation error for empty field
+        if (!formData.businessDescription.trim()) {
+          // Business description is not mandatory, so no error for empty field
+        } else if (formData.businessDescription.trim().length < 10) {
+          newErrors.businessDescription = 'Business description must be at least 10 characters';
+        }
         break;
 
-      case 4: // Documents
-        if (!formData.documents.panCard) newErrors.panCard = 'PAN card is required';
-        if (!formData.documents.aadharCard) newErrors.aadharCard = 'Aadhar card is required';
-        break;
+             case 4: // Documents
+         if (!formData.documents.panCard) newErrors.panCard = 'PAN card is required';
+         if (!formData.documents.aadharCard) newErrors.aadharCard = 'Aadhar card is required';
+         // Licence is not mandatory, so no error for empty field
+         break;
 
     }
 
@@ -327,6 +345,9 @@ export const AddExhibitor: React.FC = () => {
       case 'alternatePhone':
         if (value.trim()) {
           validationResult = validatePhone(value);
+        } else {
+          // Clear error for optional field when empty
+          validationResult = { isValid: true, message: '' };
         }
         break;
       case 'address1':
@@ -341,35 +362,81 @@ export const AddExhibitor: React.FC = () => {
       case 'pincode':
         validationResult = validatePinCode(value);
         break;
+      case 'country':
+        if (!value.trim()) {
+          validationResult = { isValid: false, message: 'Country is required' };
+        } else {
+          validationResult = { isValid: true, message: '' };
+        }
+        break;
       case 'companyName':
         validationResult = validateRequiredText(value, 'Company name', 2, 100);
         break;
+      case 'website':
+        if (value.trim() && !/^https?:\/\/.+/.test(value.trim())) {
+          validationResult = { isValid: false, message: 'Website must start with http:// or https://' };
+        } else {
+          validationResult = { isValid: true, message: '' };
+        }
+        break;
+      case 'category':
+        if (!value.trim()) {
+          validationResult = { isValid: false, message: 'Category is required' };
+        } else {
+          validationResult = { isValid: true, message: '' };
+        }
+        break;
+      case 'subCategory':
+        if (!value.trim()) {
+          validationResult = { isValid: false, message: 'Sub-category is required' };
+        } else {
+          validationResult = { isValid: true, message: '' };
+        }
+        break;
       case 'panNumber':
-        if (value.trim()) {
-          if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.trim())) {
-            validationResult = { isValid: false, message: 'PAN must be in format: ABCDE1234F' };
-          }
+        if (!value.trim()) {
+          validationResult = { isValid: false, message: 'PAN number is required' };
+        } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.trim())) {
+          validationResult = { isValid: false, message: 'PAN must be in format: ABCDE1234F' };
+        } else {
+          validationResult = { isValid: true, message: '' };
         }
         break;
       case 'gstNumber':
-        if (value.trim()) {
-          if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[A-Z0-9]{1}$/.test(value.trim())) {
-            validationResult = { isValid: false, message: 'GST must be in format: 22AAAAA0000A1Z5' };
-          }
+        if (!value.trim()) {
+          // GST is not mandatory, so no error for empty field
+          validationResult = { isValid: true, message: '' };
+        } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[A-Z0-9]{1}$/.test(value.trim())) {
+          validationResult = { isValid: false, message: 'GST must be in format: 22AAAAA0000A1Z5' };
+        } else {
+          validationResult = { isValid: true, message: '' };
         }
         break;
       case 'boothSize':
-        validationResult = validateRequiredText(value, 'Booth size', 2, 50);
+        if (!value.trim()) {
+          // Booth size is not mandatory, so no error for empty field
+          validationResult = { isValid: true, message: '' };
+        } else {
+          validationResult = validateRequiredText(value, 'Booth size', 2, 50);
+        }
         break;
       case 'businessDescription':
-        validationResult = validateRequiredText(value, 'Business description', 10, 500);
+        if (!value.trim()) {
+          // Business description is not mandatory, so no error for empty field
+          validationResult = { isValid: true, message: '' };
+        } else if (value.trim().length < 10) {
+          validationResult = { isValid: false, message: 'Business description must be at least 10 characters' };
+        } else {
+          validationResult = validateRequiredText(value, 'Business description', 10, 500);
+        }
         break;
     }
 
     // Update errors based on validation result
     if (validationResult && !validationResult.isValid) {
       setErrors(prev => ({ ...prev, [field]: validationResult.message }));
-    } else if (errors[field]) {
+    } else {
+      // Clear error for this field if validation passed or field is empty (for non-mandatory fields)
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -1207,7 +1274,7 @@ export const AddExhibitor: React.FC = () => {
                       value={formData.subCategory}
                       onChange={(e) => handleInputChange('subCategory', e.target.value)}
                       disabled={!formData.category}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${errors.subCategory ? 'border-red-300' : 'border-gray-300'}`}
                     >
                       <option value="">Select sub-category</option>
                       {formData.category && subCategories[formData.category as keyof typeof subCategories]?.map((subCat) => (
@@ -1216,6 +1283,11 @@ export const AddExhibitor: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                    {errors.subCategory && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.subCategory}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1248,20 +1320,25 @@ export const AddExhibitor: React.FC = () => {
                       type="text"
                       value={formData.gstNumber}
                       onChange={(e) => handleInputChange('gstNumber', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.gstNumber ? 'border-red-300' : 'border-gray-300'}`}
                       placeholder="27AAAAA0000A1Z5"
                     />
+                    {errors.gstNumber && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {errors.gstNumber}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Preferred Booth Size 
+                    Preferred Booth Size <span className="text-gray-500">(Optional)</span>
                   </label>
                   <select
                     value={formData.boothSize}
                     onChange={(e) => handleInputChange('boothSize', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.boothSize ? 'border-red-300' : 'border-gray-300'}`}
                   >
                     <option value="">Select booth size</option>
                     {boothSizes.map((size) => (
@@ -1270,6 +1347,11 @@ export const AddExhibitor: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  {errors.boothSize && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.boothSize}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1280,9 +1362,14 @@ export const AddExhibitor: React.FC = () => {
                     value={formData.businessDescription}
                     onChange={(e) => handleInputChange('businessDescription', e.target.value)}
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.businessDescription ? 'border-red-300' : 'border-gray-300'}`}
                     placeholder="Describe your business, products, and services..."
                   />
+                  {errors.businessDescription && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.businessDescription}
+                    </p>
+                  )}
                 </div>
 
                 {/* Social Media Links */}

@@ -58,6 +58,9 @@ interface FormData {
   // Image Field
   eventImage: File | null;
   eventImageUrl: string;
+  // Multiple Event Images Field
+  eventImages: File[];
+  eventImageUrls: string[];
   // Layout Image Field
   layoutImage: File | null;
   layoutImageUrl: string;
@@ -140,6 +143,9 @@ export const CreateEvent: React.FC = () => {
     // Image Field
     eventImage: null,
     eventImageUrl: '',
+    // Multiple Event Images Field
+    eventImages: [],
+    eventImageUrls: [],
     // Layout Image Field
     layoutImage: null,
     layoutImageUrl: '',
@@ -377,6 +383,71 @@ export const CreateEvent: React.FC = () => {
     }));
   };
 
+  const handleMultipleImageUpload = async (files: File[]) => {
+    // Validate number of files (max 10)
+    if (files.length > 10) {
+      setErrors(prev => ({ ...prev, eventImage: 'Maximum 10 images allowed' }));
+      return;
+    }
+
+    // Validate each file
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setErrors(prev => ({ ...prev, eventImage: 'Please select valid image files only' }));
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors(prev => ({ ...prev, eventImage: 'Each image must be less than 5MB' }));
+        return;
+      }
+    }
+
+    try {
+      const newImageUrls: string[] = [];
+      const newImages: File[] = [];
+
+      for (const file of files) {
+        const imageUrl = URL.createObjectURL(file);
+        newImageUrls.push(imageUrl);
+        newImages.push(file);
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        eventImages: [...prev.eventImages, ...newImages],
+        eventImageUrls: [...prev.eventImageUrls, ...newImageUrls]
+      }));
+
+      // Clear error
+      if (errors.eventImage) {
+        setErrors(prev => ({ ...prev, eventImage: '' }));
+      }
+    } catch (error) {
+      console.error('Error processing images:', error);
+      setErrors(prev => ({ ...prev, eventImage: 'Error processing images' }));
+    }
+  };
+
+  const removeImageAtIndex = (index: number) => {
+    setFormData(prev => {
+      const newImages = [...prev.eventImages];
+      const newImageUrls = [...prev.eventImageUrls];
+      
+      // Revoke the object URL to free memory
+      URL.revokeObjectURL(newImageUrls[index]);
+      
+      newImages.splice(index, 1);
+      newImageUrls.splice(index, 1);
+      
+      return {
+        ...prev,
+        eventImages: newImages,
+        eventImageUrls: newImageUrls
+      };
+    });
+  };
+
   const handleLayoutImageUpload = (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -481,6 +552,50 @@ export const CreateEvent: React.FC = () => {
         imageUrl = formData.eventImageUrl || '';
       }
 
+      // Upload multiple images to Supabase storage
+      let multipleImageUrls: string[] = [];
+      if (formData.eventImages.length > 0) {
+        try {
+          console.log('📤 Uploading multiple images...');
+          
+          for (let i = 0; i < formData.eventImages.length; i++) {
+            const file = formData.eventImages[i];
+            const fileExt = file.name.split('.').pop();
+            const fileName = `flyer_${Date.now()}_${i}.${fileExt}`;
+            const filePath = `event-images/${fileName}`;
+
+            console.log(`📤 Uploading image ${i + 1}/${formData.eventImages.length}:`, filePath);
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('event-images')
+              .upload(filePath, file);
+
+            if (uploadError) {
+              console.error(`❌ Image ${i + 1} upload failed:`, uploadError);
+              // Continue with other images
+            } else {
+              console.log(`✅ Image ${i + 1} upload successful:`, uploadData.path);
+              const { data: urlData } = supabase.storage
+                .from('event-images')
+                .getPublicUrl(filePath);
+              multipleImageUrls.push(urlData.publicUrl);
+            }
+          }
+        } catch (error) {
+          console.error('❌ Multiple image upload error:', error);
+          // Continue with existing URLs if available
+          multipleImageUrls = formData.eventImageUrls.filter(url => url.startsWith('http'));
+        }
+      } else {
+        // Use existing URLs if no new images
+        multipleImageUrls = formData.eventImageUrls.filter(url => url.startsWith('http'));
+      }
+
+      // Combine single image and multiple images
+      const finalImageUrls = multipleImageUrls.length > 0 
+        ? multipleImageUrls 
+        : (imageUrl ? [imageUrl] : []);
+
       let layoutImageUrl = formData.layoutImageUrl;
 
       // Upload layout image to Supabase storage if a new layout image is selected
@@ -540,8 +655,8 @@ export const CreateEvent: React.FC = () => {
         created_by: user?.id || null, // Allow null for unauthenticated users
         vendor_ids: selectedVendors,
         exhibitor_ids: selectedExhibitors,
-        // Image field
-        event_image_url: imageUrl,
+        // Image field - store as JSON array for multiple images
+        event_image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : '',
         // Layout image field
         layout_image_url: layoutImageUrl,
         // Pricing & Availability
@@ -694,6 +809,9 @@ export const CreateEvent: React.FC = () => {
                     totalRevenue: 0,
                     eventImage: null,
                     eventImageUrl: '',
+                    // Multiple Event Images Field
+                    eventImages: [],
+                    eventImageUrls: [],
                     layoutImage: null,
                     layoutImageUrl: '',
                     venueFacilities: [],
@@ -963,7 +1081,59 @@ export const CreateEvent: React.FC = () => {
                     Event Flyers *
                   </label>
                   <div className="space-y-4">
-                    {formData.eventImageUrl ? (
+                    {/* Multiple Image Upload */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length > 0) handleMultipleImageUpload(files);
+                        }}
+                        className="hidden"
+                        id="event-images-upload"
+                      />
+                      <label
+                        htmlFor="event-images-upload"
+                        className="cursor-pointer flex flex-col items-center space-y-2"
+                      >
+                        <Upload className="h-8 w-8 text-gray-400" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">
+                            Click to upload event flyers
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            PNG, JPG, GIF up to 5MB each (Max 10 images)
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Display Uploaded Images */}
+                    {formData.eventImageUrls.length > 0 && (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {formData.eventImageUrls.map((imageUrl, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={imageUrl}
+                              alt={`Event flyer ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-lg border border-gray-300"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeImageAtIndex(index)}
+                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Legacy Single Image Support */}
+                    {formData.eventImageUrl && formData.eventImageUrls.length === 0 && (
                       <div className="relative">
                         <img
                           src={formData.eventImageUrl}
@@ -978,41 +1148,14 @@ export const CreateEvent: React.FC = () => {
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                    ) : (
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleImageUpload(file);
-                          }}
-                          className="hidden"
-                          id="event-image-upload"
-                        />
-                        <label
-                          htmlFor="event-image-upload"
-                          className="cursor-pointer flex flex-col items-center space-y-2"
-                        >
-                          <Upload className="h-8 w-8 text-gray-400" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">
-                              Click to upload event image
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              PNG, JPG, GIF up to 5MB
-                            </p>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-                    {errors.eventImage && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.eventImage}
-                      </p>
                     )}
                   </div>
+                  {errors.eventImage && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-1" />
+                      {errors.eventImage}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout/Layout';
+import { useAutoLogout } from './hooks/useAutoLogout';
+import { AutoLogoutWarning } from './components/AutoLogoutWarning';
 
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -146,9 +148,13 @@ const AppRoutes: React.FC = () => {
 
 function App() {
   const { isLoading } = useAuth();
+  
+  // Initialize auto-logout functionality for the entire app
+  useAutoLogout();
 
   return (
     <Router>
+      <AutoLogoutWarning />
       {isLoading ? (
         <div className="min-h-screen flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
