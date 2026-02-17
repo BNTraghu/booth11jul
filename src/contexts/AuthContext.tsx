@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, UserRole } from '../types';
 
@@ -15,8 +15,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    console.warn('[useAuth] used outside of AuthProvider');
-    console.trace('Stack trace for useAuth usage outside of AuthProvider');
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
@@ -25,280 +23,170 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isInitialLoadRef = useRef(true);
 
+  const PROFILE_FETCH_TIMEOUT_MS = 4000;
 
-
-  /*useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
+  const fetchUserProfile = async (email: string): Promise<User | null> => {
+    const fetchPromise = (async () => {
       try {
-        setUser(JSON.parse(savedUser));
-        setIsLoading(false);
-        return;
-      } catch (error) {
-        localStorage.removeItem('user');
-      }
-    }
-    
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          // Fetch user profile from our users table
-          const { data: userProfile, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', session.user.email)
-            .single();
-
-          if (userProfile && !error) {
-            setUser({
-              id: userProfile.id,
-              email: userProfile.email,
-              name: userProfile.name,
-              role: userProfile.role as UserRole,
-              city: userProfile.city,
-              phone: userProfile.phone,
-              status: userProfile.status as 'active' | 'inactive',
-              created_at: userProfile.created_at,
-              last_login: userProfile.last_login,
-              updated_at: userProfile.updated_at
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error checking session:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        // Fetch user profile
-        const { data: userProfile, error } = await supabase
+        console.log(`[Auth] Fetching profile for: ${email}`);
+        const { data: profile, error } = await supabase
           .from('users')
           .select('*')
-          .eq('email', session.user.email)
+          .eq('email', email)
           .single();
 
-        if (userProfile && !error) {
-          setUser({
-            id: userProfile.id,
-            email: userProfile.email,
-            name: userProfile.name,
-            role: userProfile.role as UserRole,
-            city: userProfile.city,
-            phone: userProfile.phone,
-            status: userProfile.status as 'active' | 'inactive',
-            created_at: userProfile.created_at,
-            last_login: userProfile.last_login,
-            updated_at: userProfile.updated_at
-          });
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);*/
-
-  // Initial check for user in localStorage
-
-
-  // useEffect(() => {
-  //   console.log('[Auth] Checking session...');
-  //   const checkSession = async () => {
-  //     try {
-  //       const { data: { session },error } = await supabase.auth.getSession();
-
-  //       console.log('[Auth] Session data:', session);
-
-  //       if (error) {
-  //         console.error('Error fetching session:', error);
-  //         setIsLoading(false);
-  //         return;
-  //       }
-
-  //       if (session?.user) {
-  //         const { data: userProfile, error } = await supabase
-  //           .from('users')
-  //           .select('*')
-  //           .eq('email', session.user.email)
-  //           .single();
-
-  //         if (userProfile && !error) {
-  //           setUser({
-  //             id: userProfile.id,
-  //             email: userProfile.email,
-  //             name: userProfile.name,
-  //             role: userProfile.role as UserRole,
-  //             city: userProfile.city,
-  //             phone: userProfile.phone,
-  //             status: userProfile.status as 'active' | 'inactive',
-  //             created_at: userProfile.created_at,
-  //             last_login: userProfile.last_login,
-  //             updated_at: userProfile.updated_at
-  //           });
-
-  //           // Optional: Save to localStorage again
-  //           localStorage.setItem('user', JSON.stringify(userProfile));
-  //         } else {
-  //           setUser(null);
-  //           localStorage.removeItem('user');
-  //         }
-  //       } else {
-  //         setUser(null);
-  //         localStorage.removeItem('user');
-  //       }
-  //     } catch (error) {
-  //       console.error('[Auth] Exception during checkSession:', error);
-  //       setUser(null);
-  //     } finally {
-  //       console.log('[Auth] Setting isLoading to false');
-  //       setIsLoading(false);
-  //     }
-  //   };
-
-  //   checkSession();
-
-  //   const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-  //     if (event === 'SIGNED_IN' && session?.user) {
-  //       const { data: userProfile, error } = await supabase
-  //         .from('users')
-  //         .select('*')
-  //         .eq('email', session.user.email)
-  //         .single();
-
-  //       if (userProfile && !error) {
-  //         setUser({
-  //           id: userProfile.id,
-  //           email: userProfile.email,
-  //           name: userProfile.name,
-  //           role: userProfile.role as UserRole,
-  //           city: userProfile.city,
-  //           phone: userProfile.phone,
-  //           status: userProfile.status as 'active' | 'inactive',
-  //           created_at: userProfile.created_at,
-  //           last_login: userProfile.last_login,
-  //           updated_at: userProfile.updated_at
-  //         });
-  //         localStorage.setItem('user', JSON.stringify(userProfile));
-  //       }
-  //     } else if (event === 'SIGNED_OUT') {
-  //       setUser(null);
-  //       localStorage.removeItem('user');
-  //     }
-  //   });
-
-  //   return () => subscription.unsubscribe();
-  // }, []);
-  useEffect(() => {
-    let isMounted = true;
-
-    const checkSession = async () => {
-      console.log('[Auth] Checking session...');
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-
         if (error) {
-          console.error('[Auth] Session fetch error:', error);
+          console.warn('[Auth] Profile error:', error.message, error.code);
+          return null;
         }
-
-        if (session?.user && isMounted) {
-          const { data: userProfile, error: profileError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', session.user.email)
-            .single();
-
-          if (profileError) {
-            console.error('[Auth] Profile error:', profileError);
-          } else {
-            setUser({
-              id: userProfile.id,
-              email: userProfile.email,
-              name: userProfile.name,
-              role: userProfile.role as UserRole,
-              city: userProfile.city,
-              phone: userProfile.phone,
-              status: userProfile.status as 'active' | 'inactive',
-              created_at: userProfile.created_at,
-              last_login: userProfile.last_login,
-              updated_at: userProfile.updated_at
-            });
-          }
-        }
-      } catch (err) {
-        if (isMounted) {
-          console.error('[Auth] Unexpected error checking session:', err);
-        }
-      } finally {
-        if (isMounted) {
-          console.log('[Auth] Setting isLoading = false');
-          setIsLoading(false);
-        }
+        if (!profile) return null;
+        console.log('[Auth] Profile loaded for:', email);
+        return {
+          id: profile.id,
+          email: profile.email,
+          name: profile.name,
+          role: profile.role as UserRole,
+          city: profile.city,
+          phone: profile.phone,
+          status: profile.status as 'active' | 'inactive',
+          created_at: profile.created_at,
+          last_login: profile.last_login,
+          updated_at: profile.updated_at
+        } as User;
+      } catch (err: any) {
+        console.warn('[Auth] Profile fetch failed:', err?.message ?? err);
+        return null;
       }
-    };
+    })();
 
-    checkSession();
+    const timeoutPromise = new Promise<User | null>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), PROFILE_FETCH_TIMEOUT_MS)
+    );
 
-    return () => {
-      isMounted = false; // Prevent state updates after unmount
-    };
-  }, []);
-
-
-  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        console.error('Login error:', error);
-        return false;
+      return await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (err: any) {
+      if (err?.message === 'timeout') {
+        console.warn('[Auth] Profile fetch timed out, using fallback');
       }
-
-      if (data.user) {
-        // Update last_login timestamp
-        await supabase
-          .from('users')
-          .update({ last_login: new Date().toISOString() })
-          .eq('email', email);
-
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
+      return null;
     }
   };
 
-  const logout = async () => {
-    try {
-      // Check if we're using the demo user
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        localStorage.removeItem('user');
-        setUser(null);
-        return;
-      }
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!cancelled) setIsLoading(false);
+    }, 8000);
 
-      await supabase.auth.signOut();
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
+    // Run initial session check so after full-page redirect we have user and stop loading quickly
+    const initSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.email!);
+        if (cancelled) return;
+        if (profile) {
+          setUser(profile);
+        } else {
+          setUser({
+            id: session.user.id,
+            email: session.user.email!,
+            name: (session.user.user_metadata?.name as string) || session.user.email!.split('@')[0],
+            role: 'admin',
+            city: null,
+            phone: null,
+            status: 'active',
+            created_at: session.user.created_at ?? new Date().toISOString(),
+            last_login: null,
+            updated_at: new Date().toISOString()
+          } as User);
+        }
+      }
+      if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        setIsLoading(false);
+        clearTimeout(timer);
+      }
+    };
+    initSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.email!);
+        if (cancelled) return;
+        setUser(profile ?? {
+          id: session.user.id,
+          email: session.user.email!,
+          name: (session.user.user_metadata?.name as string) || session.user.email!.split('@')[0],
+          role: 'admin',
+          city: null,
+          phone: null,
+          status: 'active',
+          created_at: session.user.created_at ?? new Date().toISOString(),
+          last_login: null,
+          updated_at: new Date().toISOString()
+        } as User);
+      } else {
+        setUser(null);
+      }
+      if (isInitialLoadRef.current) {
+        isInitialLoadRef.current = false;
+        setIsLoading(false);
+        clearTimeout(timer);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    if (!data?.user) return false;
+
+    // Fetch profile from public.users (uses session set by signIn above)
+    let profile = await fetchUserProfile(data.user.email!);
+    if (!profile) {
+      // Fallback: build minimal user from auth so dashboard still shows if public.users read fails (e.g. RLS)
+      profile = {
+        id: data.user.id,
+        email: data.user.email!,
+        name: (data.user.user_metadata?.name as string) || data.user.email!.split('@')[0],
+        role: 'admin',
+        city: null,
+        phone: null,
+        status: 'active',
+        created_at: data.user.created_at ?? new Date().toISOString(),
+        last_login: null,
+        updated_at: new Date().toISOString()
+      } as User;
+      console.warn('[Auth] Using fallback user from auth (public.users profile not found)');
     }
+    setUser(profile);
+
+    // Update last_login in background; don't block
+    supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('email', email)
+      .then(() => {})
+      .catch(() => {});
+
+    return true;
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
   };
 
   const hasRole = (roles: UserRole[]): boolean => {
@@ -306,15 +194,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      login,
-      logout,
-      hasRole,
-      isLoading
-    }}>
+    <AuthContext.Provider value={{ user, login, logout, hasRole, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
 };
-

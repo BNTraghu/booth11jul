@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Building2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -27,46 +26,18 @@ export const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      console.log('Attempting login with:', { email });
-      
-      // For demo purposes, allow login with demo credentials without Supabase
-      if (email === 'demo@boothbuzz.com' && password === 'demo123') {
-        // Create a mock user
-        const mockUser = {
-          id: '00000000-0000-0000-0000-000000000001',
-          email: 'demo@boothbuzz.com',
-          name: 'Demo User',
-          role: 'super_admin',
-          city: 'Mumbai',
-          phone: '+91-9876543200',
-          status: 'active',
-          created_at: new Date().toISOString(),
-          last_login: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        
-        // Store in localStorage to simulate login
-        localStorage.setItem('user', JSON.stringify(mockUser));
-        
-        // Redirect to dashboard
-        window.location.href = '/dashboard';
-        return;
-      }
-      
       const success = await login(email, password);
 
       if (success) {
-        window.location.href = '/dashboard';
+        // Full page redirect so app re-initializes with session and shows dashboard
+        window.location.replace('/dashboard');
         return;
       }
 
-      if (!success) {
-        setError('Invalid email or password');
-        console.log('Login failed: Invalid credentials');
-      }
-    } catch (err) {
+      setError('Invalid email or password');
+    } catch (err: any) {
       console.error('Login error:', err);
-      setError('Login failed. Please try again.');
+      setError(err?.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

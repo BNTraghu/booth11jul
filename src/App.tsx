@@ -165,10 +165,4 @@ function App() {
     </Router>
   );
 }
-export default () => (
-  <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  </React.StrictMode>
-);
+export default App;

@@ -8,6 +8,7 @@ import { Button } from '../components/UI/Button';
 import { Event } from '../types';
 import { supabase } from '../lib/supabase';
 import { useEvents, useVenues, useVendors, useExhibitors } from '../hooks/useSupabaseData';
+import { useAuth } from '../contexts/AuthContext';
 
 interface StallConfigRow {
   id: string;
@@ -2776,10 +2777,7 @@ export const Events: React.FC = () => {
                     {exhibitorSearchTerm && (
                       <p className="text-xs text-gray-600">
                         {(() => {
-                          const interestedExhibitors = exhibitors.filter(exhibitor => 
-                            (exhibitorUpdates[exhibitor.id] || exhibitor.status) === 'interested'
-                          );
-                          const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
+                          const filteredExhibitors = exhibitors.filter((exhibitor) => {
                           const searchLower = exhibitorSearchTerm.toLowerCase();
                           return (
                             (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
@@ -2790,7 +2788,7 @@ export const Events: React.FC = () => {
                             (exhibitor.category || '').toLowerCase().includes(searchLower)
                           );
                           });
-                          return `Showing ${filteredExhibitors.length} of ${interestedExhibitors.length} interested exhibitors`;
+                          return `Showing ${filteredExhibitors.length} of ${exhibitors.length} exhibitors`;
                         })()}
                       </p>
                     )}
@@ -2803,13 +2801,11 @@ export const Events: React.FC = () => {
                 {/* Exhibitors Table */}
                 <div className="overflow-x-auto">
                   {(() => {
-                    // Filter exhibitors to only show those with "interested" status
-                    const interestedExhibitors = exhibitors.filter(exhibitor => 
-                      (exhibitorUpdates[exhibitor.id] || exhibitor.status) === 'interested'
-                    );
+                    // Show all exhibitors but allow filtering by search
+                    const allExhibitors = exhibitors;
                     
-                    // Apply search filter on top of status filter
-                    const filteredExhibitors = interestedExhibitors.filter((exhibitor) => {
+                    // Apply search filter
+                    const filteredExhibitors = allExhibitors.filter((exhibitor) => {
                                   if (!exhibitorSearchTerm) return true;
                                   const searchLower = exhibitorSearchTerm.toLowerCase();
                                   return (
@@ -2822,12 +2818,11 @@ export const Events: React.FC = () => {
                                   );
                                 });
 
-                    if (interestedExhibitors.length === 0) {
+                    if (allExhibitors.length === 0) {
                                   return (
                         <div className="text-center py-8">
                           <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">No interested exhibitors found</p>
-                          <p className="text-sm text-gray-500">Only exhibitors with "interested" status are shown here</p>
+                          <p className="text-gray-600">No exhibitors found</p>
                         </div>
                       );
                     }

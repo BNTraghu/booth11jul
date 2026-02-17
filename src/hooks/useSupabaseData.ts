@@ -336,3 +336,27 @@ export const useExhibitors = () => {
 
   return { exhibitors, loading, error, refetch };
 };
+
+export const useSocieties = () => {
+  const { data, loading, error, refetch } = useSupabaseData<any>('societies', '*', [], 
+    { order: { column: 'name', ascending: true } });
+  
+  const societies: any[] = data.map((society: any) => ({
+    id: society.id,
+    name: society.name,
+    location: society.location,
+    contactPerson: society.contact_person,
+    email: society.email,
+    phone: society.phone,
+    memberCount: society.member_count || 0,
+    facilities: society.facilities || [],
+    activeEvents: society.active_events || 0,
+    totalRevenue: society.total_revenue || 0,
+    status: society.status,
+    joinedDate: society.joined_date,
+    created_at: society.created_at,
+    updated_at: society.updated_at
+  }));
+
+  return { societies, loading, error, refetch };
+};

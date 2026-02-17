@@ -20,7 +20,6 @@ import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { mockEvents } from '../data/mockData';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';

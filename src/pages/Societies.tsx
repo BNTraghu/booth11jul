@@ -5,11 +5,12 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { mockSocieties } from '../data/mockData';
 import { Society } from '../types';
+import { useSocieties } from '../hooks/useSupabaseData';
+import { supabase } from '../lib/supabase';
 
 export const Societies: React.FC = () => {
-  const [societies, setSocieties] = useState(mockSocieties);
+  const { societies, loading, error, refetch } = useSocieties();
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSociety, setSelectedSociety] = useState<Society | null>(null);
@@ -53,22 +54,46 @@ export const Societies: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editFormData) {
-      setSocieties(prev => prev.map(society => 
-        society.id === editFormData.id ? editFormData : society
-      ));
-      setShowEditModal(false);
-      setEditFormData(null);
-      setSelectedSociety(null);
+      const { error } = await supabase
+        .from('societies')
+        .update({
+          name: editFormData.name,
+          location: editFormData.location,
+          contact_person: editFormData.contactPerson,
+          email: editFormData.email,
+          phone: editFormData.phone,
+          member_count: editFormData.memberCount,
+          status: editFormData.status,
+        })
+        .eq('id', editFormData.id);
+
+      if (!error) {
+        setShowEditModal(false);
+        setEditFormData(null);
+        setSelectedSociety(null);
+        refetch();
+      } else {
+        alert('Failed to update society: ' + error.message);
+      }
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (selectedSociety) {
-      setSocieties(prev => prev.filter(society => society.id !== selectedSociety.id));
-      setShowDeleteModal(false);
-      setSelectedSociety(null);
+      const { error } = await supabase
+        .from('societies')
+        .delete()
+        .eq('id', selectedSociety.id);
+
+      if (!error) {
+        setShowDeleteModal(false);
+        setSelectedSociety(null);
+        refetch();
+      } else {
+        alert('Failed to delete society: ' + error.message);
+      }
     }
   };
 
@@ -79,6 +104,24 @@ export const Societies: React.FC = () => {
     setSelectedSociety(null);
     setEditFormData(null);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 text-center text-red-600">
+        <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+        <p>Error loading societies: {error}</p>
+        <Button onClick={() => refetch()} className="mt-4">Retry</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
