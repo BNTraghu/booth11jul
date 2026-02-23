@@ -43,8 +43,8 @@ const navigation: NavItem[] = [
   { name: 'Calendar', href: '/calendar', icon: Calendar, roles: ALL_ROLES },
   { name: 'Plans & Billing', href: '/billing', icon: CreditCard, roles: ALL_ROLES },
   { name: 'Ads & Sponsors', href: '/ads-sponsors', icon: Megaphone, roles: ALL_ROLES },
-  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ALL_ROLES },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ALL_ROLES },
+  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['super_admin', 'admin'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['super_admin'] },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {

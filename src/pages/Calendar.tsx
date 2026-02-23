@@ -295,7 +295,7 @@ export const Calendar: React.FC = () => {
     event: CalendarEvent | null;
     mode: 'create' | 'edit';
   }>({ isOpen: false, event: null, mode: 'create' });
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const [hoveredEvent, setHoveredEvent] = useState<CalendarEvent | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
@@ -316,7 +316,8 @@ export const Calendar: React.FC = () => {
       console.log('Fetching events from Supabase...');
       
       // Now fetch with the correct column names based on the actual table structure
-      const { data, error } = await supabase
+      // Super Admin sees all events; other users see only their organization's events
+      let query = supabase
         .from('events')
         .select(`
           id,
@@ -331,6 +332,12 @@ export const Calendar: React.FC = () => {
           updated_at
         `)
         .order('event_date', { ascending: true });
+
+      if (!isSuperAdmin && user?.organizationId) {
+        query = query.eq('organization_id', user.organizationId);
+      }
+
+      const { data, error } = await query;
 
       console.log('Supabase response:', { data, error });
 
@@ -488,7 +495,7 @@ export const Calendar: React.FC = () => {
 
   useEffect(() => {
     fetchEvents();
-  }, []);
+  }, [user?.organizationId, isSuperAdmin]);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);

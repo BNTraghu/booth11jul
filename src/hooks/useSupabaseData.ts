@@ -84,7 +84,7 @@ export const useUsers = () => {
     }
   );
 
-  const users: User[] = data.map((user: any) => {
+  const mapped: User[] = data.map((user: any) => {
     const org = user.organizations;
     return {
       id: user.id,
@@ -115,6 +115,9 @@ export const useUsers = () => {
       organizationName: org?.name ?? null,
     } as User;
   });
+
+  // Only Super Admin can see other Super Admin users; other roles never see them in the list
+  const users = isSuperAdmin ? mapped : mapped.filter((u) => u.role !== 'super_admin');
 
   return { users, loading, error, refetch };
 };

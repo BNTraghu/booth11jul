@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -22,6 +22,8 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface ReportData {
   period: string;
@@ -75,10 +77,42 @@ const mockCityPerformance: CityPerformance[] = [
   { city: 'Chennai', events: 38, revenue: 1050000, societies: 12, growth: 8.9 }
 ];
 
+interface OrgOption {
+  id: string;
+  name: string;
+}
+
 export const Reports: React.FC = () => {
+  const { user, isSuperAdmin, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'financial' | 'performance' | 'custom'>('overview');
   const [dateRange, setDateRange] = useState('last_6_months');
   const [selectedCity, setSelectedCity] = useState('all');
+  // Super Admin: 'all' = collective reports for all orgs; otherwise org id for single-org view
+  const [selectedReportOrgId, setSelectedReportOrgId] = useState<string>('all');
+  const [organizations, setOrganizations] = useState<OrgOption[]>([]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      supabase
+        .from('organizations')
+        .select('id, name')
+        .order('name')
+        .then(({ data }) => setOrganizations((data as OrgOption[]) || []));
+    }
+  }, [isSuperAdmin]);
+
+  if (!hasRole(['super_admin', 'admin'])) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-gray-600">You don&apos;t have access to reports. Only Admin (for your organization) and Super Admin can view reports.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const totalRevenue = mockReportData.reduce((sum, data) => sum + data.revenue, 0);
   const totalEvents = mockReportData.reduce((sum, data) => sum + data.events, 0);
@@ -95,12 +129,35 @@ export const Reports: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600">Comprehensive insights and performance metrics</p>
+          <p className="text-gray-600">
+            {isSuperAdmin ? (
+              selectedReportOrgId === 'all'
+                ? 'Collective insights across all organizations'
+                : `Reports for: ${organizations.find((o) => o.id === selectedReportOrgId)?.name ?? 'Selected organization'}`
+            ) : (
+              <>Organization: {user?.organizationName ?? 'Your organization'}</>
+            )}
+          </p>
+          {isSuperAdmin && (
+            <div className="mt-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">View</label>
+              <select
+                value={selectedReportOrgId}
+                onChange={(e) => setSelectedReportOrgId(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[200px]"
+              >
+                <option value="all">All organizations (collective)</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-3">
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
