@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { User, Event, Venue, Vendor, Exhibitor } from '../types';
+
+export type UseSupabaseDataOptions = {
+  limit?: number;
+  order?: { column: string; ascending?: boolean };
+  /** When set and not super admin, filter by this organization (org-level users see only their org). */
+  organizationId?: string | null;
+  isSuperAdmin?: boolean;
+};
 
 // Generic hook for fetching data from Supabase
 export function useSupabaseData<T>(
   table: string,
   select: string = '*',
   dependencies: any[] = [],
-  options: { limit?: number; order?: { column: string; ascending?: boolean } } = {}
+  options: UseSupabaseDataOptions = {}
 ) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,26 +25,27 @@ export function useSupabaseData<T>(
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Start building the query
+
       let query = supabase
         .from(table)
         .select(select);
-      
-      // Add ordering if specified
+
+      // Org scoping: non–super-admin users see only their organization's data
+      if (options.organizationId != null && options.organizationId !== '' && options.isSuperAdmin !== true) {
+        query = query.eq('organization_id', options.organizationId);
+      }
+
       if (options.order) {
         query = query.order(
-          options.order.column, 
+          options.order.column,
           { ascending: options.order.ascending ?? false }
         );
       }
-      
-      // Add limit if specified
+
       if (options.limit) {
         query = query.limit(options.limit);
       }
-      
-      // Execute the query
+
       const { data: result, error } = await query;
 
       if (error) {
@@ -55,18 +65,28 @@ export function useSupabaseData<T>(
 
   useEffect(() => {
     fetchData();
-  }, [...dependencies]);
+  }, [...dependencies, options.organizationId, options.isSuperAdmin]);
 
   return { data, loading, error, refetch: () => fetchData() };
 }
 
-// Specific hooks for each entity
+// Specific hooks for each entity (org-scoped: non–super-admin see only their organization)
 export const useUsers = () => {
-  const { data, loading, error, refetch } = useSupabaseData<any>('users');
-  
-  // Transform data to match our enhanced User interface
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'users',
+    '*, organizations!users_organization_id_fkey ( name )',
+    [user?.organizationId, isSuperAdmin],
+    {
+      order: { column: 'created_at', ascending: false },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+    }
+  );
+
   const users: User[] = data.map((user: any) => {
-    const transformedUser = {
+    const org = user.organizations;
+    return {
       id: user.id,
       email: user.email,
       name: user.name,
@@ -74,7 +94,6 @@ export const useUsers = () => {
       city: user.city,
       phone: user.phone,
       status: user.status,
-      // Additional fields
       firstName: user.first_name,
       lastName: user.last_name,
       address: user.address,
@@ -91,25 +110,34 @@ export const useUsers = () => {
       preferences: user.preferences,
       last_login: user.last_login,
       created_at: user.created_at,
-      updated_at: user.updated_at
-    };
-    
-    return transformedUser;
+      updated_at: user.updated_at,
+      organizationId: user.organization_id ?? null,
+      organizationName: org?.name ?? null,
+    } as User;
   });
 
   return { users, loading, error, refetch };
 };
 
 export const useEvents = () => {
-  const { data, loading, error, refetch } = useSupabaseData<any>('events', `
-    *,
-    venue:venues(name)
-  `, [], { order: { column: 'created_at', ascending: false }, limit: 50 });
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'events',
+    `*, venue:venues(name)`,
+    [user?.organizationId, isSuperAdmin],
+    {
+      order: { column: 'created_at', ascending: false },
+      limit: 50,
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+    }
+  );
   
   // Transform data to match our Event interface
   const events: Event[] = data.map((event: any) => {
     const transformedEvent = {
       id: event.id,
+      organizationId: event.organization_id ?? null,
       title: event.title,
       description: event.description,
       date: event.event_date,
@@ -152,13 +180,23 @@ export const useEvents = () => {
 };
 
 export const useVenues = () => {
-  const { data, loading, error, refetch } = useSupabaseData<any>('venues', '*', [], 
-    { order: { column: 'name', ascending: true } });
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'venues',
+    '*',
+    [user?.organizationId, isSuperAdmin],
+    {
+      order: { column: 'name', ascending: true },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+    }
+  );
   
   // Transform data to match our Venue interface
   const venues: Venue[] = data.map((venue: any) => {
     const transformedVenue = {
       id: venue.id,
+      organizationId: venue.organization_id ?? null,
       name: venue.name,
       location: venue.location,
       contactPerson: venue.contact_person,
@@ -220,12 +258,21 @@ export const useVenues = () => {
 };
 
 export const useVendors = () => {
-  const { data, loading, error, refetch } = useSupabaseData<any>('vendors', '*', [],
-    { order: { column: 'name', ascending: true } });
-  
-  // Transform data to match our Vendor interface
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'vendors',
+    '*',
+    [user?.organizationId, isSuperAdmin],
+    {
+      order: { column: 'name', ascending: true },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+    }
+  );
+
   const vendors: Vendor[] = data.map((vendor: any) => ({
     id: vendor.id,
+    organizationId: vendor.organization_id ?? null,
     name: vendor.name,
     category: vendor.category,
     city: vendor.city,

@@ -32,6 +32,8 @@ export interface User {
   last_login?: string | null;
   created_at: string;
   updated_at: string;
+  organizationId?: string | null;
+  organizationName?: string | null;
 }
 
 export type UserRole = 
@@ -39,6 +41,10 @@ export type UserRole =
   | 'admin'
   | 'support_tech'
   | 'sales_marketing'
+  | 'accounts'
+  | 'sales'
+  | 'marketing'
+  | 'city_head'
   // | 'legal'
   | 'logistics'
   | 'accounting'
@@ -103,6 +109,7 @@ export interface Event {
   inSiteStalls?: StallConfig[] | null; // in_site_stalls from DB
   outSiteStalls?: StallConfig[] | null; // out_site_stalls from DB
   allStalls?: string[] | null; // all_stalls from DB
+  organizationId?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +128,7 @@ export interface Venue {
   totalRevenue: number; // total_revenue from DB
   status: 'active' | 'inactive' | 'pending';
   joinedDate?: string | null; // joined_date from DB
+  organizationId?: string | null;
   // Extended fields
   addressLine1?: string | null; // address_line1 from DB
   addressLine2?: string | null; // address_line2 from DB
@@ -180,6 +188,7 @@ export interface Vendor {
   completedJobs: number; // completed_jobs from DB
   status: 'active' | 'inactive';
   priceRange?: string | null; // price_range from DB
+  organizationId?: string | null;
   created_at: string;
   updated_at: string;
 }

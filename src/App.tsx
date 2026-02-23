@@ -7,6 +7,7 @@ import { AutoLogoutWarning } from './components/AutoLogoutWarning';
 
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { Organizations } from './pages/Organizations';
 import { Users } from './pages/Users';
 import { AddUser } from './pages/AddUser';
 import { Events } from './pages/Events';
@@ -44,6 +45,11 @@ const AppRoutes: React.FC = () => {
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <Dashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/organizations" element={
+        <ProtectedRoute>
+          <Organizations />
         </ProtectedRoute>
       } />
       <Route path="/users" element={

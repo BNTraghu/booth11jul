@@ -27,10 +27,12 @@ interface FormData {
   phone: string;
   role: string;
   city: string;
+  organizationId: string;
   password: string;
   confirmPassword: string;
   status: 'active' | 'inactive';
   sendWelcomeEmail: boolean;
+  sendInvite: boolean;
 }
 
 interface FormErrors {
@@ -73,18 +75,52 @@ const rolePermissions = {
     description: 'Vendor and supply management',
     permissions: ['Vendor management', 'Supply chain', 'Inventory management', 'Logistics coordination'],
     color: 'default'
+  },
+  accounts: {
+    label: 'Accounts',
+    description: 'Accounts and finance',
+    permissions: ['Financial reports', 'Invoice management', 'Payment tracking'],
+    color: 'default'
+  },
+  sales: {
+    label: 'Sales',
+    description: 'Sales operations',
+    permissions: ['Lead management', 'Sales reports', 'Customer relations'],
+    color: 'success'
+  },
+  marketing: {
+    label: 'Marketing',
+    description: 'Marketing operations',
+    permissions: ['Marketing campaigns', 'Brand management', 'Content'],
+    color: 'success'
+  },
+  city_head: {
+    label: 'City Head',
+    description: 'City-level lead',
+    permissions: ['City operations', 'Local team management', 'City reports'],
+    color: 'warning'
   }
 };
 
 const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad', 'Kolkata', 'Ahmedabad'];
 
+const ORG_ROLES: (keyof typeof rolePermissions)[] = ['admin', 'accounts', 'sales', 'marketing', 'city_head', 'support_tech', 'logistics', 'accounting', 'sales_marketing'];
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+interface OrgOption {
+  id: string;
+  name: string;
+}
+
 export const AddUser: React.FC = () => {
   const navigate = useNavigate();
-  const { hasRole } = useAuth();
+  const { hasRole, isSuperAdmin, isOrgAdmin } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [organizations, setOrganizations] = useState<OrgOption[]>([]);
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -92,16 +128,17 @@ export const AddUser: React.FC = () => {
     phone: '',
     role: '',
     city: '',
+    organizationId: '',
     password: '',
     confirmPassword: '',
     status: 'active',
-    sendWelcomeEmail: true
+    sendWelcomeEmail: true,
+    sendInvite: false
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
 
-  // Only super admins can access this page
-  if (!hasRole(['super_admin'])) {
+  if (!hasRole(['super_admin', 'admin'])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -111,6 +148,17 @@ export const AddUser: React.FC = () => {
       </div>
     );
   }
+
+  const isOrgAdminFlow = isOrgAdmin;
+  const roleOptions = ORG_ROLES;
+  const adminWithoutOrg = hasRole(['admin']) && !isOrgAdmin;
+
+  React.useEffect(() => {
+    if (!isSuperAdmin) return;
+    supabase.from('organizations').select('id, name').order('name').then(({ data }) => {
+      setOrganizations(data || []);
+    });
+  }, [isSuperAdmin]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -130,41 +178,47 @@ export const AddUser: React.FC = () => {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Phone validation
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (formData.phone.length > 10) {
-      newErrors.phone = 'Phone number must be less than 10 digits';
-    } else if (formData.phone.length < 10) {
-      newErrors.phone = 'Phone number must be at least 10 digits';
-    } else if (!/^[0-9]{10}$/.test(formData.phone)) {
-      newErrors.phone = 'Phone number must contain only digits';
+    if (!isOrgAdminFlow) {
+      if (!formData.phone.trim()) {
+        newErrors.phone = 'Phone number is required';
+      } else if (formData.phone.length > 10 || formData.phone.length < 10 || !/^[0-9]{10}$/.test(formData.phone)) {
+        newErrors.phone = 'Phone number must be 10 digits';
+      }
     }
 
-    // Role validation
     if (!formData.role) {
       newErrors.role = 'Role is required';
     }
 
-    // City validation (required for non-super admin roles)
-    if (formData.role !== 'super_admin' && !formData.city) {
+    if (isSuperAdmin && !formData.organizationId) {
+      newErrors.organizationId = 'Organization is required';
+    }
+
+    if (!isOrgAdminFlow && !isSuperAdmin && formData.role && !formData.city) {
       newErrors.city = 'City is required for this role';
     }
 
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and number';
-    }
-
-    // Confirm password validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+    if (isOrgAdminFlow) {
+      if (!formData.sendInvite) {
+        if (!formData.password || formData.password.length < 6) {
+          newErrors.password = 'Password is required (min 6 characters) when not sending invite';
+        } else if (formData.password !== formData.confirmPassword) {
+          newErrors.confirmPassword = 'Passwords do not match';
+        }
+      }
+    } else {
+      if (!formData.password) {
+        newErrors.password = 'Password is required';
+      } else if (formData.password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters';
+      } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+        newErrors.password = 'Password must contain uppercase, lowercase, and number';
+      }
+      if (!formData.confirmPassword) {
+        newErrors.confirmPassword = 'Please confirm your password';
+      } else if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords do not match';
+      }
     }
 
     setErrors(newErrors);
@@ -182,15 +236,49 @@ export const AddUser: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
+    if (adminWithoutOrg) return;
+    if (!validateForm()) return;
     setIsSubmitting(true);
 
     try {
-      // Step 1: Create user in Supabase Auth
+      if (isOrgAdminFlow) {
+        const { data: { session }, error: refreshErr } = await supabase.auth.refreshSession();
+        const token = session?.access_token?.trim();
+        if (refreshErr || !token) throw new Error(refreshErr?.message || 'Not authenticated. Log out and log in again.');
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/create-org-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            email: formData.email.trim(),
+            name: formData.name.trim(),
+            role: formData.role,
+            password: formData.sendInvite ? undefined : formData.password,
+            sendInvite: formData.sendInvite,
+            phone: formData.phone?.trim() || undefined,
+            city: formData.city?.trim() || undefined,
+          }),
+        });
+        let json: { error?: string; message?: string } = {};
+        try {
+          json = await res.json();
+        } catch {
+          if (!res.ok) throw new Error(res.status === 401 ? 'Session expired. Log out and log in again.' : `Request failed (${res.status}). Try again.`);
+        }
+        if (!res.ok) {
+          const msg = json.error || json.message || (typeof json === 'object' && json !== null && 'msg' in json ? (json as { msg?: string }).msg : null) || `Failed to create user (${res.status}). ${res.status === 422 ? 'Email may already be registered.' : ''}`.trim();
+          throw new Error(msg);
+        }
+        setSubmitSuccess(true);
+        setTimeout(() => navigate('/users'), 2000);
+        return;
+      }
+
+      // Super-admin path: client signUp cannot set email_confirm. For new users to log in
+      // without clicking a link, either disable "Confirm email" in Supabase Dashboard
+      // (Auth → Providers → Email) or create users via an Edge Function with email_confirm: true.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -198,21 +286,14 @@ export const AddUser: React.FC = () => {
           data: {
             name: formData.name,
             role: formData.role,
-            city: formData.role === 'super_admin' ? null : formData.city,
+            city: formData.city || null,
             phone: formData.phone
           }
         }
       });
+      if (authError) throw new Error(authError.message);
+      if (!authData.user) throw new Error('Failed to create user account');
 
-      if (authError) {
-        throw new Error(authError.message);
-      }
-
-      if (!authData.user) {
-        throw new Error('Failed to create user account');
-      }
-
-      // Step 2: Insert user profile into public.users table
       const { error: profileError } = await supabase
         .from('users')
         .insert({
@@ -220,34 +301,16 @@ export const AddUser: React.FC = () => {
           email: formData.email,
           name: formData.name,
           role: formData.role as UserRole,
-          city: formData.role === 'super_admin' ? null : formData.city,
+          city: formData.city || null,
           phone: formData.phone,
-          status: formData.status
+          status: formData.status,
+          organization_id: formData.organizationId || null
         });
+      if (profileError) throw new Error('Failed to create user profile: ' + profileError.message);
 
-      if (profileError) {
-        // If profile creation fails, we should clean up the auth user
-        // In a production app, you might want to handle this more gracefully
-        console.error('Profile creation failed:', profileError);
-        throw new Error('Failed to create user profile: ' + profileError.message);
-      }
-      
-      console.log('User created successfully:', {
-        id: authData.user.id,
-        email: formData.email,
-        name: formData.name,
-        role: formData.role
-      });
-      
       setSubmitSuccess(true);
-      
-      // Redirect after success
-      setTimeout(() => {
-        navigate('/users');
-      }, 2000);
-      
+      setTimeout(() => navigate('/users'), 2000);
     } catch (error) {
-      console.error('Error creating user:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create user. Please try again.';
       setErrors({ submit: errorMessage });
     } finally {
@@ -283,10 +346,12 @@ export const AddUser: React.FC = () => {
                     phone: '',
                     role: '',
                     city: '',
+                    organizationId: '',
                     password: '',
                     confirmPassword: '',
                     status: 'active',
-                    sendWelcomeEmail: true
+                    sendWelcomeEmail: true,
+                    sendInvite: false
                   });
                 }}
                 className="w-full"
@@ -319,6 +384,12 @@ export const AddUser: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {adminWithoutOrg && (
+        <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          Your account is not linked to an organization. Contact your Super Admin to fix this. You won&apos;t be able to create users until your account is assigned to an organization.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -386,7 +457,7 @@ export const AddUser: React.FC = () => {
                       label="Phone Number"
                       value={formData.phone}
                       onChange={(value) => handleInputChange('phone', value)}
-                      required={true}
+                      required={!isOrgAdminFlow}
                       error={errors.phone}
                       name="phone"
                     />
@@ -431,9 +502,9 @@ export const AddUser: React.FC = () => {
                       }`}
                     >
                       <option value="">Select a role</option>
-                      {Object.entries(rolePermissions).map(([key, role]) => (
+                      {roleOptions.map((key) => (
                         <option key={key} value={key}>
-                          {role.label}
+                          {rolePermissions[key].label}
                         </option>
                       ))}
                     </select>
@@ -445,37 +516,93 @@ export const AddUser: React.FC = () => {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      City Assignment {formData.role !== 'super_admin' && '*'}
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  {isSuperAdmin && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Organization *</label>
                       <select
-                        value={formData.city}
-                        onChange={(e) => handleInputChange('city', e.target.value)}
-                        disabled={formData.role === 'super_admin'}
-                        className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.city ? 'border-red-300' : 'border-gray-300'
-                        } ${formData.role === 'super_admin' ? 'bg-gray-100' : ''}`}
+                        value={formData.organizationId}
+                        onChange={(e) => handleInputChange('organizationId', e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          errors.organizationId ? 'border-red-300' : 'border-gray-300'
+                        }`}
                       >
-                        <option value="">
-                          {formData.role === 'super_admin' ? 'All Cities' : 'Select a city'}
-                        </option>
-                        {formData.role !== 'super_admin' && cities.map((city) => (
-                          <option key={city} value={city}>
-                            {city}
-                          </option>
+                        <option value="">Select organization</option>
+                        {organizations.map((org) => (
+                          <option key={org.id} value={org.id}>{org.name}</option>
                         ))}
                       </select>
+                      {errors.organizationId && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.organizationId}
+                        </p>
+                      )}
                     </div>
-                    {errors.city && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.city}
-                      </p>
-                    )}
-                  </div>
+                  )}
+
+                  {!isOrgAdminFlow && !isSuperAdmin && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City Assignment *</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <select
+                          value={formData.city}
+                          onChange={(e) => handleInputChange('city', e.target.value)}
+                          className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            errors.city ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="">Select a city</option>
+                          {cities.map((city) => (
+                            <option key={city} value={city}>{city}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {errors.city && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.city}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {isOrgAdminFlow && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City (optional)</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <select
+                          value={formData.city}
+                          onChange={(e) => handleInputChange('city', e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select a city</option>
+                          {cities.map((city) => (
+                            <option key={city} value={city}>{city}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {isSuperAdmin && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City (optional)</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <select
+                          value={formData.city}
+                          onChange={(e) => handleInputChange('city', e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select a city</option>
+                          {cities.map((city) => (
+                            <option key={city} value={city}>{city}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -486,84 +613,99 @@ export const AddUser: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Security Settings</h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Password *
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={formData.password}
-                        onChange={(e) => handleInputChange('password', e.target.value)}
-                        className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.password ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="Enter password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {errors.password && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.password}
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-gray-500">
-                      Must be at least 8 characters with uppercase, lowercase, and number
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Confirm Password *
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={formData.confirmPassword}
-                        onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                        className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        placeholder="Confirm password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {errors.confirmPassword && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.confirmPassword}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="sendWelcomeEmail"
-                    checked={formData.sendWelcomeEmail}
-                    onChange={(e) => handleInputChange('sendWelcomeEmail', e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    disabled
-                  />
-                  <label htmlFor="sendWelcomeEmail" className="ml-2 block text-sm text-gray-700">
-                    Send welcome email with login credentials (Coming soon)
+                {isOrgAdminFlow && (
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.sendInvite}
+                      onChange={(e) => handleInputChange('sendInvite', e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Send invite email (user sets password)</span>
                   </label>
-                </div>
+                )}
+                {(!isOrgAdminFlow || !formData.sendInvite) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Password {isOrgAdminFlow ? '(min 6)' : '*'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            errors.password ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder={isOrgAdminFlow ? 'Min 6 characters' : 'Enter password'}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.password}
+                        </p>
+                      )}
+                      {!isOrgAdminFlow && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Must be at least 8 characters with uppercase, lowercase, and number
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Confirm Password *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          className={`w-full pr-10 pl-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                            errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          placeholder="Confirm password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {errors.confirmPassword && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.confirmPassword}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!isOrgAdminFlow && (
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="sendWelcomeEmail"
+                      checked={formData.sendWelcomeEmail}
+                      onChange={(e) => handleInputChange('sendWelcomeEmail', e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled
+                    />
+                    <label htmlFor="sendWelcomeEmail" className="ml-2 block text-sm text-gray-700">
+                      Send welcome email with login credentials (Coming soon)
+                    </label>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -646,7 +788,7 @@ export const AddUser: React.FC = () => {
               
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || adminWithoutOrg}
                 className="w-full flex items-center justify-center space-x-2"
               >
                 {isSubmitting ? (

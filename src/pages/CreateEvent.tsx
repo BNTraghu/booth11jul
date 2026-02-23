@@ -652,7 +652,8 @@ export const CreateEvent: React.FC = () => {
         status: normalizedStatus,
         attendees: formData.attendees,
         total_revenue: formData.totalRevenue,
-        created_by: user?.id || null, // Allow null for unauthenticated users
+        created_by: user?.id || null,
+        organization_id: user?.organizationId ?? null,
         vendor_ids: selectedVendors,
         exhibitor_ids: selectedExhibitors,
         // Image field - store as JSON array for multiple images

@@ -98,6 +98,7 @@ export interface Database {
           id: string;
           name: string;
           location: string | null;
+          organization_id: string | null;
           contact_person: string | null;
           email: string | null;
           phone: string | null;
@@ -114,6 +115,7 @@ export interface Database {
           id?: string;
           name: string;
           location?: string | null;
+          organization_id?: string | null;
           contact_person?: string | null;
           email?: string | null;
           phone?: string | null;
@@ -130,6 +132,7 @@ export interface Database {
           id?: string;
           name?: string;
           location?: string | null;
+          organization_id?: string | null;
           contact_person?: string | null;
           email?: string | null;
           phone?: string | null;
@@ -148,6 +151,7 @@ export interface Database {
           id: string;
           title: string;
           description: string | null;
+          organization_id: string | null;
           event_date: string | null;
           event_time: string | null;
           event_end_date: string | null;
@@ -200,6 +204,7 @@ export interface Database {
           id?: string;
           title: string;
           description?: string | null;
+          organization_id?: string | null;
           event_date?: string | null;
           event_time?: string | null;
           event_end_date?: string | null;
@@ -252,6 +257,7 @@ export interface Database {
           id?: string;
           title?: string;
           description?: string | null;
+          organization_id?: string | null;
           event_date?: string | null;
           event_time?: string | null;
           event_end_date?: string | null;
@@ -307,6 +313,7 @@ export interface Database {
           name: string;
           category: string;
           city: string | null;
+          organization_id: string | null;
           contact_person: string | null;
           email: string | null;
           phone: string | null;
@@ -322,6 +329,7 @@ export interface Database {
           name: string;
           category: string;
           city?: string | null;
+          organization_id?: string | null;
           contact_person?: string | null;
           email?: string | null;
           phone?: string | null;
@@ -337,6 +345,7 @@ export interface Database {
           name?: string;
           category?: string;
           city?: string | null;
+          organization_id?: string | null;
           contact_person?: string | null;
           email?: string | null;
           phone?: string | null;

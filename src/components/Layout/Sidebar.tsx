@@ -12,7 +12,8 @@ import {
   CreditCard,
   Megaphone,
   LogOut,
-  X
+  X,
+  Building
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
@@ -28,18 +29,22 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+// All roles that can log in to the admin portal (sidebar "all" visibility)
+const ALL_ROLES: UserRole[] = ['super_admin', 'admin', 'support_tech', 'sales_marketing', 'accounts', 'sales', 'marketing', 'city_head', 'logistics', 'accounting'];
+
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'support_tech', 'sales_marketing', 'legal', 'logistics', 'accounting', 'vendor', 'society', 'exhibitor'] },
-  { name: 'Users', href: '/users', icon: Users, roles: ['super_admin'] },
-  { name: 'Events', href: '/events', icon: Calendar, roles: ['super_admin', 'admin', 'support_tech', 'society'] },
-  { name: 'Venues', href: '/venues', icon: Building2, roles: ['super_admin', 'admin', 'sales_marketing'] },
-  { name: 'Vendors', href: '/vendors', icon: Truck, roles: ['super_admin', 'admin', 'logistics'] },
-  { name: 'Exhibitors', href: '/exhibitors', icon: UserCheck, roles: ['super_admin', 'admin', 'sales_marketing'] },
-  { name: 'Calendar', href: '/calendar', icon: Calendar, roles: ['super_admin', 'admin', 'support_tech', 'society'] },
-  { name: 'Plans & Billing', href: '/billing', icon: CreditCard, roles: ['super_admin', 'admin', 'accounting'] },
-  { name: 'Ads & Sponsors', href: '/ads-sponsors', icon: Megaphone, roles: ['super_admin', 'admin', 'sales_marketing'] },
-  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['super_admin', 'admin', 'accounting'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['super_admin', 'admin'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
+  { name: 'Organizations', href: '/organizations', icon: Building, roles: ['super_admin'] },
+  { name: 'Users', href: '/users', icon: Users, roles: ['super_admin', 'admin'] },
+  { name: 'Events', href: '/events', icon: Calendar, roles: ALL_ROLES },
+  { name: 'Venues', href: '/venues', icon: Building2, roles: ALL_ROLES },
+  { name: 'Vendors', href: '/vendors', icon: Truck, roles: ALL_ROLES },
+  { name: 'Exhibitors', href: '/exhibitors', icon: UserCheck, roles: ALL_ROLES },
+  { name: 'Calendar', href: '/calendar', icon: Calendar, roles: ALL_ROLES },
+  { name: 'Plans & Billing', href: '/billing', icon: CreditCard, roles: ALL_ROLES },
+  { name: 'Ads & Sponsors', href: '/ads-sponsors', icon: Megaphone, roles: ALL_ROLES },
+  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ALL_ROLES },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ALL_ROLES },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {

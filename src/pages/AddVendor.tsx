@@ -18,6 +18,7 @@ import {
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
+import { useAuth } from '../contexts/AuthContext';
 
 interface FormData {
   name: string;
@@ -49,6 +50,7 @@ const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad', 
 
 export const AddVendor: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -143,6 +145,7 @@ export const AddVendor: React.FC = () => {
           name: formData.name,
           category: formData.category,
           city: formData.city,
+          organization_id: user?.organizationId ?? null,
           contact_person: formData.contactPerson,
           email: formData.email,
           phone: formData.phone,

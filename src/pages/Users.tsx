@@ -431,15 +431,13 @@ export const Users: React.FC = () => {
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const { hasRole } = useAuth();
+  const { hasRole, isSuperAdmin } = useAuth();
   const [viewModal, setViewModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
   const [editModal, setEditModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
-  // 1. In Users page, add editFormData state
   const [editFormData, setEditFormData] = useState<User | null>(null);
 
-  // Only super admins can access this page
-  if (!hasRole(['super_admin'])) {
+  if (!hasRole(['super_admin', 'admin'])) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -468,10 +466,12 @@ export const Users: React.FC = () => {
       case 'sales_marketing': return 'success';
       case 'accounting': return 'default';
       case 'logistics': return 'default';
+      case 'accounts': case 'sales': case 'marketing': case 'city_head': return 'info';
       default: return 'default';
     }
   };
 
+  const allRoleKeys = ['super_admin', 'admin', 'support_tech', 'sales_marketing', 'accounting', 'logistics', 'accounts', 'sales', 'marketing', 'city_head'];
   const roleStats = {
     super_admin: users.filter(u => u.role === 'super_admin').length,
     admin: users.filter(u => u.role === 'admin').length,
@@ -479,7 +479,11 @@ export const Users: React.FC = () => {
     sales_marketing: users.filter(u => u.role === 'sales_marketing').length,
     accounting: users.filter(u => u.role === 'accounting').length,
     logistics: users.filter(u => u.role === 'logistics').length,
-    other: users.filter(u => !['super_admin', 'admin', 'support_tech', 'sales_marketing', 'accounting', 'logistics'].includes(u.role)).length
+    accounts: users.filter(u => u.role === 'accounts').length,
+    sales: users.filter(u => u.role === 'sales').length,
+    marketing: users.filter(u => u.role === 'marketing').length,
+    city_head: users.filter(u => u.role === 'city_head').length,
+    other: users.filter(u => !allRoleKeys.includes(u.role)).length
   };
 
   const handleSelectUser = (userId: string) => {
@@ -537,8 +541,8 @@ export const Users: React.FC = () => {
       // First, check if the authenticated user exists in our users table
       const { data: currentUser, error: userError } = await supabase
         .from('users')
-        .select('id, role, email')
-        .eq('email', authenticatedUser.email) // Use email instead of ID
+        .select('id, role, email, organization_id')
+        .eq('email', authenticatedUser.email)
         .maybeSingle();
 
       if (userError) {
@@ -555,8 +559,7 @@ export const Users: React.FC = () => {
 
       console.log('Current user from database:', currentUser);
 
-      // Check permissions
-      if (currentUser.role !== 'super_admin' && formData.id !== currentUser.id) {
+      if (currentUser.role !== 'super_admin' && currentUser.role !== 'admin' && formData.id !== currentUser.id) {
         showNotification('You can only update your own profile', 'error');
         return;
       }
@@ -801,7 +804,11 @@ export const Users: React.FC = () => {
             >
               <option value="all">All Roles</option>
               <option value="super_admin">Super Admin</option>
-              <option value="admin">City Admin</option>
+              <option value="admin">Org Admin</option>
+              <option value="accounts">Accounts</option>
+              <option value="sales">Sales</option>
+              <option value="marketing">Marketing</option>
+              <option value="city_head">City Head</option>
               <option value="support_tech">Support Tech</option>
               <option value="sales_marketing">Sales & Marketing</option>
               <option value="accounting">Accounting</option>
@@ -813,7 +820,7 @@ export const Users: React.FC = () => {
 
       {/* Filter Bar */}
       <div className="flex flex-wrap gap-2">
-        {['all', 'super_admin', 'admin', 'support_tech', 'sales_marketing', 'accounting', 'logistics'].map((role) => (
+        {['all', 'super_admin', 'admin', 'accounts', 'sales', 'marketing', 'city_head', 'support_tech', 'sales_marketing', 'accounting', 'logistics'].map((role) => (
           <button
             key={role}
             onClick={() => setFilter(role)}
@@ -889,6 +896,7 @@ export const Users: React.FC = () => {
                 </TableHead>
                 <TableHead>User</TableHead>
                 <TableHead>Role</TableHead>
+                {isSuperAdmin && <TableHead className="hidden md:table-cell">Organization</TableHead>}
                 <TableHead className="hidden md:table-cell">City</TableHead>
                 <TableHead className="hidden lg:table-cell">Contact</TableHead>
                 <TableHead>Status</TableHead>
@@ -932,6 +940,11 @@ export const Users: React.FC = () => {
                       <span className="sm:hidden">{user.role.split('_')[0].toUpperCase()}</span>
                     </Badge>
                   </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell className="hidden md:table-cell">
+                      {user.organizationName ?? '—'}
+                    </TableCell>
+                  )}
                   <TableCell className="hidden md:table-cell">{user.city || 'N/A'}</TableCell>
                   <TableCell className="hidden lg:table-cell">
                     <div className="text-sm flex items-center">

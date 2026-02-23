@@ -35,6 +35,7 @@ import {
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
+import { useAuth } from '../contexts/AuthContext';
 import { COUNTRIES } from '../data/locations';
 import statesData from '../data/states.json';
 
@@ -123,6 +124,7 @@ const defaultAmenities = [
 
 export const AddVenue: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [isMapUpdating, setIsMapUpdating] = useState(false);
@@ -1010,6 +1012,7 @@ export const AddVenue: React.FC = () => {
       const insertData = {
         name: formData.name,
         location: formData.location,
+        organization_id: user?.organizationId ?? null,
         contact_person: formData.contactPerson,
         // contact_role: formData.contactRole, // Commented out until column is added to database
         email: formData.email,
