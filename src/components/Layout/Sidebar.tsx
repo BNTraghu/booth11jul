@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
+import logo from '../../assets/newlogo.png';
 
 interface NavItem {
   name: string;
@@ -62,7 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   return (
     <div className="flex h-full w-64 flex-col bg-gray-900">
       <div className="flex h-16 items-center justify-between bg-gray-800 px-4">
-        <h1 className="text-lg sm:text-xl font-bold text-white">Booth Buzz</h1>
+      <img src={logo} alt="BoothBuzz" className="h-40 w-40 object-contain" />
+        {/*<h1 className="text-lg sm:text-xl font-bold text-white">Booth Buzz</h1> */}
         {/* Mobile close button */}
         <button
           onClick={onClose}

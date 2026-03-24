@@ -20,7 +20,8 @@ import {
   MousePointer,
   Activity
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useSponsors, useAdvertisements, useCampaigns } from '../hooks/useSupabaseData';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
@@ -79,147 +80,11 @@ interface Campaign {
   };
 }
 
-const mockAds: Advertisement[] = [
-  {
-    id: '1',
-    title: 'Premium Event Management Software',
-    advertiser: 'EventTech Solutions',
-    type: 'banner',
-    placement: 'header',
-    startDate: '2024-01-01',
-    endDate: '2024-03-31',
-    budget: 50000,
-    spent: 32000,
-    impressions: 125000,
-    clicks: 2500,
-    status: 'active',
-    ctr: 2.0,
-    cpm: 256
-  },
-  {
-    id: '2',
-    title: 'Luxury Catering Services',
-    advertiser: 'Royal Feast Catering',
-    type: 'sponsored_post',
-    placement: 'event_page',
-    startDate: '2024-01-15',
-    endDate: '2024-02-15',
-    budget: 25000,
-    spent: 25000,
-    impressions: 85000,
-    clicks: 1700,
-    status: 'completed',
-    ctr: 2.0,
-    cpm: 294
-  },
-  {
-    id: '3',
-    title: 'Sound & Lighting Equipment',
-    advertiser: 'ProAudio Systems',
-    type: 'video',
-    placement: 'sidebar',
-    startDate: '2024-02-01',
-    endDate: '2024-04-30',
-    budget: 75000,
-    spent: 18000,
-    impressions: 45000,
-    clicks: 900,
-    status: 'active',
-    ctr: 2.0,
-    cpm: 400
-  }
-];
-
-const mockSponsors: Sponsor[] = [
-  {
-    id: '1',
-    companyName: 'TechCorp Industries',
-    contactPerson: 'Rajesh Kumar',
-    email: 'rajesh@techcorp.com',
-    phone: '+91-9876543210',
-    sponsorshipType: 'platform',
-    sponsorshipLevel: 'platinum',
-    amount: 500000,
-    startDate: '2024-01-01',
-    endDate: '2024-12-31',
-    status: 'active',
-    benefits: ['Logo on all events', 'Dedicated booth space', 'Email marketing', 'Social media mentions'],
-    eventsSponsored: 12
-  },
-  {
-    id: '2',
-    companyName: 'Green Energy Solutions',
-    contactPerson: 'Priya Sharma',
-    email: 'priya@greenenergy.com',
-    phone: '+91-9876543211',
-    sponsorshipType: 'event',
-    sponsorshipLevel: 'gold',
-    amount: 200000,
-    startDate: '2024-01-15',
-    endDate: '2024-06-15',
-    status: 'active',
-    benefits: ['Event branding', 'Speaking opportunity', 'Networking sessions'],
-    eventsSponsored: 5
-  },
-  {
-    id: '3',
-    companyName: 'Local Bank Ltd',
-    contactPerson: 'Amit Patel',
-    email: 'amit@localbank.com',
-    phone: '+91-9876543212',
-    sponsorshipType: 'society',
-    sponsorshipLevel: 'silver',
-    amount: 100000,
-    startDate: '2023-12-01',
-    endDate: '2024-02-29',
-    status: 'expired',
-    benefits: ['Society newsletter ads', 'ATM placement'],
-    eventsSponsored: 3
-  }
-];
-
-const mockCampaigns: Campaign[] = [
-  {
-    id: '1',
-    name: 'Q1 Event Promotion Campaign',
-    description: 'Promoting upcoming events for Q1 2024',
-    startDate: '2024-01-01',
-    endDate: '2024-03-31',
-    budget: 150000,
-    spent: 95000,
-    targetAudience: 'Society members aged 25-45',
-    status: 'active',
-    ads: ['1', '2'],
-    performance: {
-      impressions: 210000,
-      clicks: 4200,
-      conversions: 420,
-      ctr: 2.0,
-      cpc: 22.6
-    }
-  },
-  {
-    id: '2',
-    name: 'Summer Festival Marketing',
-    description: 'Marketing campaign for summer cultural festivals',
-    startDate: '2024-04-01',
-    endDate: '2024-06-30',
-    budget: 200000,
-    spent: 45000,
-    targetAudience: 'Families and young adults',
-    status: 'active',
-    ads: ['3'],
-    performance: {
-      impressions: 85000,
-      clicks: 1700,
-      conversions: 170,
-      ctr: 2.0,
-      cpc: 26.5
-    }
-  }
-];
-
 export const AdsSponsors: React.FC = () => {
+  const navigate = useNavigate();
+  const { sponsors, loading: sponsorsLoading, refetch: refetchSponsors } = useSponsors();
+  const { advertisements, loading: adsLoading, error: adsError, refetch: refetchAds } = useAdvertisements({ skipOrgFilter: true });
+  const { campaigns, loading: campaignsLoading, error: campaignsError, refetch: refetchCampaigns } = useCampaigns({ skipOrgFilter: true });
   const [activeTab, setActiveTab] = useState<'campaigns' | 'ads' | 'sponsors'>('campaigns');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -245,11 +110,11 @@ export const AdsSponsors: React.FC = () => {
     }
   };
 
-  const totalAdSpend = mockAds.reduce((sum, ad) => sum + ad.spent, 0);
-  const totalSponsorRevenue = mockSponsors.reduce((sum, sponsor) => sum + sponsor.amount, 0);
-  const totalImpressions = mockAds.reduce((sum, ad) => sum + ad.impressions, 0);
-  const totalClicks = mockAds.reduce((sum, ad) => sum + ad.clicks, 0);
-  const avgCTR = totalClicks > 0 ? (totalClicks / totalImpressions * 100) : 0;
+  const totalAdSpend = advertisements.reduce((sum, ad) => sum + ad.spent, 0);
+  const totalSponsorRevenue = sponsors.reduce((sum, sponsor) => sum + sponsor.amount, 0);
+  const totalImpressions = advertisements.reduce((sum, ad) => sum + ad.impressions, 0);
+  const totalClicks = advertisements.reduce((sum, ad) => sum + ad.clicks, 0);
+  const avgCTR = totalImpressions > 0 ? (totalClicks / totalImpressions * 100) : 0;
 
   const handleViewDetails = (item: any) => {
     setSelectedItem(item);
@@ -307,7 +172,7 @@ export const AdsSponsors: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Sponsor Revenue</p>
                 <p className="text-2xl font-bold text-gray-900">₹{(totalSponsorRevenue / 100000).toFixed(1)}L</p>
-                <p className="text-sm text-gray-500">{mockSponsors.filter(s => s.status === 'active').length} active</p>
+                <p className="text-sm text-gray-500">{sponsors.filter(s => s.status === 'active').length} active</p>
               </div>
             </div>
           </CardContent>
@@ -363,9 +228,9 @@ export const AdsSponsors: React.FC = () => {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'campaigns', label: 'Campaigns', count: mockCampaigns.length },
-            { id: 'ads', label: 'Advertisements', count: mockAds.length },
-            { id: 'sponsors', label: 'Sponsors', count: mockSponsors.length }
+            { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
+            { id: 'ads', label: 'Advertisements', count: advertisements.length },
+            { id: 'sponsors', label: 'Sponsors', count: sponsors.length }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -397,8 +262,15 @@ export const AdsSponsors: React.FC = () => {
               </Button>
             </Link>
           </div>
-          
-          {mockCampaigns.map((campaign) => (
+          {campaignsError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+              {campaignsError}
+            </div>
+          )}
+          {campaignsLoading ? (
+            <p className="text-gray-500 py-4">Loading campaigns…</p>
+          ) : (
+          campaigns.map((campaign) => (
             <Card key={campaign.id}>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -462,7 +334,7 @@ export const AdsSponsors: React.FC = () => {
                         <BarChart3 className="h-4 w-4 mr-2" />
                         View Analytics
                       </Button>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/ads-sponsors/campaigns/${campaign.id}/edit`)}>
                         <Edit className="h-4 w-4 mr-2" />
                         Edit Campaign
                       </Button>
@@ -471,7 +343,8 @@ export const AdsSponsors: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-          ))}
+          ))
+          )}
         </div>
       )}
 
@@ -498,6 +371,14 @@ export const AdsSponsors: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
+            {adsError && (
+              <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm mb-4">
+                {adsError}
+              </div>
+            )}
+            {adsLoading ? (
+              <p className="text-gray-500 py-4">Loading advertisements…</p>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -511,7 +392,7 @@ export const AdsSponsors: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockAds.map((ad) => (
+                {advertisements.map((ad) => (
                   <TableRow key={ad.id}>
                     <TableCell>
                       <div>
@@ -557,10 +438,10 @@ export const AdsSponsors: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleViewDetails(ad)}>
+                        <Button size="sm" variant="ghost" onClick={() => handleViewDetails(ad)} title="View">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost">
+                        <Button size="sm" variant="ghost" onClick={() => navigate(`/ads-sponsors/ads/${ad.id}/edit`)} title="Edit">
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost">
@@ -575,6 +456,7 @@ export const AdsSponsors: React.FC = () => {
                 ))}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -585,10 +467,12 @@ export const AdsSponsors: React.FC = () => {
           <CardHeader>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold text-gray-900">Sponsor Partners</h3>
-              <Button size="sm" className="flex items-center space-x-2">
-                <Plus className="h-4 w-4" />
-                <span>Add Sponsor</span>
-              </Button>
+              <Link to="/ads-sponsors/sponsors/create">
+                <Button size="sm" className="flex items-center space-x-2">
+                  <Plus className="h-4 w-4" />
+                  <span>Add Sponsor</span>
+                </Button>
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
@@ -606,7 +490,20 @@ export const AdsSponsors: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockSponsors.map((sponsor) => (
+                {sponsorsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      Loading sponsors…
+                    </TableCell>
+                  </TableRow>
+                ) : sponsors.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      No sponsors yet. Add one using the button above.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                sponsors.map((sponsor) => (
                   <TableRow key={sponsor.id}>
                     <TableCell>
                       <div className="font-medium text-gray-900">{sponsor.companyName}</div>
@@ -648,19 +545,20 @@ export const AdsSponsors: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleViewDetails(sponsor)}>
+                        <Button size="sm" variant="ghost" onClick={() => handleViewDetails(sponsor)} title="View">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost">
+                        <Button size="sm" variant="ghost" onClick={() => navigate(`/ads-sponsors/sponsors/${sponsor.id}/edit`)} title="Edit">
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost">
+                        <Button size="sm" variant="ghost" title="External link">
                           <ExternalLink className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -686,17 +584,119 @@ export const AdsSponsors: React.FC = () => {
             </div>
             
             <div className="p-6">
-              {/* Content varies based on item type */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Details</h3>
-                  {/* Add specific details based on item type */}
+              {selectedItem.advertiser != null ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Advertisement Details</h3>
+                    <dl className="space-y-3 text-sm">
+                      <div>
+                        <dt className="text-gray-500">Title</dt>
+                        <dd className="font-medium text-gray-900">{selectedItem.title}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Advertiser</dt>
+                        <dd className="text-gray-900">{selectedItem.advertiser}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Type / Placement</dt>
+                        <dd className="text-gray-900 capitalize">{String(selectedItem.type).replace('_', ' ')} / {String(selectedItem.placement).replace('_', ' ')}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Period</dt>
+                        <dd className="text-gray-900">
+                          {selectedItem.startDate && new Date(selectedItem.startDate).toLocaleDateString()} – {selectedItem.endDate && new Date(selectedItem.endDate).toLocaleDateString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Budget / Spent</dt>
+                        <dd className="text-gray-900">₹{selectedItem.budget?.toLocaleString?.() ?? '0'} / ₹{selectedItem.spent?.toLocaleString?.() ?? '0'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Status</dt>
+                        <dd><Badge variant={getStatusVariant(selectedItem.status)}>{selectedItem.status}</Badge></dd>
+                      </div>
+                    </dl>
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => { setShowDetailModal(false); navigate(`/ads-sponsors/ads/${selectedItem.id}/edit`); }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Advertisement
+                    </Button>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance</h3>
+                    <dl className="space-y-2 text-sm">
+                      <div className="flex justify-between"><dt className="text-gray-500">Impressions</dt><dd className="font-medium text-gray-900">{selectedItem.impressions?.toLocaleString?.() ?? 0}</dd></div>
+                      <div className="flex justify-between"><dt className="text-gray-500">Clicks</dt><dd className="font-medium text-gray-900">{selectedItem.clicks?.toLocaleString?.() ?? 0}</dd></div>
+                      <div className="flex justify-between"><dt className="text-gray-500">CTR</dt><dd className="font-medium text-gray-900">{selectedItem.ctr ?? 0}%</dd></div>
+                      <div className="flex justify-between"><dt className="text-gray-500">CPM</dt><dd className="font-medium text-gray-900">{selectedItem.cpm ?? 0}</dd></div>
+                    </dl>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance</h3>
-                  {/* Add performance metrics */}
+              ) : selectedItem.companyName != null ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Sponsor Details</h3>
+                    <dl className="space-y-3 text-sm">
+                      <div>
+                        <dt className="text-gray-500">Company</dt>
+                        <dd className="font-medium text-gray-900">{selectedItem.companyName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Contact</dt>
+                        <dd className="text-gray-900">{selectedItem.contactPerson}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Email</dt>
+                        <dd className="text-gray-900">{selectedItem.email}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Phone</dt>
+                        <dd className="text-gray-900">{selectedItem.phone || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Type / Level</dt>
+                        <dd className="text-gray-900 capitalize">{selectedItem.sponsorshipType} / {selectedItem.sponsorshipLevel}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Amount</dt>
+                        <dd className="text-gray-900">₹{selectedItem.amount?.toLocaleString?.() ?? '0'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Period</dt>
+                        <dd className="text-gray-900">
+                          {selectedItem.startDate && new Date(selectedItem.startDate).toLocaleDateString()} – {selectedItem.endDate && new Date(selectedItem.endDate).toLocaleDateString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Status</dt>
+                        <dd><Badge variant={selectedItem.status === 'active' ? 'success' : selectedItem.status === 'expired' || selectedItem.status === 'cancelled' ? 'error' : 'warning'}>{selectedItem.status}</Badge></dd>
+                      </div>
+                      {Array.isArray(selectedItem.benefits) && selectedItem.benefits.length > 0 && (
+                        <div>
+                          <dt className="text-gray-500 mb-1">Benefits</dt>
+                          <dd className="text-gray-900"><ul className="list-disc pl-4">{selectedItem.benefits.map((b: string, i: number) => <li key={i}>{b}</li>)}</ul></dd>
+                        </div>
+                      )}
+                    </dl>
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => { setShowDetailModal(false); navigate(`/ads-sponsors/sponsors/${selectedItem.id}/edit`); }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Sponsor
+                    </Button>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary</h3>
+                    <p className="text-sm text-gray-600">Events sponsored: <span className="font-medium text-gray-900">{selectedItem.eventsSponsored ?? 0}</span></p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Details</h3>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance</h3>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

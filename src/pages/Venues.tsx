@@ -479,23 +479,19 @@ export const Venues: React.FC = () => {
     if (!editFormData.country.trim()) {
       errors.country = 'Country is required';
     }
-    // Bank validations
-    if (!editFormData.bankName.trim()) {
-      errors.bankName = 'Bank name is required';
-    }
+    // Bank — optional; validate format only when filled
     const accountRegex = /^[0-9]{9,18}$/;
-    if (!editFormData.bankAccountNumber.trim()) {
-      errors.bankAccountNumber = 'Account number is required';
-    } else if (!accountRegex.test(editFormData.bankAccountNumber.trim())) {
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+    if (editFormData.bankName.trim() && editFormData.bankName.trim().length < 2) {
+      errors.bankName = 'Bank name must be at least 2 characters';
+    }
+    if (editFormData.bankAccountNumber.trim() && !accountRegex.test(editFormData.bankAccountNumber.trim())) {
       errors.bankAccountNumber = 'Account number must be 9-18 digits';
     }
-    if (!editFormData.bankHolderName.trim()) {
-      errors.bankHolderName = 'Account holder name is required';
+    if (editFormData.bankHolderName.trim() && editFormData.bankHolderName.trim().length < 2) {
+      errors.bankHolderName = 'Account holder name must be at least 2 characters';
     }
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
-    if (!editFormData.bankIfsc.trim()) {
-      errors.bankIfsc = 'IFSC is required';
-    } else if (!ifscRegex.test(editFormData.bankIfsc.trim())) {
+    if (editFormData.bankIfsc.trim() && !ifscRegex.test(editFormData.bankIfsc.trim())) {
       errors.bankIfsc = 'Invalid IFSC format (e.g., HDFC0001234)';
     }
     // const micrRegex = /^[0-9]{9}$/;
@@ -1986,26 +1982,27 @@ export const Venues: React.FC = () => {
                     <Card>
                       <CardHeader>
                         <h3 className="text-lg font-semibold text-gray-900">Bank Details</h3>
+                        <p className="text-sm text-gray-500 mt-1">Optional — leave blank if not available.</p>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
                             <input type="text" value={editFormData.bankName} onChange={(e) => setEditFormData({ ...editFormData, bankName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankName ? 'border-red-300' : 'border-gray-300'}`} />
                             {editErrors.bankName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankName}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                             <input type="text" value={editFormData.bankAccountNumber} onChange={(e) => setEditFormData({ ...editFormData, bankAccountNumber: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankAccountNumber ? 'border-red-300' : 'border-gray-300'}`} />
                             {editErrors.bankAccountNumber && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankAccountNumber}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Name in Bank *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Name in Bank</label>
                             <input type="text" value={editFormData.bankHolderName} onChange={(e) => setEditFormData({ ...editFormData, bankHolderName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankHolderName ? 'border-red-300' : 'border-gray-300'}`} />
                             {editErrors.bankHolderName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankHolderName}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC</label>
                             <input type="text" value={editFormData.bankIfsc} onChange={(e) => setEditFormData({ ...editFormData, bankIfsc: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankIfsc ? 'border-red-300' : 'border-gray-300'}`} />
                             {editErrors.bankIfsc && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankIfsc}</p>)}
                           </div>

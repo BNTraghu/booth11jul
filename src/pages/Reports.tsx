@@ -24,6 +24,8 @@ import { Button } from '../components/UI/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { useReportData } from '../hooks/useReportData';
+import { useMemo } from 'react';
 
 interface ReportData {
   period: string;
@@ -34,14 +36,14 @@ interface ReportData {
   growth: number;
 }
 
-interface EventPerformance {
+interface EventPerformanceRow {
   id: string;
   name: string;
   date: string;
   attendees: number;
   revenue: number;
-  satisfaction: number;
-  roi: number;
+  satisfaction?: number;
+  roi?: number;
 }
 
 interface CityPerformance {
@@ -52,44 +54,28 @@ interface CityPerformance {
   growth: number;
 }
 
-const mockReportData: ReportData[] = [
-  { period: 'Jan 2024', events: 45, revenue: 1250000, attendees: 8500, societies: 12, growth: 15.2 },
-  { period: 'Feb 2024', events: 52, revenue: 1420000, attendees: 9200, societies: 14, growth: 18.5 },
-  { period: 'Mar 2024', events: 48, revenue: 1380000, attendees: 8800, societies: 13, growth: 12.8 },
-  { period: 'Apr 2024', events: 55, revenue: 1580000, attendees: 9800, societies: 15, growth: 22.1 },
-  { period: 'May 2024', events: 61, revenue: 1720000, attendees: 10500, societies: 16, growth: 25.4 },
-  { period: 'Jun 2024', events: 58, revenue: 1650000, attendees: 10200, societies: 15, growth: 19.7 }
-];
-
-const mockEventPerformance: EventPerformance[] = [
-  { id: '1', name: 'Annual Cultural Festival', date: '2024-06-15', attendees: 450, revenue: 125000, satisfaction: 4.8, roi: 185 },
-  { id: '2', name: 'Tech Innovation Summit', date: '2024-06-10', attendees: 320, revenue: 95000, satisfaction: 4.6, roi: 165 },
-  { id: '3', name: 'Health & Wellness Expo', date: '2024-06-05', attendees: 280, revenue: 78000, satisfaction: 4.4, roi: 145 },
-  { id: '4', name: 'Sports Championship', date: '2024-05-28', attendees: 520, revenue: 142000, satisfaction: 4.9, roi: 210 },
-  { id: '5', name: 'Food Festival', date: '2024-05-20', attendees: 380, revenue: 105000, satisfaction: 4.7, roi: 175 }
-];
-
-const mockCityPerformance: CityPerformance[] = [
-  { city: 'Mumbai', events: 85, revenue: 2450000, societies: 25, growth: 18.5 },
-  { city: 'Delhi', events: 72, revenue: 2100000, societies: 22, growth: 15.2 },
-  { city: 'Bangalore', events: 68, revenue: 1950000, societies: 20, growth: 22.1 },
-  { city: 'Pune', events: 45, revenue: 1280000, societies: 15, growth: 12.8 },
-  { city: 'Chennai', events: 38, revenue: 1050000, societies: 12, growth: 8.9 }
-];
-
 interface OrgOption {
   id: string;
   name: string;
 }
+
+const PLAN_TYPE_COLORS: Record<string, string> = {
+  'Plan A': 'bg-blue-500',
+  'Plan B': 'bg-green-500',
+  'Plan C': 'bg-yellow-500',
+  Custom: 'bg-purple-500',
+  Unset: 'bg-gray-500',
+};
 
 export const Reports: React.FC = () => {
   const { user, isSuperAdmin, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'financial' | 'performance' | 'custom'>('overview');
   const [dateRange, setDateRange] = useState('last_6_months');
   const [selectedCity, setSelectedCity] = useState('all');
-  // Super Admin: 'all' = collective reports for all orgs; otherwise org id for single-org view
   const [selectedReportOrgId, setSelectedReportOrgId] = useState<string>('all');
   const [organizations, setOrganizations] = useState<OrgOption[]>([]);
+
+  const { events, venues, loading, error, refetch } = useReportData(selectedReportOrgId, dateRange);
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -100,6 +86,125 @@ export const Reports: React.FC = () => {
         .then(({ data }) => setOrganizations((data as OrgOption[]) || []));
     }
   }, [isSuperAdmin]);
+
+  const reportData = useMemo((): ReportData[] => {
+    const byMonth: Record<string, { events: number; revenue: number; attendees: number }> = {};
+    events.forEach((e) => {
+      if (!e.date) return;
+      const key = e.date.slice(0, 7);
+      if (!byMonth[key]) byMonth[key] = { events: 0, revenue: 0, attendees: 0 };
+      byMonth[key].events += 1;
+      byMonth[key].revenue += e.totalRevenue || 0;
+      byMonth[key].attendees += e.attendees || 0;
+    });
+    const sorted = Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b));
+    const prev: Record<string, number> = {};
+    return sorted.map(([ym, d], i) => {
+      const prevRev = i > 0 ? sorted[i - 1][1].revenue : d.revenue;
+      const growth = prevRev > 0 ? ((d.revenue - prevRev) / prevRev) * 100 : 0;
+      const [y, m] = ym.split('-');
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const period = `${monthNames[parseInt(m, 10) - 1]} ${y}`;
+      return {
+        period,
+        events: d.events,
+        revenue: d.revenue,
+        attendees: d.attendees,
+        societies: venues.length,
+        growth,
+      };
+    });
+  }, [events, venues.length]);
+
+  const eventPerformanceRows = useMemo((): EventPerformanceRow[] => {
+    return events
+      .slice()
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .map((e) => ({
+        id: e.id,
+        name: e.title || 'Untitled',
+        date: e.date || '',
+        attendees: e.attendees || 0,
+        revenue: e.totalRevenue || 0,
+      }));
+  }, [events]);
+
+  const cityPerformance = useMemo((): CityPerformance[] => {
+    const byCity: Record<string, { events: number; revenue: number; venueIds: Set<string> }> = {};
+    events.forEach((e) => {
+      const city = (e.city || '').trim() || 'Unknown';
+      if (!byCity[city]) byCity[city] = { events: 0, revenue: 0, venueIds: new Set() };
+      byCity[city].events += 1;
+      byCity[city].revenue += e.totalRevenue || 0;
+      if (e.venueId) byCity[city].venueIds.add(e.venueId);
+    });
+    const venueCountByCity: Record<string, number> = {};
+    venues.forEach((v) => {
+      const c = (v.city || '').trim() || 'Unknown';
+      venueCountByCity[c] = (venueCountByCity[c] || 0) + 1;
+    });
+    const totalRev = events.reduce((s, e) => s + (e.totalRevenue || 0), 0);
+    return Object.entries(byCity)
+      .map(([city, d]) => ({
+        city,
+        events: d.events,
+        revenue: d.revenue,
+        societies: venueCountByCity[city] ?? 0,
+        growth: 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [events, venues]);
+
+  const planDistribution = useMemo(() => {
+    const count: Record<string, number> = {};
+    events.forEach((e) => {
+      const plan = (e.planType as string) || 'Unset';
+      count[plan] = (count[plan] || 0) + 1;
+    });
+    const total = events.length;
+    return Object.entries(count).map(([type, n]) => ({
+      type,
+      count: n,
+      percentage: total > 0 ? Math.round((n / total) * 100) : 0,
+      color: PLAN_TYPE_COLORS[type] || 'bg-gray-500',
+    }));
+  }, [events]);
+
+  const topVenues = useMemo(() => {
+    return venues
+      .slice()
+      .sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
+      .slice(0, 10)
+      .map((v) => ({
+        name: v.name,
+        events: v.activeEvents || 0,
+        revenue: v.totalRevenue || 0,
+        growth: 0,
+      }));
+  }, [venues]);
+
+  const totalRevenue = reportData.reduce((sum, d) => sum + d.revenue, 0);
+  const totalEvents = events.length;
+  const totalAttendees = events.reduce((sum, e) => sum + (e.attendees || 0), 0);
+  const avgGrowth = reportData.length > 0
+    ? reportData.reduce((sum, d) => sum + d.growth, 0) / reportData.length
+    : 0;
+  const currentMonth = reportData[reportData.length - 1];
+  const previousMonth = reportData[reportData.length - 2];
+  const revenueGrowth = previousMonth && previousMonth.revenue > 0 && currentMonth
+    ? ((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100
+    : 0;
+  const eventGrowth = previousMonth && previousMonth.events > 0 && currentMonth
+    ? ((currentMonth.events - previousMonth.events) / previousMonth.events) * 100
+    : 0;
+  const attendeeGrowth = previousMonth && previousMonth.attendees > 0 && currentMonth
+    ? ((currentMonth.attendees - previousMonth.attendees) / previousMonth.attendees) * 100
+    : 0;
+
+  const avgEventSize = totalEvents > 0 ? Math.round(totalAttendees / totalEvents) : 0;
+  const avgRevenuePerEvent = totalEvents > 0 ? Math.round(totalRevenue / totalEvents) : 0;
+  const completedCount = events.filter((e) => e.status === 'completed' || e.status === 'ongoing').length;
+  const eventSuccessRate = totalEvents > 0 ? Math.round((completedCount / totalEvents) * 1000) / 10 : 0;
 
   if (!hasRole(['super_admin', 'admin'])) {
     return (
@@ -114,20 +219,13 @@ export const Reports: React.FC = () => {
     );
   }
 
-  const totalRevenue = mockReportData.reduce((sum, data) => sum + data.revenue, 0);
-  const totalEvents = mockReportData.reduce((sum, data) => sum + data.events, 0);
-  const totalAttendees = mockReportData.reduce((sum, data) => sum + data.attendees, 0);
-  const avgGrowth = mockReportData.reduce((sum, data) => sum + data.growth, 0) / mockReportData.length;
-
-  const currentMonth = mockReportData[mockReportData.length - 1];
-  const previousMonth = mockReportData[mockReportData.length - 2];
-
-  const revenueGrowth = ((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100;
-  const eventGrowth = ((currentMonth.events - previousMonth.events) / previousMonth.events) * 100;
-  const attendeeGrowth = ((currentMonth.attendees - previousMonth.attendees) / previousMonth.attendees) * 100;
-
   return (
     <div className="space-y-6">
+      {error && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 text-amber-800">{error}</CardContent>
+        </Card>
+      )}
       {/* Header */}
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
@@ -169,8 +267,8 @@ export const Reports: React.FC = () => {
             <option value="last_6_months">Last 6 Months</option>
             <option value="last_year">Last Year</option>
           </select>
-          <Button variant="outline" className="flex items-center space-x-2">
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" className="flex items-center space-x-2" onClick={() => refetch()} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </Button>
           <Button className="flex items-center space-x-2">
@@ -181,6 +279,17 @@ export const Reports: React.FC = () => {
       </div>
 
       {/* Key Metrics */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="animate-pulse h-16 bg-gray-200 rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
@@ -192,15 +301,19 @@ export const Reports: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600">Total Revenue</p>
                 <p className="text-2xl font-bold text-gray-900">₹{(totalRevenue / 100000).toFixed(1)}L</p>
                 <div className="flex items-center mt-1">
-                  {revenueGrowth >= 0 ? (
-                    <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                  {reportData.length >= 2 && (
+                    <>
+                      {revenueGrowth >= 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                      )}
+                      <span className={`text-sm font-medium ${revenueGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {Math.abs(revenueGrowth).toFixed(1)}%
+                      </span>
+                      <span className="text-sm text-gray-500 ml-1">vs previous period</span>
+                    </>
                   )}
-                  <span className={`text-sm font-medium ${revenueGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {Math.abs(revenueGrowth).toFixed(1)}%
-                  </span>
-                  <span className="text-sm text-gray-500 ml-1">vs last month</span>
                 </div>
               </div>
             </div>
@@ -217,15 +330,19 @@ export const Reports: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600">Total Events</p>
                 <p className="text-2xl font-bold text-gray-900">{totalEvents}</p>
                 <div className="flex items-center mt-1">
-                  {eventGrowth >= 0 ? (
-                    <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                  {reportData.length >= 2 && (
+                    <>
+                      {eventGrowth >= 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                      )}
+                      <span className={`text-sm font-medium ${eventGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {Math.abs(eventGrowth).toFixed(1)}%
+                      </span>
+                      <span className="text-sm text-gray-500 ml-1">vs previous period</span>
+                    </>
                   )}
-                  <span className={`text-sm font-medium ${eventGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {Math.abs(eventGrowth).toFixed(1)}%
-                  </span>
-                  <span className="text-sm text-gray-500 ml-1">vs last month</span>
                 </div>
               </div>
             </div>
@@ -242,15 +359,19 @@ export const Reports: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600">Total Attendees</p>
                 <p className="text-2xl font-bold text-gray-900">{(totalAttendees / 1000).toFixed(1)}K</p>
                 <div className="flex items-center mt-1">
-                  {attendeeGrowth >= 0 ? (
-                    <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                  {reportData.length >= 2 && (
+                    <>
+                      {attendeeGrowth >= 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                      )}
+                      <span className={`text-sm font-medium ${attendeeGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {Math.abs(attendeeGrowth).toFixed(1)}%
+                      </span>
+                      <span className="text-sm text-gray-500 ml-1">vs previous period</span>
+                    </>
                   )}
-                  <span className={`text-sm font-medium ${attendeeGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {Math.abs(attendeeGrowth).toFixed(1)}%
-                  </span>
-                  <span className="text-sm text-gray-500 ml-1">vs last month</span>
                 </div>
               </div>
             </div>
@@ -268,13 +389,14 @@ export const Reports: React.FC = () => {
                 <p className="text-2xl font-bold text-gray-900">{avgGrowth.toFixed(1)}%</p>
                 <div className="flex items-center mt-1">
                   <Activity className="h-4 w-4 text-blue-500 mr-1" />
-                  <span className="text-sm text-gray-500">Monthly average</span>
+                  <span className="text-sm text-gray-500">Period average</span>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -311,92 +433,100 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Revenue Trend</h3>
             </CardHeader>
             <CardContent>
-              <div className="h-64 flex items-end justify-between space-x-2">
-                {mockReportData.map((data, index) => (
-                  <div key={index} className="flex flex-col items-center flex-1">
-                    <div 
-                      className="w-full bg-blue-500 rounded-t-sm"
-                      style={{ 
-                        height: `${(data.revenue / Math.max(...mockReportData.map(d => d.revenue))) * 200}px`,
-                        minHeight: '20px'
-                      }}
-                    ></div>
-                    <div className="text-xs text-gray-600 mt-2 text-center">
-                      {data.period.split(' ')[0]}
-                    </div>
+              {reportData.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No event data for this period.</p>
+              ) : (
+                <>
+                  <div className="h-64 flex items-end justify-between space-x-2">
+                    {reportData.map((data, index) => {
+                      const maxRev = Math.max(...reportData.map((d) => d.revenue), 1);
+                      return (
+                        <div key={data.period} className="flex flex-col items-center flex-1">
+                          <div
+                            className="w-full bg-blue-500 rounded-t-sm"
+                            style={{
+                              height: `${(data.revenue / maxRev) * 200}px`,
+                              minHeight: data.revenue > 0 ? '20px' : '4px',
+                            }}
+                          />
+                          <div className="text-xs text-gray-600 mt-2 text-center">
+                            {data.period.split(' ')[0]}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-              <div className="mt-4 text-center text-sm text-gray-600">
-                Monthly Revenue (₹ Lakhs)
-              </div>
+                  <div className="mt-4 text-center text-sm text-gray-600">
+                    Monthly Revenue (₹ Lakhs)
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
-          {/* Event Distribution */}
+          {/* Event Distribution by Plan Type */}
           <Card>
             <CardHeader>
-              <h3 className="text-lg font-semibold text-gray-900">Event Distribution</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Event Distribution (by Plan)</h3>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { type: 'Cultural Events', count: 45, percentage: 35, color: 'bg-blue-500' },
-                  { type: 'Corporate Events', count: 32, percentage: 25, color: 'bg-green-500' },
-                  { type: 'Sports Events', count: 28, percentage: 22, color: 'bg-yellow-500' },
-                  { type: 'Educational Events', count: 23, percentage: 18, color: 'bg-purple-500' }
-                ].map((item) => (
-                  <div key={item.type} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-4 h-4 rounded ${item.color}`}></div>
-                      <span className="text-sm font-medium text-gray-900">{item.type}</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${item.color}`}
-                          style={{ width: `${item.percentage}%` }}
-                        ></div>
+              {planDistribution.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No events in this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  {planDistribution.map((item) => (
+                    <div key={item.type} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-4 h-4 rounded ${item.color}`} />
+                        <span className="text-sm font-medium text-gray-900">{item.type}</span>
                       </div>
-                      <span className="text-sm text-gray-600 w-8">{item.count}</span>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${item.color}`}
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-gray-600 w-8">{item.count}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Top Performing Societies */}
           {/* Top Performing Venues */}
           <Card>
             <CardHeader>
               <h3 className="text-lg font-semibold text-gray-900">Top Performing Venues</h3>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { name: 'Sunset Heights Venue', events: 12, revenue: 345000, growth: 25.4 },
-                  { name: 'Green Valley Convention Center', events: 10, revenue: 298000, growth: 18.7 },
-                  { name: 'Royal Gardens Event Center', events: 8, revenue: 234000, growth: 15.2 },
-                  { name: 'Paradise Event Hall', events: 6, revenue: 187000, growth: 12.8 }
-                ].map((venue, index) => (
-                  <div key={venue.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-blue-600">{index + 1}</span>
+              {topVenues.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No venue data.</p>
+              ) : (
+                <div className="space-y-4">
+                  {topVenues.map((venue, index) => (
+                    <div key={venue.name + index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-blue-600">{index + 1}</span>
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{venue.name}</div>
+                          <div className="text-sm text-gray-500">{venue.events} events</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-medium text-gray-900">{venue.name}</div>
-                        <div className="text-sm text-gray-500">{venue.events} events</div>
+                      <div className="text-right">
+                        <div className="font-medium text-gray-900">₹{(venue.revenue / 1000).toFixed(0)}K</div>
+                        {venue.growth > 0 && (
+                          <div className="text-sm text-green-600">+{venue.growth}%</div>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-medium text-gray-900">₹{(venue.revenue / 1000).toFixed(0)}K</div>
-                      <div className="text-sm text-green-600">+{venue.growth}%</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -407,21 +537,38 @@ export const Reports: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Avg Event Size', value: '285', unit: 'attendees', icon: Users },
-                  { label: 'Avg Revenue/Event', value: '₹28K', unit: '', icon: DollarSign },
-                  { label: 'Event Success Rate', value: '94.5', unit: '%', icon: Target },
-                  { label: 'Avg Planning Time', value: '21', unit: 'days', icon: Clock }
-                ].map((stat) => (
-                  <div key={stat.label} className="text-center p-4 bg-gray-50 rounded-lg">
-                    <div className="flex justify-center mb-2">
-                      <stat.icon className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                    <div className="text-sm text-gray-600">{stat.unit}</div>
-                    <div className="text-xs text-gray-500 mt-1">{stat.label}</div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-center mb-2">
+                    <Users className="h-6 w-6 text-blue-600" />
                   </div>
-                ))}
+                  <div className="text-2xl font-bold text-gray-900">{avgEventSize}</div>
+                  <div className="text-sm text-gray-600">attendees</div>
+                  <div className="text-xs text-gray-500 mt-1">Avg Event Size</div>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-center mb-2">
+                    <DollarSign className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900">₹{(avgRevenuePerEvent / 1000).toFixed(0)}K</div>
+                  <div className="text-sm text-gray-600" />
+                  <div className="text-xs text-gray-500 mt-1">Avg Revenue/Event</div>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-center mb-2">
+                    <Target className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900">{eventSuccessRate}%</div>
+                  <div className="text-sm text-gray-600" />
+                  <div className="text-xs text-gray-500 mt-1">Event Success Rate</div>
+                </div>
+                <div className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-center mb-2">
+                    <Clock className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900">—</div>
+                  <div className="text-sm text-gray-600">days</div>
+                  <div className="text-xs text-gray-500 mt-1">Avg Planning Time</div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -436,10 +583,6 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Event Performance Analysis</h3>
               <div className="flex space-x-2">
                 <Button size="sm" variant="outline">
-                  <Filter className="h-4 w-4 mr-1" />
-                  Filter
-                </Button>
-                <Button size="sm" variant="outline">
                   <Download className="h-4 w-4 mr-1" />
                   Export
                 </Button>
@@ -447,59 +590,45 @@ export const Reports: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Event Name</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Attendees</TableHead>
-                  <TableHead>Revenue</TableHead>
-                  <TableHead>Satisfaction</TableHead>
-                  <TableHead>ROI</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockEventPerformance.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell className="font-medium">{event.name}</TableCell>
-                    <TableCell>{new Date(event.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{event.attendees}</TableCell>
-                    <TableCell>₹{event.revenue.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        <span className="mr-2">{event.satisfaction}</span>
-                        <div className="flex">
-                          {[...Array(5)].map((_, i) => (
-                            <span
-                              key={i}
-                              className={`text-sm ${i < Math.floor(event.satisfaction) ? 'text-yellow-400' : 'text-gray-300'}`}
-                            >
-                              ★
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={event.roi >= 150 ? 'success' : event.roi >= 100 ? 'warning' : 'error'}>
-                        {event.roi}%
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex space-x-1">
-                        <Button size="sm" variant="ghost">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="ghost">
-                          <BarChart3 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            {eventPerformanceRows.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No events in this period.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Event Name</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Attendees</TableHead>
+                    <TableHead>Revenue</TableHead>
+                    <TableHead>Satisfaction</TableHead>
+                    <TableHead>ROI</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {eventPerformanceRows.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="font-medium">{event.name}</TableCell>
+                      <TableCell>{event.date ? new Date(event.date).toLocaleDateString() : '—'}</TableCell>
+                      <TableCell>{event.attendees}</TableCell>
+                      <TableCell>₹{event.revenue.toLocaleString()}</TableCell>
+                      <TableCell className="text-gray-500">—</TableCell>
+                      <TableCell className="text-gray-500">—</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-1">
+                          <Button size="sm" variant="ghost">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost">
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -512,32 +641,27 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Revenue Breakdown</h3>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { source: 'Event Fees', amount: 4250000, percentage: 65, color: 'bg-blue-500' },
-                  { source: 'Vendor Commissions', amount: 1350000, percentage: 20, color: 'bg-green-500' },
-                  { source: 'Sponsorships', amount: 650000, percentage: 10, color: 'bg-yellow-500' },
-                  { source: 'Advertisements', amount: 325000, percentage: 5, color: 'bg-purple-500' }
-                ].map((item) => (
-                  <div key={item.source} className="flex items-center justify-between">
+              {totalRevenue === 0 ? (
+                <p className="text-gray-500 text-center py-6">No revenue data for this period.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className={`w-4 h-4 rounded ${item.color}`}></div>
-                      <span className="text-sm font-medium text-gray-900">{item.source}</span>
+                      <div className="w-4 h-4 rounded bg-blue-500" />
+                      <span className="text-sm font-medium text-gray-900">Event revenue</span>
                     </div>
                     <div className="flex items-center space-x-3">
                       <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${item.color}`}
-                          style={{ width: `${item.percentage}%` }}
-                        ></div>
+                        <div className="h-2 rounded-full bg-blue-500" style={{ width: '100%' }} />
                       </div>
                       <span className="text-sm text-gray-600 w-20 text-right">
-                        ₹{(item.amount / 100000).toFixed(1)}L
+                        ₹{(totalRevenue / 100000).toFixed(1)}L
                       </span>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <p className="text-xs text-gray-500 mt-2">Other sources (vendor commissions, sponsorships, etc.) coming soon.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -546,33 +670,7 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Expense Analysis</h3>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { category: 'Vendor Payments', amount: 2100000, percentage: 45, color: 'bg-red-500' },
-                  { category: 'Platform Costs', amount: 980000, percentage: 21, color: 'bg-orange-500' },
-                  { category: 'Marketing', amount: 700000, percentage: 15, color: 'bg-pink-500' },
-                  { category: 'Operations', amount: 560000, percentage: 12, color: 'bg-indigo-500' },
-                  { category: 'Others', amount: 330000, percentage: 7, color: 'bg-gray-500' }
-                ].map((item) => (
-                  <div key={item.category} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-4 h-4 rounded ${item.color}`}></div>
-                      <span className="text-sm font-medium text-gray-900">{item.category}</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${item.color}`}
-                          style={{ width: `${item.percentage}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm text-gray-600 w-20 text-right">
-                        ₹{(item.amount / 100000).toFixed(1)}L
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-gray-500 text-center py-8">No expense data available. Coming soon.</p>
             </CardContent>
           </Card>
         </div>
@@ -585,48 +683,47 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900">City-wise Performance</h3>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>City</TableHead>
-                  <TableHead>Events</TableHead>
-                  <TableHead>Revenue</TableHead>
-                  <TableHead>Societies</TableHead>
-                  <TableHead>Growth Rate</TableHead>
-                  <TableHead>Market Share</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockCityPerformance.map((city) => (
-                  <TableRow key={city.city}>
-                    <TableCell className="font-medium">{city.city}</TableCell>
-                    <TableCell>{city.events}</TableCell>
-                    <TableCell>₹{(city.revenue / 100000).toFixed(1)}L</TableCell>
-                    <TableCell>{city.societies}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
-                        {city.growth >= 15 ? (
-                          <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                        )}
-                        <span className={`font-medium ${city.growth >= 15 ? 'text-green-600' : 'text-red-600'}`}>
-                          {city.growth}%
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full"
-                          style={{ width: `${(city.revenue / Math.max(...mockCityPerformance.map(c => c.revenue))) * 100}%` }}
-                        ></div>
-                      </div>
-                    </TableCell>
+            {cityPerformance.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No event data by city for this period.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>City</TableHead>
+                    <TableHead>Events</TableHead>
+                    <TableHead>Revenue</TableHead>
+                    <TableHead>Venues</TableHead>
+                    <TableHead>Growth Rate</TableHead>
+                    <TableHead>Market Share</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {cityPerformance.map((city) => {
+                    const maxCityRev = Math.max(...cityPerformance.map((c) => c.revenue), 1);
+                    const share = (city.revenue / maxCityRev) * 100;
+                    return (
+                      <TableRow key={city.city}>
+                        <TableCell className="font-medium">{city.city}</TableCell>
+                        <TableCell>{city.events}</TableCell>
+                        <TableCell>₹{(city.revenue / 100000).toFixed(1)}L</TableCell>
+                        <TableCell>{city.societies}</TableCell>
+                        <TableCell>
+                          <span className="text-gray-500">—</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="w-24 bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full"
+                              style={{ width: `${share}%` }}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -685,6 +782,7 @@ export const Reports: React.FC = () => {
           <Card>
             <CardHeader>
               <h3 className="text-lg font-semibold text-gray-900">Saved Reports</h3>
+              <p className="text-sm text-gray-500 font-normal mt-1">Sample list — saved reports will be available when the feature is enabled.</p>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">

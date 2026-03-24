@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Building2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import logo from '../assets/newlogo.png';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -48,10 +49,11 @@ export const Login: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8">
           <div className="text-center">
-            <div className="mx-auto h-12 w-12 sm:h-16 sm:w-16 bg-blue-600 rounded-full flex items-center justify-center">
-              <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+          <img src={logo} alt="BoothBuzz" className="h-80 w-100 object-contain" />
+            {/*<div className="mx-auto h-12 w-12 sm:h-16 sm:w-16 bg-blue-600 rounded-full flex items-center justify-center">
+              <Building2 className="h-6 w-6 sm:h-8 sm:w-8 text-white" /
             </div>
-            <h2 className="mt-4 sm:mt-6 text-2xl sm:text-3xl font-bold text-gray-900">Booth Buzz</h2>
+            <h2 className="mt-4 sm:mt-6 text-2xl sm:text-3xl font-bold text-gray-900">Booth Buzz</h2> */}
             <p className="mt-2 text-sm text-gray-600">Admin Portal</p>
           </div>
 

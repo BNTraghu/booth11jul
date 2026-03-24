@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   Save, 
   ArrowLeft, 
@@ -154,8 +156,17 @@ const targetingBehaviors = [
 
 const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad', 'Kolkata', 'Ahmedabad'];
 
+const PLACEMENTS: Record<string, 'header' | 'sidebar' | 'footer' | 'event_page' | 'mobile_app'> = {
+  header: 'header',
+  sidebar: 'sidebar',
+  footer: 'footer',
+  event_page: 'event_page',
+  mobile_app: 'mobile_app'
+};
+
 export const CreateCampaign: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
@@ -203,7 +214,7 @@ export const CreateCampaign: React.FC = () => {
 
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const validateForm = (): boolean => {
+  const validateForm = (): { valid: boolean; newErrors: FormErrors } => {
     const newErrors: FormErrors = {};
 
     // Basic validation
@@ -237,8 +248,9 @@ export const CreateCampaign: React.FC = () => {
       newErrors.ads = 'At least one advertisement is required';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const valid = Object.keys(newErrors).length === 0;
+    setErrors(valid ? {} : { ...newErrors, submit: 'Please fix the errors below. Go back to the step(s) with issues and correct them, then click Create Campaign again.' });
+    return { valid, newErrors };
   };
 
   const handleInputChange = (field: keyof FormData, value: any) => {
@@ -301,27 +313,94 @@ export const CreateCampaign: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
+
+    const { valid, newErrors } = validateForm();
+    if (!valid) {
+      // Jump to first step that has an error so user can fix it
+      if (newErrors.name || newErrors.description) setActiveStep(1);
+      else if (newErrors.budget || newErrors.startDate || newErrors.endDate) setActiveStep(2);
+      else if (newErrors.ads) setActiveStep(3);
       return;
     }
 
+    setErrors(prev => ({ ...prev, submit: '' }));
     setIsSubmitting(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('Creating campaign:', formData);
-      
+      const organizationId = user?.organizationId ?? null;
+      const targetAudience = formData.targeting.geographic.cities.length > 0
+        ? formData.targeting.geographic.cities.join(', ')
+        : `Age ${formData.targeting.demographics.ageMin}-${formData.targeting.demographics.ageMax}`;
+
+      const { data: campaignRow, error: campaignError } = await supabase
+        .from('campaigns')
+        .insert({
+          organization_id: organizationId,
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          target_audience: targetAudience,
+          start_date: formData.startDate,
+          end_date: formData.endDate,
+          budget: formData.budget,
+          spent: 0,
+          status: formData.status,
+          performance: { impressions: 0, clicks: 0, conversions: 0, ctr: 0, cpc: 0 }
+        })
+        .select('id')
+        .single();
+
+      if (campaignError || !campaignRow?.id) {
+        throw new Error(campaignError?.message ?? 'Failed to create campaign');
+      }
+
+      const campaignId = campaignRow.id;
+      const advertisementIds: string[] = [];
+
+      for (const ad of formData.ads) {
+        const adType = ad.type === 'native' ? 'banner' : ad.type;
+        const placement = (ad.placement?.[0] && PLACEMENTS[ad.placement[0]]) ? PLACEMENTS[ad.placement[0]] : 'header';
+        const { data: adRow, error: adError } = await supabase
+          .from('advertisements')
+          .insert({
+            organization_id: organizationId,
+            title: ad.title?.trim() || formData.name.trim(),
+            advertiser: formData.name.trim(),
+            type: adType,
+            placement,
+            start_date: formData.startDate,
+            end_date: formData.endDate,
+            budget: ad.budget ?? 0,
+            spent: 0,
+            impressions: 0,
+            clicks: 0,
+            status: formData.status,
+            ctr: 0,
+            cpm: ad.bidStrategy === 'cpm' ? (ad.bidAmount ?? 0) : 0
+          })
+          .select('id')
+          .single();
+
+        if (adError || !adRow?.id) {
+          throw new Error(adError?.message ?? 'Failed to create advertisement');
+        }
+        advertisementIds.push(adRow.id);
+      }
+
+      if (advertisementIds.length > 0) {
+        const { error: linkError } = await supabase
+          .from('campaign_ads')
+          .insert(advertisementIds.map(advertisement_id => ({ campaign_id: campaignId, advertisement_id })));
+
+        if (linkError) {
+          throw new Error(linkError.message);
+        }
+      }
+
       setSubmitSuccess(true);
-      
-      setTimeout(() => {
-        navigate('/ads-sponsors');
-      }, 2000);
-      
+      setTimeout(() => navigate('/ads-sponsors'), 1500);
     } catch (error) {
       console.error('Error creating campaign:', error);
-      setErrors({ submit: 'Failed to create campaign. Please try again.' });
+      setErrors(prev => ({ ...prev, submit: error instanceof Error ? error.message : 'Failed to create campaign. Please try again.' }));
     } finally {
       setIsSubmitting(false);
     }

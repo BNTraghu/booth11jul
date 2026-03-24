@@ -719,26 +719,19 @@ export const AddVenue: React.FC = () => {
     //   console.log('✅ Kind of space validation passed');
     // }
 
-    // Bank details validation
-    if (!formData.bankName.trim()) {
-      newErrors.bankName = 'Bank name is required';
-    }
+    // Bank details — all optional; validate format only when filled
     const accountRegex = /^[0-9]{9,18}$/;
-    if (!formData.bankAccountNumber.trim()) {
-      newErrors.bankAccountNumber = 'Account number is required';
-    } else if(formData.bankName.trim().length < 4) {
-      newErrors.bankName = 'Bank name must be at least 4 characters';
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+    if (formData.bankName.trim() && formData.bankName.trim().length < 2) {
+      newErrors.bankName = 'Bank name must be at least 2 characters';
     }
-    else if (!accountRegex.test(formData.bankAccountNumber.trim())) {
+    if (formData.bankAccountNumber.trim() && !accountRegex.test(formData.bankAccountNumber.trim())) {
       newErrors.bankAccountNumber = 'Account number must be 9-18 digits';
     }
-    if (!formData.bankHolderName.trim()) {  
-      newErrors.bankHolderName = 'Account holder name is required';
+    if (formData.bankHolderName.trim() && formData.bankHolderName.trim().length < 2) {
+      newErrors.bankHolderName = 'Account holder name must be at least 2 characters';
     }
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
-    if (!formData.bankIfsc.trim()) {
-      newErrors.bankIfsc = 'IFSC is required';
-    } else if (!ifscRegex.test(formData.bankIfsc.trim())) {
+    if (formData.bankIfsc.trim() && !ifscRegex.test(formData.bankIfsc.trim())) {
       newErrors.bankIfsc = 'Invalid IFSC format (e.g., HDFC0001234)';
     }
     // const micrRegex = /^[0-9]{9}$/;
@@ -2290,11 +2283,12 @@ export const AddVenue: React.FC = () => {
             <Card>
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Bank Details</h3>
+                <p className="text-sm text-gray-500 mt-1">Optional — leave blank if not available.</p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
                     <input
                       type="text"
                       value={formData.bankName}
@@ -2312,7 +2306,7 @@ export const AddVenue: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Account Number *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Account Number</label>
                     <input
                       type="text"
                       value={formData.bankAccountNumber}
@@ -2330,7 +2324,7 @@ export const AddVenue: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Holder Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank Holder Name</label>
                     <input
                       type="text"
                       value={formData.bankHolderName}
@@ -2348,7 +2342,7 @@ export const AddVenue: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank IFSC *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Bank IFSC</label>
                     <input
                       type="text"
                       value={formData.bankIfsc}

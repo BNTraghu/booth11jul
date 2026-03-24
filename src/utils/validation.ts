@@ -60,12 +60,12 @@ export const validatePinCode = (pincode: string): ValidationResult => {
   return { isValid: true, message: '' };
 };
 
-// Bank account number validation
+// Bank account number validation (empty = optional)
 export const validateBankAccountNumber = (accountNumber: string): ValidationResult => {
   if (!accountNumber.trim()) {
-    return { isValid: false, message: 'Account number is required' };
+    return { isValid: true, message: '' };
   }
-  
+
   if (!/^[0-9]{9,18}$/.test(accountNumber.trim())) {
     return { isValid: false, message: 'Account number must be 9-18 digits' };
   }
@@ -73,12 +73,12 @@ export const validateBankAccountNumber = (accountNumber: string): ValidationResu
   return { isValid: true, message: '' };
 };
 
-// Bank IFSC validation
+// Bank IFSC validation (empty = optional)
 export const validateBankIFSC = (ifsc: string): ValidationResult => {
   if (!ifsc.trim()) {
-    return { isValid: false, message: 'IFSC is required' };
+    return { isValid: true, message: '' };
   }
-  
+
   const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
   if (!ifscRegex.test(ifsc.trim())) {
     return { isValid: false, message: 'Invalid IFSC format (e.g., HDFC0001234)' };
@@ -87,12 +87,12 @@ export const validateBankIFSC = (ifsc: string): ValidationResult => {
   return { isValid: true, message: '' };
 };
 
-// Bank MICR validation
+// Bank MICR validation (empty = optional)
 export const validateBankMICR = (micr: string): ValidationResult => {
   if (!micr.trim()) {
-    return { isValid: false, message: 'MICR is required' };
+    return { isValid: true, message: '' };
   }
-  
+
   if (!/^[0-9]{9}$/.test(micr.trim())) {
     return { isValid: false, message: 'MICR must be exactly 9 digits' };
   }
@@ -100,12 +100,12 @@ export const validateBankMICR = (micr: string): ValidationResult => {
   return { isValid: true, message: '' };
 };
 
-// Bank holder name validation
+// Bank holder name validation (empty = optional)
 export const validateBankHolderName = (holderName: string): ValidationResult => {
   if (!holderName.trim()) {
-    return { isValid: false, message: 'Account holder name is required' };
+    return { isValid: true, message: '' };
   }
-  
+
   if (holderName.trim().length < 2) {
     return { isValid: false, message: 'Account holder name must be at least 2 characters' };
   }
@@ -117,12 +117,12 @@ export const validateBankHolderName = (holderName: string): ValidationResult => 
   return { isValid: true, message: '' };
 };
 
-// Bank name validation
+// Bank name validation (empty = optional)
 export const validateBankName = (bankName: string): ValidationResult => {
   if (!bankName.trim()) {
-    return { isValid: false, message: 'Bank name is required' };
+    return { isValid: true, message: '' };
   }
-  
+
   if (bankName.trim().length < 2) {
     return { isValid: false, message: 'Bank name must be at least 2 characters' };
   }

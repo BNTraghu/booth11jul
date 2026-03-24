@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
@@ -7,7 +7,7 @@ import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { Event } from '../types';
 import { supabase } from '../lib/supabase';
-import { useEvents, useVenues, useVendors, useExhibitors } from '../hooks/useSupabaseData';
+import { useEvents, useVenues, useVendors, useExhibitors, useSponsors } from '../hooks/useSupabaseData';
 import { useAuth } from '../contexts/AuthContext';
 
 interface StallConfigRow {
@@ -64,11 +64,31 @@ interface ExtendedEventFormData {
   allStalls: StallConfigRow[];
 }
 
+interface EventRegistrationRow {
+  id: string;
+  event_id: string;
+  exhibitor_id: string | null;
+  status: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at?: string;
+}
+
+const SPONSOR_ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'title', label: 'Title Sponsorship' },
+  { value: 'co_sponsor', label: 'Co-Sponsor' },
+  { value: 'associate', label: 'Associate Sponsor' },
+  { value: 'supporting', label: 'Supporting Sponsor' },
+  { value: 'in_kind', label: 'In-Kind Sponsor' },
+];
+
 export const Events: React.FC = () => {
   const { events, loading, refetch } = useEvents();
   const { venues } = useVenues();
   const { vendors } = useVendors();
   const { exhibitors } = useExhibitors();
+  const { sponsors } = useSponsors();
   
   // Debug vendor data
   console.log('🔍 Vendors loaded:', vendors.length, vendors);
@@ -99,6 +119,14 @@ export const Events: React.FC = () => {
     return exhibitor ? exhibitor.companyName || `${exhibitor.firstName} ${exhibitor.lastName}` : `Exhibitor ID: ${exhibitorId}`;
   };
 
+  const getSponsorName = (sponsorId: string) => {
+    const sponsor = sponsors.find(s => s.id === sponsorId);
+    return sponsor ? sponsor.companyName : `Sponsor ID: ${sponsorId}`;
+  };
+
+  const getSponsorRoleLabel = (role: string) =>
+    SPONSOR_ROLE_OPTIONS.find(o => o.value === role)?.label ?? role;
+
   // const [localEvents, setLocalEvents] = useState<Event[]>([]); // for local UI updates if needed
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -109,10 +137,19 @@ export const Events: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<ExtendedEventFormData | null>(null);
   const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
-  const [editActiveTab, setEditActiveTab] = useState<'event' | 'exhibitor'>('event');
+  const [editActiveTab, setEditActiveTab] = useState<'event' | 'exhibitor' | 'sponsor'>('event');
   const [viewActiveTab, setViewActiveTab] = useState<'event' | 'exhibitor'>('event');
   const [selectedExhibitorsForEdit, setSelectedExhibitorsForEdit] = useState<string[]>([]);
   const [exhibitorSearchTerm, setExhibitorSearchTerm] = useState('');
+  const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+  // Event sponsors: { sponsorId, role } for current event (edit modal)
+  const [eventSponsors, setEventSponsors] = useState<{ sponsorId: string; role: string }[]>([]);
+  const [loadingEventSponsors, setLoadingEventSponsors] = useState(false);
+  const [newSponsorId, setNewSponsorId] = useState('');
+  const [newSponsorRole, setNewSponsorRole] = useState<string>('co_sponsor');
+  const [viewEventSponsors, setViewEventSponsors] = useState<{ sponsorId: string; role: string }[]>([]);
+  const [loadingViewSponsors, setLoadingViewSponsors] = useState(false);
   
   // Stall removal modal state
   const [showDeleteStallModal, setShowDeleteStallModal] = useState(false);
@@ -128,6 +165,122 @@ export const Events: React.FC = () => {
 
   const toggleExhibitor = (id: string) => {
     setSelectedExhibitors(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  };
+
+  // Fetch exhibitor registrations when Edit modal opens for an event
+  useEffect(() => {
+    if (!showEditModal || !editFormData?.id) {
+      setEventRegistrations([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingRegistrations(true);
+    supabase
+      .from('event_registrations')
+      .select('id, event_id, exhibitor_id, status, name, email, phone, created_at')
+      .eq('event_id', editFormData.id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingRegistrations(false);
+        if (error) {
+          console.error('Error fetching event registrations:', error);
+          setEventRegistrations([]);
+          return;
+        }
+        const rows = (data as EventRegistrationRow[]) || [];
+        setEventRegistrations(rows.filter((r) => r.exhibitor_id != null));
+      });
+    return () => { cancelled = true; };
+  }, [showEditModal, editFormData?.id]);
+
+  // Fetch event_sponsors when Edit modal opens
+  useEffect(() => {
+    if (!showEditModal || !editFormData?.id) {
+      setEventSponsors([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingEventSponsors(true);
+    supabase
+      .from('event_sponsors')
+      .select('sponsor_id, role')
+      .eq('event_id', editFormData.id)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingEventSponsors(false);
+        if (error) {
+          console.error('Error fetching event sponsors:', error);
+          setEventSponsors([]);
+          return;
+        }
+        setEventSponsors((data || []).map((r: { sponsor_id: string; role: string }) => ({ sponsorId: r.sponsor_id, role: r.role })));
+      });
+    return () => { cancelled = true; };
+  }, [showEditModal, editFormData?.id]);
+
+  // Fetch event sponsors when View modal opens
+  useEffect(() => {
+    if (!showViewModal || !selectedEvent?.id) {
+      setViewEventSponsors([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingViewSponsors(true);
+    supabase
+      .from('event_sponsors')
+      .select('sponsor_id, role')
+      .eq('event_id', selectedEvent.id)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingViewSponsors(false);
+        if (error) {
+          console.error('Error fetching view event sponsors:', error);
+          setViewEventSponsors([]);
+          return;
+        }
+        setViewEventSponsors(
+          (data || []).map((r: { sponsor_id: string; role: string }) => ({ sponsorId: r.sponsor_id, role: r.role }))
+        );
+      });
+    return () => { cancelled = true; };
+  }, [showViewModal, selectedEvent?.id]);
+
+  const handleApproveRegistration = async (reg: EventRegistrationRow) => {
+    if (!reg.exhibitor_id || !editFormData) return;
+    const eventId = editFormData.id;
+    const currentIds = selectedExhibitorsForEdit || [];
+    if (currentIds.includes(reg.exhibitor_id)) {
+      await supabase.from('event_registrations').update({ status: 'approved' }).eq('id', reg.id);
+      setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'approved' } : r));
+      return;
+    }
+    const newIds = [...currentIds, reg.exhibitor_id];
+    const { error: updateRegError } = await supabase.from('event_registrations').update({ status: 'approved' }).eq('id', reg.id);
+    if (updateRegError) {
+      console.error('Error approving registration:', updateRegError);
+      return;
+    }
+    const { error: updateEventError } = await supabase.from('events').update({ exhibitor_ids: newIds }).eq('id', eventId);
+    if (updateEventError) {
+      console.error('Error adding exhibitor to event:', updateEventError);
+      return;
+    }
+    setSelectedExhibitorsForEdit(newIds);
+    setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'approved' } : r));
+    await refetch();
+    if (selectedEvent?.id === eventId) {
+      setSelectedEvent(prev => prev ? { ...prev, exhibitors: newIds } : null);
+    }
+  };
+
+  const handleRejectRegistration = async (reg: EventRegistrationRow) => {
+    const { error } = await supabase.from('event_registrations').update({ status: 'rejected' }).eq('id', reg.id);
+    if (error) {
+      console.error('Error rejecting registration:', error);
+      return;
+    }
+    setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'rejected' } : r));
   };
 
   // Stalls management functions
@@ -651,14 +804,37 @@ export const Events: React.FC = () => {
       if (error) {
         console.error('❌ Update failed:', error);
         showNotification('Failed to update event: ' + error.message, 'error');
-      } else {
-        console.log('✅ Update successful');
-        showNotification('Event updated successfully!', 'success');
-        setShowEditModal(false);
-        setEditFormData(null);
-        setSelectedEvent(null);
-        refetch();
+        return;
       }
+
+      // Sync event_sponsors: replace all for this event
+      const { error: deleteErr } = await supabase
+        .from('event_sponsors')
+        .delete()
+        .eq('event_id', editFormData.id);
+      if (deleteErr) {
+        console.error('❌ Event sponsors delete failed:', deleteErr);
+        showNotification('Event saved but sponsors could not be updated.', 'error');
+      } else if (eventSponsors.length > 0) {
+        const { error: insertErr } = await supabase
+          .from('event_sponsors')
+          .insert(eventSponsors.map(({ sponsorId, role }) => ({
+            event_id: editFormData.id,
+            sponsor_id: sponsorId,
+            role,
+          })));
+        if (insertErr) {
+          console.error('❌ Event sponsors insert failed:', insertErr);
+          showNotification('Event saved but sponsors could not be updated.', 'error');
+        }
+      }
+
+      console.log('✅ Update successful');
+      showNotification('Event updated successfully!', 'success');
+      setShowEditModal(false);
+      setEditFormData(null);
+      setSelectedEvent(null);
+      refetch();
     }
   };
 
@@ -696,6 +872,10 @@ export const Events: React.FC = () => {
     setViewActiveTab('event');
     setSelectedExhibitorsForEdit([]);
     setExhibitorSearchTerm('');
+    setEventSponsors([]);
+    setNewSponsorId('');
+    setNewSponsorRole('co_sponsor');
+    setViewEventSponsors([]);
     setStallToRemove(null);
   };
 
@@ -1470,6 +1650,32 @@ export const Events: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Sponsors */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <DollarSign className="h-5 w-5 mr-2" />
+                    Sponsors
+                  </h3>
+                  {loadingViewSponsors ? (
+                    <p className="text-sm text-gray-500">Loading sponsors…</p>
+                  ) : viewEventSponsors.length === 0 ? (
+                    <div className="col-span-full text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
+                      <DollarSign className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">No sponsors assigned to this event</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                      {viewEventSponsors.map(({ sponsorId, role }) => (
+                        <div key={sponsorId} className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="font-medium text-gray-900 text-sm">{getSponsorName(sponsorId)}</div>
+                          <Badge variant="default" className="text-xs shrink-0">
+                            {getSponsorRoleLabel(role)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
 
                 {/* Stalls Configuration */}
@@ -1827,6 +2033,16 @@ export const Events: React.FC = () => {
                     <User className="h-4 w-4 inline mr-2" />
                     Exhibitor
                   </button>
+                  <button
+                    onClick={() => setEditActiveTab('sponsor')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${editActiveTab === 'sponsor'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                  >
+                    <DollarSign className="h-4 w-4 inline mr-2" />
+                    Sponsor
+                  </button>
                 </nav>
               </div>
             </div>
@@ -1891,6 +2107,59 @@ export const Events: React.FC = () => {
                     </p>
                   </div>
                 </div> */}
+                </div>
+
+                {/* Exhibitor registrations */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Exhibitor registrations
+                  </h3>
+                  {loadingRegistrations ? (
+                    <p className="text-sm text-gray-500">Loading registrations...</p>
+                  ) : eventRegistrations.length === 0 ? (
+                    <p className="text-sm text-gray-500">No exhibitor registrations for this event.</p>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Exhibitor</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {eventRegistrations.map((reg) => (
+                            <TableRow key={reg.id}>
+                              <TableCell className="font-medium">
+                                {reg.exhibitor_id ? getExhibitorName(reg.exhibitor_id) : reg.name || '—'}
+                              </TableCell>
+                              <TableCell>{reg.email || (reg.exhibitor_id ? exhibitors.find(e => e.id === reg.exhibitor_id)?.email : null) || '—'}</TableCell>
+                              <TableCell>
+                                <Badge variant={reg.status === 'approved' ? 'success' : reg.status === 'rejected' ? 'error' : 'warning'}>
+                                  {reg.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {reg.status === 'pending' && (
+                                  <div className="flex gap-2">
+                                    <Button size="sm" onClick={() => handleApproveRegistration(reg)}>
+                                      Approve
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
+                                      Reject
+                                    </Button>
+                                  </div>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </div>
 
                 {/* Basic Information */}
@@ -2938,6 +3207,109 @@ export const Events: React.FC = () => {
                     );
                   })()}
                 </div>
+              </div>
+            )}
+
+            {/* Sponsor Tab */}
+            {editActiveTab === 'sponsor' && (
+              <div className="p-6 space-y-6 overflow-y-auto">
+                <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Event Sponsors</h3>
+                    <p className="text-sm text-gray-600">
+                      Assign sponsors to this event and set their role (e.g. Title, Co-Sponsor). {eventSponsors.length} sponsor(s) assigned.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setEditActiveTab('event')} className="flex items-center space-x-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span>Back to Event</span>
+                  </Button>
+                </div>
+
+                {loadingEventSponsors ? (
+                  <p className="text-sm text-gray-500">Loading sponsors…</p>
+                ) : (
+                  <>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Company</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead className="w-24">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {eventSponsors.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={3} className="text-center py-6 text-gray-500">
+                                No sponsors assigned. Add one below.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            eventSponsors.map(({ sponsorId, role }) => (
+                              <TableRow key={sponsorId}>
+                                <TableCell className="font-medium">{getSponsorName(sponsorId)}</TableCell>
+                                <TableCell>{getSponsorRoleLabel(role)}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEventSponsors(prev => prev.filter(s => s.sponsorId !== sponsorId))}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    <div className="flex flex-wrap items-end gap-3 p-4 bg-gray-50 rounded-lg">
+                      <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Sponsor</label>
+                        <select
+                          value={newSponsorId}
+                          onChange={(e) => setNewSponsorId(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select sponsor…</option>
+                          {sponsors
+                            .filter(s => !eventSponsors.some(es => es.sponsorId === s.id))
+                            .map(s => (
+                              <option key={s.id} value={s.id}>{s.companyName}</option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="w-48">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                        <select
+                          value={newSponsorRole}
+                          onChange={(e) => setNewSponsorRole(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          {SPONSOR_ROLE_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={!newSponsorId}
+                        onClick={() => {
+                          if (!newSponsorId) return;
+                          setEventSponsors(prev => [...prev, { sponsorId: newSponsorId, role: newSponsorRole }]);
+                          setNewSponsorId('');
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

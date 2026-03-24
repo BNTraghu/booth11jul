@@ -9,6 +9,8 @@ export type UseSupabaseDataOptions = {
   /** When set and not super admin, filter by this organization (org-level users see only their org). */
   organizationId?: string | null;
   isSuperAdmin?: boolean;
+  /** When true, do not filter by organization_id (e.g. show seed data to all). */
+  skipOrgFilter?: boolean;
 };
 
 // Generic hook for fetching data from Supabase
@@ -30,8 +32,13 @@ export function useSupabaseData<T>(
         .from(table)
         .select(select);
 
-      // Org scoping: non–super-admin users see only their organization's data
-      if (options.organizationId != null && options.organizationId !== '' && options.isSuperAdmin !== true) {
+      // Org scoping: non–super-admin users see only their organization's data (unless skipOrgFilter)
+      if (
+        !options.skipOrgFilter &&
+        options.organizationId != null &&
+        options.organizationId !== '' &&
+        options.isSuperAdmin !== true
+      ) {
         query = query.eq('organization_id', options.organizationId);
       }
 
@@ -65,7 +72,7 @@ export function useSupabaseData<T>(
 
   useEffect(() => {
     fetchData();
-  }, [...dependencies, options.organizationId, options.isSuperAdmin]);
+  }, [...dependencies, options.organizationId, options.isSuperAdmin, options.skipOrgFilter]);
 
   return { data, loading, error, refetch: () => fetchData() };
 }
@@ -409,4 +416,137 @@ export const useSocieties = () => {
   }));
 
   return { societies, loading, error, refetch };
+};
+
+export const useSponsors = (opts?: { all?: boolean }) => {
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'sponsors',
+    '*',
+    [user?.organizationId, isSuperAdmin, opts?.all],
+    {
+      order: { column: 'created_at', ascending: false },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+      skipOrgFilter: opts?.all === true,
+    }
+  );
+
+  const sponsors = data.map((row: any) => ({
+    id: row.id,
+    companyName: row.company_name,
+    contactPerson: row.contact_person,
+    email: row.email,
+    phone: row.phone ?? '',
+    sponsorshipType: row.sponsorship_type,
+    sponsorshipLevel: row.sponsorship_level,
+    amount: Number(row.amount) || 0,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+    benefits: Array.isArray(row.benefits) ? row.benefits : [],
+    eventsSponsored: row.events_sponsored ?? 0,
+  }));
+
+  return { sponsors, loading, error, refetch };
+};
+
+export const useAdvertisements = (opts?: { skipOrgFilter?: boolean }) => {
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'advertisements',
+    '*',
+    [user?.organizationId, isSuperAdmin, opts?.skipOrgFilter],
+    {
+      order: { column: 'created_at', ascending: false },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+      skipOrgFilter: opts?.skipOrgFilter === true,
+    }
+  );
+
+  const advertisements = data.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    advertiser: row.advertiser,
+    type: row.type,
+    placement: row.placement,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    budget: Number(row.budget) || 0,
+    spent: Number(row.spent) || 0,
+    impressions: Number(row.impressions) || 0,
+    clicks: Number(row.clicks) || 0,
+    status: row.status,
+    ctr: Number(row.ctr) || 0,
+    cpm: Number(row.cpm) || 0,
+  }));
+
+  return { advertisements, loading, error, refetch };
+};
+
+export const useCampaigns = (opts?: { skipOrgFilter?: boolean }) => {
+  const { user, isSuperAdmin } = useAuth();
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchCampaigns = async () => {
+    try {
+      setLoading(true);
+      let query = supabase
+        .from('campaigns')
+        .select('*, campaign_ads(advertisement_id)')
+        .order('created_at', { ascending: false });
+
+      if (
+        opts?.skipOrgFilter !== true &&
+        user?.organizationId != null &&
+        user.organizationId !== '' &&
+        !isSuperAdmin
+      ) {
+        query = query.eq('organization_id', user.organizationId);
+      }
+
+      const { data: result, error: err } = await query;
+      if (err) {
+        console.error('Error fetching campaigns:', err);
+        setError(err.message);
+      } else {
+        setData(result ?? []);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching campaigns:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCampaigns();
+  }, [user?.organizationId, isSuperAdmin, opts?.skipOrgFilter]);
+
+  const campaigns = data.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description ?? '',
+    startDate: row.start_date,
+    endDate: row.end_date,
+    budget: Number(row.budget) || 0,
+    spent: Number(row.spent) || 0,
+    targetAudience: row.target_audience ?? '',
+    status: row.status,
+    ads: (row.campaign_ads ?? []).map((c: any) => c.advertisement_id),
+    performance: {
+      impressions: Number(row.performance?.impressions) ?? 0,
+      clicks: Number(row.performance?.clicks) ?? 0,
+      conversions: Number(row.performance?.conversions) ?? 0,
+      ctr: Number(row.performance?.ctr) ?? 0,
+      cpc: Number(row.performance?.cpc) ?? 0,
+    },
+  }));
+
+  return { campaigns, loading, error, refetch: fetchCampaigns };
 };

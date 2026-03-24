@@ -24,6 +24,10 @@ import { Billing } from './pages/Billing';
 import { CreatePlan } from './pages/CreatePlan';
 import { AdsSponsors } from './pages/AdsSponsors';
 import { CreateCampaign } from './pages/CreateCampaign';
+import { EditCampaign } from './pages/EditCampaign';
+import { EditAdvertisement } from './pages/EditAdvertisement';
+import { AddSponsor } from './pages/AddSponsor';
+import { EditSponsor } from './pages/EditSponsor';
 import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
 import { BRDDownload } from './pages/BRDDownload';
@@ -130,6 +134,26 @@ const AppRoutes: React.FC = () => {
       <Route path="/ads-sponsors/campaigns/create" element={
         <ProtectedRoute>
           <CreateCampaign />
+        </ProtectedRoute>
+      } />
+      <Route path="/ads-sponsors/campaigns/:id/edit" element={
+        <ProtectedRoute>
+          <EditCampaign />
+        </ProtectedRoute>
+      } />
+      <Route path="/ads-sponsors/ads/:id/edit" element={
+        <ProtectedRoute>
+          <EditAdvertisement />
+        </ProtectedRoute>
+      } />
+      <Route path="/ads-sponsors/sponsors/create" element={
+        <ProtectedRoute>
+          <AddSponsor />
+        </ProtectedRoute>
+      } />
+      <Route path="/ads-sponsors/sponsors/:id/edit" element={
+        <ProtectedRoute>
+          <EditSponsor />
         </ProtectedRoute>
       } />
       <Route path="/reports" element={
