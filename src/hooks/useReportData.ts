@@ -59,6 +59,8 @@ function mapEventRow(event: any): Event {
     venueId: event.venue_id,
     createdBy: event.created_by,
     totalRevenue: event.total_revenue || 0,
+    satisfactionScore: event.satisfaction_score ?? event.satisfactionScore ?? null,
+    roiPercent: event.roi_percent ?? event.roiPercent ?? null,
     eventImageUrl: event.event_image_url,
     layoutImageUrl: event.layout_image_url,
     pricePerHour: event.price_per_hour,

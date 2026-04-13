@@ -19,6 +19,7 @@ import {
   Building,
   XCircle,
   Mail,
+  Globe,
   Phone,
   Calendar,
   CreditCard,
@@ -36,7 +37,20 @@ import { Button } from '../components/UI/Button';
 import { PhoneInput } from '../components/UI/PhoneInput';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { useExhibitors } from '../hooks/useSupabaseData';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { uploadExhibitorPublicImage } from '../lib/exhibitorStorage';
+import {
+  exhibitorPortfolioDisplayUrl,
+  parseExhibitorImageUrls,
+  exhibitorUploadedImageUrls,
+} from '../utils/exhibitorPortfolio';
+import {
+  ExhibitorStorageImage,
+  LocalFileImagePreview,
+} from '../components/Exhibitor/ExhibitorStorageImage';
+import { getDefaultExhibitorProfileUrl, normalizePersistableImageUrl } from '../constants/exhibitorDefaultProfile';
+import { normalizeExhibitorImageUrlsForWrite } from '../lib/exhibitorImageDb';
 import statesData from '../data/states.json';
 
 // Interface matching AddExhibitor exactly
@@ -88,6 +102,8 @@ interface ExhibitorFormData {
   // Images (supports both files and URLs)
   images: File[];
   imageUrls?: string[];
+  portfolioImageUrl?: string;
+  portfolioImage?: File | null;
   
   // Status
   status: 'interested' | 'approved' | 'declined';
@@ -103,47 +119,93 @@ interface ExhibitorFilters {
   search: string;
 }
 
-// Categories from AddExhibitor
-const exhibitorCategories = [
-  'Technology',
-  'Healthcare',
-  'Education',
-  'Fashion',
-  'Food & Beverage',
-  'Automotive',
-  'Home & Garden',
-  'Sports & Fitness',
-  'Travel & Tourism',
-  'Finance & Banking',
-  'Real Estate',
-  'Entertainment',
-  'Manufacturing',
-  'Retail',
-  'Services',
-  'Others'
-];
+interface EventSubcategoryRow {
+  name: string;
+  sort_order: number;
+}
 
-const subCategories = {
-  'Technology': ['Software', 'Hardware', 'AI/ML', 'IoT', 'Cybersecurity', 'Mobile Apps', 'Web Development'],
-  'Healthcare': ['Medical Devices', 'Pharmaceuticals', 'Telemedicine', 'Health Tech', 'Wellness'],
-  'Education': ['EdTech', 'Online Learning', 'Training', 'Certification', 'Academic Services'],
-  'Fashion': ['Clothing', 'Accessories', 'Footwear', 'Jewelry', 'Beauty Products'],
-  'Food & Beverage': ['Restaurants', 'Catering', 'Packaged Foods', 'Beverages', 'Organic Products'],
-  'Automotive': ['Cars', 'Motorcycles', 'Parts & Accessories', 'Services', 'Electric Vehicles'],
-  'Home & Garden': ['Furniture', 'Decor', 'Appliances', 'Gardening', 'Home Improvement'],
-  'Sports & Fitness': ['Equipment', 'Apparel', 'Fitness Centers', 'Sports Services', 'Nutrition'],
-  'Travel & Tourism': ['Hotels', 'Travel Agencies', 'Tour Operators', 'Transportation', 'Destinations'],
-  'Finance & Banking': ['Banks', 'Insurance', 'Investment', 'Fintech', 'Loans & Credit'],
-  'Real Estate': ['Residential', 'Commercial', 'Property Management', 'Construction', 'Architecture'],
-  'Entertainment': ['Events', 'Media', 'Gaming', 'Music', 'Film & Video'],
-  'Manufacturing': ['Industrial Equipment', 'Raw Materials', 'Machinery', 'Tools', 'Automation'],
-  'Retail': ['E-commerce', 'Physical Stores', 'Wholesale', 'Distribution', 'Franchising'],
-  'Services': ['Consulting', 'Marketing', 'Legal', 'Accounting', 'IT Services'],
-  'Others': ['Miscellaneous', 'Emerging Industries', 'Non-profit', 'Government', 'Research']
-};
+interface EventCategoryRow {
+  name: string;
+  sort_order: number;
+  event_subcategories?: EventSubcategoryRow[];
+}
 
 const boothSizes = ['3x3 meters', '3x6 meters', '6x6 meters', '6x9 meters', '9x9 meters', 'Custom Size'];
 // States and cities are now loaded from JSON data
+
+/** When first_name/last_name are empty in DB, derive from contact_person or company so form state matches what the user sees (avoids false "required" errors). */
+function resolveEditPersonalNames(exhibitor: {
+  firstName?: string;
+  lastName?: string;
+  contactPerson?: string | null;
+  companyName?: string;
+}): { firstName: string; lastName: string } {
+  const first = (exhibitor.firstName || '').trim();
+  const last = (exhibitor.lastName || '').trim();
+  if (first || last) {
+    return { firstName: first, lastName: last };
+  }
+  const cp = (exhibitor.contactPerson || '').trim();
+  if (cp) {
+    const parts = cp.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+    }
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  }
+  const company = (exhibitor.companyName || '').trim();
+  if (company) {
+    const parts = company.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+    }
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  }
+  return { firstName: '', lastName: '' };
+}
+
+/** Comma-separated sub_category: trim segments, drop empties, dedupe (order preserved). */
+function normalizeSubCategoriesCsv(raw: string | null | undefined): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    if (!seen.has(part)) {
+      seen.add(part);
+      out.push(part);
+    }
+  }
+  return out.join(', ');
+}
+
+/**
+ * Map saved sub-category labels to canonical names from event_subcategories so checkboxes match.
+ * Case-insensitive match; drops duplicate canonical entries.
+ */
+function reconcileSubCategoriesToCanonical(savedCsv: string, canonicalList: string[]): string {
+  const saved = normalizeSubCategoriesCsv(savedCsv)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!canonicalList.length) return saved.join(', ');
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const lowerMap = new Map<string, string>();
+  for (const c of canonicalList) {
+    lowerMap.set(c.toLowerCase(), c);
+  }
+  for (const s of saved) {
+    const exact = canonicalList.find((c) => c === s);
+    const use = exact || lowerMap.get(s.toLowerCase()) || s;
+    if (!seen.has(use)) {
+      seen.add(use);
+      out.push(use);
+    }
+  }
+  return out.join(', ');
+}
 
 // File handling functions (stores placeholder data since no storage exists)
 const handleDocumentUpload = async (file: File, fileName: string): Promise<string | null> => {
@@ -183,49 +245,24 @@ const handleDocumentUpload = async (file: File, fileName: string): Promise<strin
 
 const handleImageUploads = async (images: File[], exhibitorName: string): Promise<string[]> => {
   const uploadedUrls: string[] = [];
-  
   for (let i = 0; i < images.length; i++) {
-    const file = images[i];
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${exhibitorName.replace(/\s+/g, '_')}_image_${i + 1}.${fileExt}`;
-
-    try {
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('exhibitor-images')
-        .upload(fileName, file, {
-          upsert: true
-        });
-
-      if (error) {
-        console.error('Error uploading image:', error);
-        continue;
-      }
-
-      // Get signed URL since bucket is not public
-      const { data: signedUrl, error: signedError } = await supabase.storage
-        .from('exhibitor-images')
-        .createSignedUrl(fileName, 3600); // 1 hour expiry
-
-      if (signedError) {
-        console.error('Error creating signed URL for image:', signedError);
-        continue;
-      }
-
-      console.log(`🖼️ Image ${i + 1} uploaded successfully:`, signedUrl.signedUrl);
-      uploadedUrls.push(signedUrl.signedUrl);
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      continue;
-    }
+    const { url, error } = await uploadExhibitorPublicImage(
+      images[i],
+      'gallery',
+      `${exhibitorName}_edit_${i + 1}`
+    );
+    if (url) uploadedUrls.push(url);
+    else console.error(`Edit gallery image ${i + 1} upload failed:`, error);
   }
-  
   return uploadedUrls;
 };
 
 export const Exhibitors: React.FC = () => {
   const navigate = useNavigate();
+  const { isSuperAdmin } = useAuth();
   const { exhibitors, loading, error, refetch } = useExhibitors();
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [subCategoryOptions, setSubCategoryOptions] = useState<Record<string, string[]>>({});
   
   // DEBUG: Log all exhibitors' document/image status
   React.useEffect(() => {
@@ -278,6 +315,8 @@ export const Exhibitors: React.FC = () => {
       licence: null
     },
     images: [],
+    portfolioImageUrl: '',
+    portfolioImage: null,
     status: 'interested',
     paymentStatus: 'pending'
   });
@@ -297,6 +336,21 @@ export const Exhibitors: React.FC = () => {
   const [newService, setNewService] = useState('');
   const [existingDocuments, setExistingDocuments] = useState<{[key: string]: string}>({});
   const [existingImages, setExistingImages] = useState<string[]>([]);
+  const editSubCategories = editFormData?.category ? (subCategoryOptions[editFormData.category] || []) : [];
+  const selectedEditSubCategories = (editFormData?.subCategory || '')
+    .split(',')
+    .map((v: string) => v.trim())
+    .filter(Boolean);
+
+  const toggleEditSubCategory = (subCategory: string) => {
+    if (!editFormData) return;
+    const next = selectedEditSubCategories.includes(subCategory)
+      ? selectedEditSubCategories.filter((v: string) => v !== subCategory)
+      : [...selectedEditSubCategories, subCategory];
+    const nextValue = normalizeSubCategoriesCsv(next.join(', '));
+    setEditFormData({ ...editFormData, subCategory: nextValue });
+    validateField('subCategory', nextValue);
+  };
   
   // Filters
   const [filters, setFilters] = useState<ExhibitorFilters>({
@@ -308,11 +362,56 @@ export const Exhibitors: React.FC = () => {
     city: 'all'
   });
 
+  React.useEffect(() => {
+    const loadEventTaxonomy = async () => {
+      const { data, error } = await supabase
+        .from('event_categories')
+        .select('name, sort_order, event_subcategories(name, sort_order)')
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        console.error('Failed to load event categories:', error);
+        return;
+      }
+
+      const categories = (data || []) as EventCategoryRow[];
+      setCategoryOptions(categories.map((c) => c.name));
+
+      const subCategoryMap: Record<string, string[]> = {};
+      categories.forEach((category) => {
+        const sortedSubs = [...(category.event_subcategories || [])].sort(
+          (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
+        );
+        subCategoryMap[category.name] = sortedSubs.map((sub) => sub.name);
+      });
+      setSubCategoryOptions(subCategoryMap);
+    };
+
+    loadEventTaxonomy();
+  }, []);
+
+  // When taxonomy loads (or edit modal opens), align saved sub_category text with canonical option labels so checkboxes show selected and toggles don't duplicate entries.
+  React.useEffect(() => {
+    if (!showEditModal) return;
+    setEditFormData((prev: any) => {
+      if (!prev?.category) return prev;
+      const canon = subCategoryOptions[prev.category];
+      if (!canon?.length) return prev;
+      const normalized = normalizeSubCategoriesCsv(prev.subCategory || '');
+      const reconciled = reconcileSubCategoriesToCanonical(normalized, canon);
+      return reconciled === normalized ? prev : { ...prev, subCategory: reconciled };
+    });
+  }, [showEditModal, subCategoryOptions, editFormData?.id, editFormData?.category]);
+
   const filteredExhibitors = exhibitors.filter(exhibitor => {
     const matchesStatus = filters.status === 'all' || exhibitor.status === filters.status;
     const matchesPayment = filters.paymentStatus === 'all' || exhibitor.paymentStatus === filters.paymentStatus;
     const matchesCategory = filters.category === 'all' || exhibitor.category === filters.category;
-    const matchesSubCategory = filters.subCategory === 'all' || exhibitor.subCategory === filters.subCategory;
+    const exhibitorSubCategories = (exhibitor.subCategory || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    const matchesSubCategory = filters.subCategory === 'all' || exhibitorSubCategories.includes(filters.subCategory);
     const matchesCity = filters.city === 'all' || exhibitor.city === filters.city;
     const matchesSearch = filters.search === '' || 
       exhibitor.companyName.toLowerCase().includes(filters.search.toLowerCase()) ||
@@ -395,6 +494,10 @@ export const Exhibitors: React.FC = () => {
   };
 
   const handleEdit = (exhibitor: any) => {
+    if (!isSuperAdmin) {
+      showNotification('Only Super Admin can edit exhibitors.', 'error');
+      return;
+    }
     console.log('🔍 Edit exhibitor called with data:', exhibitor);
     console.log('📄 Document URLs:', exhibitor.documentUrls);
     console.log('🖼️ Image URLs:', exhibitor.imageUrls);
@@ -409,17 +512,20 @@ export const Exhibitors: React.FC = () => {
     console.log('📋 Setting existingDocuments:', docUrls);
     setExistingDocuments(docUrls);
     
-    const imgUrls = exhibitor.imageUrls || [];
+    const imgUrls = parseExhibitorImageUrls(exhibitor.imageUrls ?? (exhibitor as { image_urls?: unknown }).image_urls);
     console.log('🖼️ Setting existingImages:', imgUrls);
     setExistingImages(imgUrls);
-    
+
+    const { firstName: resolvedFirstName, lastName: resolvedLastName } = resolveEditPersonalNames(exhibitor);
+    setEditErrors({});
+
     // Map Exhibitor to ExtendedExhibitorFormData with NEW structure matching AddExhibitor exactly
     setEditFormData({
       id: exhibitor.id,
       
       // Personal Information (Step 1 - matching AddExhibitor)
-      firstName: exhibitor.firstName || '',
-      lastName: exhibitor.lastName || '',
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
       email: exhibitor.email || '',
       phone: exhibitor.phone || '',
       alternatePhone: exhibitor.alternatePhone || '',
@@ -436,7 +542,9 @@ export const Exhibitors: React.FC = () => {
       companyName: exhibitor.companyName || '',
       website: exhibitor.website || '',
       category: exhibitor.category || '',
-      subCategory: exhibitor.subCategory || '',
+      subCategory: normalizeSubCategoriesCsv(
+        exhibitor.subCategory ?? exhibitor.sub_category ?? ''
+      ),
       panNumber: exhibitor.panNumber || '',
       gstNumber: exhibitor.gstNumber || '',
       boothSize: exhibitor.boothSize || '',
@@ -462,8 +570,10 @@ export const Exhibitors: React.FC = () => {
       
       // Upload Images (Step 5 - matching AddExhibitor)
       images: [],
-      imageUrls: exhibitor.imageUrls || [],
-      
+      imageUrls: imgUrls,
+      portfolioImageUrl: exhibitor.portfolioImageUrl || '',
+      portfolioImage: null,
+
       // Settings
       status: exhibitor.status || 'interested',
       paymentStatus: exhibitor.paymentStatus || 'pending',
@@ -505,17 +615,22 @@ export const Exhibitors: React.FC = () => {
   };
 
   const handleDelete = (exhibitor: any) => {
+    if (!isSuperAdmin) {
+      showNotification('Only Super Admin can delete exhibitors.', 'error');
+      return;
+    }
     setSelectedExhibitor(exhibitor);
     setShowDeleteModal(true);
   };
 
   const handleSaveEdit = async () => {
+    if (!isSuperAdmin) {
+      showNotification('Only Super Admin can edit exhibitors.', 'error');
+      return;
+    }
     if (editFormData) {
-      // Validate all steps before saving
-      const allStepsValid = [1, 2, 3, 4, 5, 6].every(step => validateEditStep(step));
-      
-      if (!allStepsValid) {
-        showNotification('Please fill in all required fields before saving.', 'error');
+      if (!validateEditMandatoryFields()) {
+        showNotification('Please complete required fields: name, email, phone, company, and main category.', 'error');
         return;
       }
       console.log('Starting exhibitor update with data:', editFormData);
@@ -545,17 +660,49 @@ export const Exhibitors: React.FC = () => {
           if (licenceUrl) documentUrls.licence = licenceUrl;
         }
         
-        // Process new images (keeping existing ones)
-        let imageUrls = [...existingImages];
+        // Process new images (keeping existing ones); drop blob previews and invalid entries
+        let imageUrls = normalizeExhibitorImageUrlsForWrite([...existingImages]);
         if (editFormData.images.length > 0) {
           console.log('🖼️ Processing new images...');
           const newImageUrls = await handleImageUploads(editFormData.images, exhibitorName);
-          imageUrls = [...imageUrls, ...newImageUrls];
+          if (newImageUrls.length !== editFormData.images.length) {
+            showNotification(
+              `Only ${newImageUrls.length} of ${editFormData.images.length} new images uploaded. Check Storage bucket "exhibitor-images" and policies.`,
+              'error'
+            );
+            setSaving(false);
+            return;
+          }
+          imageUrls = normalizeExhibitorImageUrlsForWrite([...imageUrls, ...newImageUrls]);
         }
-        
+
         console.log('📋 Final documentUrls:', documentUrls);
         console.log('🖼️ Final imageUrls:', imageUrls);
-      
+
+        let portfolio_image_url: string | null = normalizePersistableImageUrl(editFormData.portfolioImageUrl);
+        if (editFormData.portfolioImage) {
+          const pr = await uploadExhibitorPublicImage(
+            editFormData.portfolioImage,
+            'portfolio',
+            `${exhibitorName}_portfolio`
+          );
+          if (pr.url) portfolio_image_url = pr.url;
+          else {
+            showNotification(
+              pr.error || 'Portfolio image upload failed. Check Storage bucket "exhibitor-images".',
+              'error'
+            );
+            setSaving(false);
+            return;
+          }
+        }
+        if (!portfolio_image_url && imageUrls.length > 0) {
+          portfolio_image_url = imageUrls[0];
+        }
+        if (!portfolio_image_url) {
+          portfolio_image_url = getDefaultExhibitorProfileUrl();
+        }
+
       const updateData = {
         // Personal Information (NEW - matching AddExhibitor Step 1)
         first_name: editFormData.firstName,
@@ -593,7 +740,8 @@ export const Exhibitors: React.FC = () => {
         
         // Image URLs (NEW - matching AddExhibitor)
         image_urls: imageUrls,
-        
+        portfolio_image_url,
+
         // Settings
         status: editFormData.status,
         payment_status: editFormData.paymentStatus,
@@ -708,6 +856,11 @@ export const Exhibitors: React.FC = () => {
   };
 
   const handleConfirmDelete = async () => {
+    if (!isSuperAdmin) {
+      showNotification('Only Super Admin can delete exhibitors.', 'error');
+      setShowDeleteModal(false);
+      return;
+    }
     if (selectedExhibitor) {
       const { error } = await supabase
         .from('exhibitors')
@@ -777,98 +930,67 @@ export const Exhibitors: React.FC = () => {
     }
   };
 
+  const validateEditMandatoryFields = (): boolean => {
+    if (!editFormData) return false;
+    const errors: { [key: string]: string } = {};
+    if (!editFormData.firstName?.trim()) errors.firstName = 'First name is required';
+    if (!editFormData.lastName?.trim()) errors.lastName = 'Last name is required';
+    if (!editFormData.email?.trim()) errors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+    if (!editFormData.phone?.trim()) errors.phone = 'Phone number is required';
+    else {
+      const clean = String(editFormData.phone).replace(/[\s\-\(\)]/g, '');
+      if (clean.length !== 10 || !/^[0-9]{10}$/.test(clean)) {
+        errors.phone = 'Contact number must be exactly 10 digits';
+      }
+    }
+    if (editFormData.alternatePhone?.trim()) {
+      const alt = String(editFormData.alternatePhone).replace(/[\s\-\(\)]/g, '');
+      if (alt.length !== 10 || !/^[0-9]{10}$/.test(alt)) {
+        errors.alternatePhone = 'Alternate contact number must be exactly 10 digits';
+      }
+    }
+    if (!editFormData.companyName?.trim()) errors.companyName = 'Company name is required';
+    if (!editFormData.category?.trim()) errors.category = 'Main category is required';
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const validateEditStep = (step: number): boolean => {
     if (!editFormData) {
-      console.log('❌ editFormData is null');
       return false;
     }
-    
-    const errors: { [key: string]: string } = {};
-    console.log(`🔍 Validating step ${step} with data:`, editFormData);
 
-    switch (step) {
-      case 1: // Personal Information
-        if (!editFormData.firstName?.trim()) {
-          errors.firstName = 'First name is required';
-        }
-        if (!editFormData.lastName?.trim()) {
-          errors.lastName = 'Last name is required';
-        }
-        if (!editFormData.email?.trim()) {
-          errors.email = 'Email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)) {
-          errors.email = 'Please enter a valid email address';
-        }
-        if (!editFormData.phone?.trim()) {
-          errors.phone = 'Phone number is required';
-        }
-        break;
-
-      case 2: // Address Information
-        if (!editFormData.address1?.trim()) {
-          errors.address1 = 'Address line 1 is required';
-        }
-        if (!editFormData.city?.trim()) {
-          errors.city = 'City is required';
-        }
-        if (!editFormData.state?.trim()) {
-          errors.state = 'State is required';
-        }
-        if (!editFormData.pincode?.trim()) {
-          errors.pincode = 'Pincode is required';
-        }
-        if (!editFormData.country?.trim()) {
-          errors.country = 'Country is required';
-        }
-        break;
-
-      case 3: // Business Information
-        if (!editFormData.companyName?.trim()) {
-          errors.companyName = 'Company name is required';
-        }
-        if (!editFormData.category?.trim()) {
-          errors.category = 'Category is required';
-        }
-        if (!editFormData.subCategory?.trim()) {
-          errors.subCategory = 'Sub-category is required';
-        }
-        // Booth size is not mandatory, so no validation error for empty field
-        
-        // PAN Number validation (if provided)
-        if (editFormData.panNumber?.trim()) {
-          const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-          if (!panRegex.test(editFormData.panNumber.trim())) {
-            errors.panNumber = 'PAN number must be in format: ABCDE1234F';
-          }
-        }
-        
-        // GST Number validation (if provided)
-        if (editFormData.gstNumber?.trim()) {
-          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-          if (!gstRegex.test(editFormData.gstNumber.trim())) {
-            errors.gstNumber = 'GST number must be in format: 22AAAAA0000A1Z5';
-          }
-        }
-        break;
-
-      case 4: // Documents
-        // Documents are optional for updates, so no validation needed
-        break;
-
-      case 5: // Images
-        // Images are optional for updates, so no validation needed
-        break;
-
-      case 6: // Review
-        // All previous validations should be passed
-        break;
+    if (step === 1) {
+      return validateEditMandatoryFields();
     }
 
-    console.log(`📊 Step ${step} validation results:`, errors);
-    setEditErrors(errors);
-    const isValid = Object.keys(errors).length === 0;
-    console.log(`✅ Step ${step} is valid:`, isValid);
-    return isValid;
+    if (step === 2 || step === 4 || step === 5 || step === 6) {
+      setEditErrors({});
+      return true;
+    }
+
+    if (step === 3) {
+      const errors: { [key: string]: string } = {};
+      if (editFormData.panNumber?.trim()) {
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        if (!panRegex.test(editFormData.panNumber.trim())) {
+          errors.panNumber = 'PAN number must be in format: ABCDE1234F';
+        }
+      }
+      if (editFormData.gstNumber?.trim()) {
+        const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!gstRegex.test(editFormData.gstNumber.trim())) {
+          errors.gstNumber = 'GST number must be in format: 22AAAAA0000A1Z5';
+        }
+      }
+      setEditErrors(errors);
+      return Object.keys(errors).length === 0;
+    }
+
+    return true;
   };
 
   const clearFieldError = (fieldName: string) => {
@@ -892,13 +1014,30 @@ export const Exhibitors: React.FC = () => {
       case 'address1':
       case 'city':
       case 'state':
-      case 'pincode':
       case 'country':
-      case 'companyName':
-      case 'category':
       case 'subCategory':
       case 'boothSize':
-        // Booth size is not mandatory, so no validation error for empty field
+        break;
+
+      case 'companyName':
+        if (!trimmedValue) {
+          isValid = false;
+          errorMessage = 'Company name is required';
+        }
+        break;
+
+      case 'category':
+        if (!trimmedValue) {
+          isValid = false;
+          errorMessage = 'Main category is required';
+        }
+        break;
+
+      case 'pincode':
+        if (trimmedValue && !/^[0-9]{6}$/.test(trimmedValue)) {
+          isValid = false;
+          errorMessage = 'Pin code must be exactly 6 digits';
+        }
         break;
 
       case 'email':
@@ -915,6 +1054,12 @@ export const Exhibitors: React.FC = () => {
         if (!trimmedValue) {
           isValid = false;
           errorMessage = 'Phone number is required';
+        } else {
+          const clean = trimmedValue.replace(/[\s\-\(\)]/g, '');
+          if (clean.length !== 10 || !/^[0-9]{10}$/.test(clean)) {
+            isValid = false;
+            errorMessage = 'Contact number must be exactly 10 digits';
+          }
         }
         break;
 
@@ -949,18 +1094,25 @@ export const Exhibitors: React.FC = () => {
   };
 
   const nextEditStep = () => {
-    console.log('🔍 Validating step:', editStep);
-    console.log('📝 Current form data:', editFormData);
-    
     if (validateEditStep(editStep)) {
-      console.log('✅ Step validation passed');
       setEditStep((prev: any) => Math.min(prev + 1, 6));
-      setEditErrors({}); // Clear errors when moving to next step
+      setEditErrors({});
     } else {
-      console.log('❌ Step validation failed');
-      console.log('🚨 Current errors:', editErrors);
-      // Show error notification
-      showNotification('Please fill in all required fields before proceeding to the next step.', 'error');
+      showNotification(
+        editStep === 1
+          ? 'Please complete required fields: name, email, phone, company, and main category.'
+          : 'Please fix the highlighted fields before continuing.',
+        'error'
+      );
+    }
+  };
+
+  const skipOptionalEditToReview = () => {
+    if (validateEditMandatoryFields()) {
+      setEditStep(6);
+      setEditErrors({});
+    } else {
+      showNotification('Please complete required fields: name, email, phone, company, and main category.', 'error');
     }
   };
 
@@ -1113,7 +1265,7 @@ export const Exhibitors: React.FC = () => {
               <option value="all">All Sub Categories</option>
               {[...new Set(exhibitors
                 .filter(e => filters.category === 'all' || e.category === filters.category)
-                .map(e => e.subCategory)
+                .flatMap(e => (e.subCategory || '').split(',').map(v => v.trim()))
                 .filter(Boolean))].map(subCategory => (
                 <option key={subCategory || ''} value={subCategory || ''}>{subCategory || ''}</option>
               ))}
@@ -1191,6 +1343,7 @@ export const Exhibitors: React.FC = () => {
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </TableHead>
+                <TableHead className="w-20">Portfolio</TableHead>
                                     <TableHead>Company</TableHead>
                     <TableHead>Contact Person</TableHead>
                     <TableHead className="hidden md:table-cell">Category</TableHead>
@@ -1205,13 +1358,13 @@ export const Exhibitors: React.FC = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center">
+                  <TableCell colSpan={9} className="text-center">
                     Loading exhibitors...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-red-500">
+                  <TableCell colSpan={9} className="text-center text-red-500">
                     Error loading exhibitors: {error}
                   </TableCell>
                 </TableRow>
@@ -1224,6 +1377,19 @@ export const Exhibitors: React.FC = () => {
                         checked={selectedExhibitors.includes(exhibitor.id)}
                         onChange={() => handleSelectExhibitor(exhibitor.id)}
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </TableCell>
+                    <TableCell className="align-middle">
+                      <ExhibitorStorageImage
+                        src={exhibitorPortfolioDisplayUrl({
+                          portfolioImageUrl: exhibitor.portfolioImageUrl,
+                          imageUrls: exhibitor.imageUrls,
+                          companyName: exhibitor.companyName,
+                          id: exhibitor.id,
+                        })}
+                        alt=""
+                        className="h-12 w-12 rounded-lg object-cover border border-gray-200 bg-gray-100"
+                        loading="lazy"
                       />
                     </TableCell>
                     <TableCell>
@@ -1295,6 +1461,7 @@ export const Exhibitors: React.FC = () => {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {isSuperAdmin && (
                         <Button 
                           size="sm" 
                           variant="ghost" 
@@ -1303,6 +1470,7 @@ export const Exhibitors: React.FC = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
+                        )}
                         <Button 
                           size="sm" 
                           variant="ghost" 
@@ -1311,6 +1479,7 @@ export const Exhibitors: React.FC = () => {
                         >
                           <Mail className="h-4 w-4" />
                         </Button>
+                        {isSuperAdmin && (
                         <Button 
                           size="sm" 
                           variant="ghost" 
@@ -1319,6 +1488,7 @@ export const Exhibitors: React.FC = () => {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1343,6 +1513,24 @@ export const Exhibitors: React.FC = () => {
             </div>
             
             <div className="p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <ExhibitorStorageImage
+                  src={exhibitorPortfolioDisplayUrl({
+                    portfolioImageUrl: selectedExhibitor.portfolioImageUrl,
+                    imageUrls: selectedExhibitor.imageUrls,
+                    companyName: selectedExhibitor.companyName,
+                    id: selectedExhibitor.id,
+                  })}
+                  alt={selectedExhibitor.companyName || 'Exhibitor'}
+                  className="h-28 w-28 sm:h-32 sm:w-32 rounded-xl object-cover border border-gray-200 shadow-sm shrink-0"
+                />
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Portfolio</p>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedExhibitor.companyName}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{selectedExhibitor.category || 'Category'} · {selectedExhibitor.city || 'City'}</p>
+                </div>
+              </div>
+
               {/* Personal Information (Step 1) */}
                     <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
@@ -1548,39 +1736,33 @@ export const Exhibitors: React.FC = () => {
                 </div>
               </div>
 
-              {/* Images (Step 5) */}
+              {/* Images (gallery + cover, deduped; excludes default placeholder-only) */}
                     <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
                   <Upload className="h-5 w-5 mr-2" />
-                  Images
+                  Uploaded images
                 </h3>
-                {selectedExhibitor.imageUrls && selectedExhibitor.imageUrls.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {selectedExhibitor.imageUrls.map((imageUrl: string, index: number) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={imageUrl}
-                          alt={`Company image ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                          onLoad={() => {
-                            console.log('✅ Exhibitor image loaded successfully:', imageUrl);
-                          }}
-                          onError={(e) => {
-                            console.log('❌ Exhibitor image failed to load:', imageUrl);
-                            // Try converting to signed URL
-                            if (imageUrl.includes('/storage/v1/object/public/')) {
-                              const signedUrl = imageUrl.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
-                              console.log('🔄 Trying signed URL for exhibitor image:', signedUrl);
-                              e.currentTarget.src = signedUrl;
-                            }
-                          }}
-                        />
-                      </div>
-                    ))}
+                {(() => {
+                  const uploaded = exhibitorUploadedImageUrls({
+                    portfolioImageUrl: selectedExhibitor.portfolioImageUrl,
+                    imageUrls: selectedExhibitor.imageUrls,
+                  });
+                  return uploaded.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {uploaded.map((imageUrl, index) => (
+                        <div key={`${imageUrl}-${index}`} className="relative">
+                          <ExhibitorStorageImage
+                            src={imageUrl}
+                            alt={`Company image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg border border-gray-200 bg-gray-50"
+                          />
+                        </div>
+                      ))}
                     </div>
-                ) : (
-                  <p className="text-gray-500 text-sm">No images uploaded</p>
-                )}
+                  ) : (
+                    <p className="text-gray-500 text-sm">No gallery images uploaded (only default profile may be set).</p>
+                  );
+                })()}
                     </div>
 
               {/* Status Information */}
@@ -1609,10 +1791,12 @@ export const Exhibitors: React.FC = () => {
 
             <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
               <Button variant="outline" onClick={closeModals}>Close</Button>
+                {isSuperAdmin && (
                 <Button onClick={() => { closeModals(); handleEdit(selectedExhibitor); }}>
                   <Edit className="h-4 w-4 mr-2" />
                 Edit Exhibitor
                 </Button>
+                )}
             </div>
           </div>
         </div>
@@ -1642,7 +1826,7 @@ export const Exhibitors: React.FC = () => {
                       }`}>
                         {step}
                       </div>
-                      {step < 5 && (
+                      {step < 6 && (
                         <div className={`w-12 h-1 mx-2 ${
                           editStep > step ? 'bg-blue-600' : 'bg-gray-200'
                         }`} />
@@ -1651,11 +1835,12 @@ export const Exhibitors: React.FC = () => {
                   ))}
                 </div>
                 <div className="text-center mt-2 text-sm text-gray-600">
-                  {editStep === 1 && 'Company Information'}
-                  {editStep === 2 && 'Contact & Business Details'}
-                  {editStep === 3 && 'Location & Exhibition'}
-                  {editStep === 4 && 'Products & Services'}
-                  {editStep === 5 && 'Settings & Save'}
+                  {editStep === 1 && 'Personal information & company'}
+                  {editStep === 2 && 'Address (optional)'}
+                  {editStep === 3 && 'Business details (optional)'}
+                  {editStep === 4 && 'Documents (optional)'}
+                  {editStep === 5 && 'Images (optional)'}
+                  {editStep === 6 && 'Review & update'}
                 </div>
               </div>
             </div>
@@ -1679,7 +1864,7 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <input
                             type="text"
-                            value={editFormData.firstName ? editFormData.firstName : editFormData?.companyName?.split(' ')[0]}
+                            value={editFormData.firstName}
                             onChange={(e) => {
                               setEditFormData({...editFormData, firstName: e.target.value});
                               validateField('firstName', e.target.value);
@@ -1703,7 +1888,7 @@ export const Exhibitors: React.FC = () => {
                           </label>
                           <input
                             type="text"
-                            value={editFormData.lastName ? editFormData.lastName : editFormData?.companyName?.split(' ')[1]}
+                            value={editFormData.lastName}
                             onChange={(e) => {
                               setEditFormData({...editFormData, lastName: e.target.value});
                               validateField('lastName', e.target.value);
@@ -1777,6 +1962,66 @@ export const Exhibitors: React.FC = () => {
                           placeholder="9876543210"
                         />
                       </div>
+
+                      <div className="border-t border-gray-200 pt-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Company Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.companyName || ''}
+                              onChange={(e) => {
+                                setEditFormData({ ...editFormData, companyName: e.target.value });
+                                validateField('companyName', e.target.value);
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.companyName ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                              placeholder="Enter company name"
+                            />
+                            {editErrors.companyName && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertTriangle className="h-4 w-4 mr-1" />
+                                {editErrors.companyName}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Main Category *
+                            </label>
+                            <select
+                              value={editFormData.category || ''}
+                              onChange={(e) => {
+                                setEditFormData({ ...editFormData, category: e.target.value, subCategory: '' });
+                                validateField('category', e.target.value);
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                editErrors.category ? 'border-red-300' : 'border-gray-300'
+                              }`}
+                            >
+                              <option value="">Select category</option>
+                              {categoryOptions.map((category) => (
+                                <option key={category} value={category}>
+                                  {category}
+                                </option>
+                              ))}
+                            </select>
+                            {editErrors.category && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertTriangle className="h-4 w-4 mr-1" />
+                                {editErrors.category}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500">
+                          Later steps are optional — you can skip to review when these required fields are complete.
+                        </p>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -1787,15 +2032,16 @@ export const Exhibitors: React.FC = () => {
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <MapPin className="h-5 w-5 mr-2" />
-                        Address
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        <MapPin className="h-5 w-5 shrink-0" />
+                        <span>Address</span>
+                        <span className="text-sm font-normal text-gray-500">(optional)</span>
                       </h3>
                     </CardHeader>
                     <CardContent className="space-y-6">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Address Line 1 *
+                          Address Line 1
                         </label>
                         <input
                           type="text"
@@ -1834,7 +2080,7 @@ export const Exhibitors: React.FC = () => {
                         
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            State *
+                            State
                           </label>
                           <select
                             value={editFormData.state || ''}
@@ -1862,7 +2108,7 @@ export const Exhibitors: React.FC = () => {
                         </div>
 <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            City *
+                            City
                           </label>
                           <select
                             value={editFormData.city || ''}
@@ -1892,7 +2138,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Pincode *
+                            Pincode
                           </label>
                           <input
                             type="text"
@@ -1948,116 +2194,71 @@ export const Exhibitors: React.FC = () => {
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <Building className="h-5 w-5 mr-2" />
-                        Business Information
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        <Building className="h-5 w-5 shrink-0" />
+                        <span>Business Information</span>
+                        <span className="text-sm font-normal text-gray-500">(optional)</span>
                       </h3>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Company Name *
-                          </label>
-                          <input
-                            type="text"
-                            value={editFormData.companyName || ''}
-                            onChange={(e) => {
-                              setEditFormData({...editFormData, companyName: e.target.value});
-                              validateField('companyName', e.target.value);
-                            }}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.companyName ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                            placeholder="Enter company name"
-                          />
-                          {editErrors.companyName && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.companyName}
-                            </p>
-                          )}
-                      </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Company Website
-                          </label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Company Website <span className="text-gray-500 font-normal">(optional)</span>
+                        </label>
+                        <div className="relative">
+                          <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                           <input
                             type="url"
                             value={editFormData.website || ''}
-                            onChange={(e) => setEditFormData({...editFormData, website: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => setEditFormData({ ...editFormData, website: e.target.value })}
+                            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="https://company.com"
                           />
                         </div>
-                        </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Category *
-                          </label>
-                          <select
-                            value={editFormData.category || ''}
-                            onChange={(e) => {
-                              setEditFormData({...editFormData, category: e.target.value, subCategory: ''});
-                              validateField('category', e.target.value);
-                            }}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.category ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                          >
-                            <option value="">Select category</option>
-                            {exhibitorCategories.map((category) => (
-                              <option key={category} value={category}>
-                                {category}
-                              </option>
-                            ))}
-                          </select>
-                          {editErrors.category && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.category}
-                            </p>
-                          )}
                       </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Sub Category
-                          </label>
-                          <select
-                            value={editFormData.subCategory || ''}
-                            onChange={(e) => {
-                              setEditFormData({...editFormData, subCategory: e.target.value});
-                              validateField('subCategory', e.target.value);
-                            }}
-                            disabled={!editFormData.category}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${
-                              editErrors.subCategory ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                          >
-                            <option value="">Select sub-category</option>
-                            {editFormData.category && subCategories[editFormData.category as keyof typeof subCategories]?.map((subCat) => (
-                              <option key={subCat} value={subCat}>
-                                {subCat}
-                              </option>
-                            ))}
-                          </select>
-                          {editErrors.subCategory && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertTriangle className="h-4 w-4 mr-1" />
-                              {editErrors.subCategory}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Sub Category <span className="text-gray-500 font-normal">(optional)</span>
+                        </label>
+                        <div
+                          className={`max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2 ${
+                            editErrors.subCategory ? 'border-red-300' : 'border-gray-300'
+                          } ${!editFormData.category ? 'bg-gray-100' : 'bg-white'}`}
+                        >
+                          {!editFormData.category && (
+                            <p className="text-sm text-gray-500">
+                              Set main category on step 1 to enable sub-categories
                             </p>
                           )}
+                          {editFormData.category && editSubCategories.length === 0 && (
+                            <p className="text-sm text-gray-500">No sub-categories available</p>
+                          )}
+                          {editFormData.category &&
+                            editSubCategories.map((subCat) => (
+                              <label key={subCat} className="flex items-center gap-2 text-sm text-gray-700">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEditSubCategories.includes(subCat)}
+                                  onChange={() => toggleEditSubCategory(subCat)}
+                                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{subCat}</span>
+                              </label>
+                            ))}
                         </div>
-                        </div>
+                        {editErrors.subCategory && (
+                          <p className="mt-1 text-sm text-red-600 flex items-center">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            {editErrors.subCategory}
+                          </p>
+                        )}
+                      </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            PAN Number *
+                            PAN Number <span className="text-gray-500 font-normal">(optional)</span>
                           </label>
                           <input
                             type="text"
@@ -2234,7 +2435,7 @@ export const Exhibitors: React.FC = () => {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            PAN Card *
+                            PAN Card <span className="text-gray-500 font-normal">(optional)</span>
                           </label>
                           <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                             <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -2286,7 +2487,7 @@ export const Exhibitors: React.FC = () => {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Aadhar Card *
+                            Aadhar Card <span className="text-gray-500 font-normal">(optional)</span>
                           </label>
                           <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                             <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -2394,7 +2595,7 @@ export const Exhibitors: React.FC = () => {
                               <li>• Images will be automatically compressed if too large</li>
                               <li>• PDF files over 100KB need manual compression</li>
                               <li>• Accepted formats: PDF, JPG, JPEG, PNG</li>
-                              <li>• PAN Card and Aadhar Card are mandatory</li>
+                              <li>• Documents are optional unless your process requires them</li>
                             </ul>
                           </div>
                         </div>
@@ -2415,6 +2616,51 @@ export const Exhibitors: React.FC = () => {
                       </h3>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-4">
+                        <label className="block text-sm font-medium text-gray-900 mb-2">Portfolio image (cover)</label>
+                        <p className="text-xs text-gray-600 mb-3">
+                          Shown in the exhibitor list. Uses your cover URL, or the first gallery image, until you pick a new file.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 mb-3">
+                          {editFormData.portfolioImage ? (
+                            <LocalFileImagePreview
+                              file={editFormData.portfolioImage}
+                              alt="New portfolio"
+                              className="h-20 w-20 rounded-lg object-cover border border-gray-200"
+                            />
+                          ) : (
+                            <ExhibitorStorageImage
+                              src={exhibitorPortfolioDisplayUrl({
+                                portfolioImageUrl: editFormData.portfolioImageUrl,
+                                imageUrls: existingImages,
+                                companyName: editFormData.companyName,
+                                id: editFormData.id,
+                              })}
+                              alt="Current portfolio"
+                              className="h-20 w-20 rounded-lg object-cover border border-gray-200 bg-gray-50"
+                            />
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          id="edit-portfolio-upload"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            if (editFormData && file) {
+                              setEditFormData({ ...editFormData, portfolioImage: file });
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor="edit-portfolio-upload"
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+                        >
+                          Replace portfolio image
+                        </label>
+                      </div>
+
                       {/* Existing Images Section - Matching AddExhibitor Format */}
                       {existingImages.length > 0 && (
                         <div className="mt-3">
@@ -2423,24 +2669,12 @@ export const Exhibitors: React.FC = () => {
                           </h4>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {existingImages.map((imageUrl, index) => (
-                              <div key={index} className="relative">
-                                <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                                  <img
+                              <div key={`${imageUrl}-${index}`} className="relative">
+                                <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                  <ExhibitorStorageImage
                                     src={imageUrl}
-                                    alt={`Preview ${index + 1}`}
+                                    alt={`Gallery ${index + 1}`}
                                     className="w-full h-full object-cover rounded-lg"
-                                    onLoad={() => {
-                                      console.log('✅ Edit modal exhibitor image loaded successfully:', imageUrl);
-                                    }}
-                                    onError={(e) => {
-                                      console.log('❌ Edit modal exhibitor image failed to load:', imageUrl);
-                                      // Try converting to signed URL
-                                      if (imageUrl.includes('/storage/v1/object/public/')) {
-                                        const signedUrl = imageUrl.replace('/storage/v1/object/public/', '/storage/v1/object/sign/');
-                                        console.log('🔄 Trying signed URL for edit modal exhibitor image:', signedUrl);
-                                        e.currentTarget.src = signedUrl;
-                                      }
-                                    }}
                                   />
                                 </div>
                               </div>
@@ -2493,10 +2727,10 @@ export const Exhibitors: React.FC = () => {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                               {editFormData.images.map((file: any, index: any) => (
                                 <div key={index} className="relative">
-                                  <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                                    <img
-                                      src={URL.createObjectURL(file)}
-                                      alt={`Preview ${index + 1}`}
+                                  <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                                    <LocalFileImagePreview
+                                      file={file}
+                                      alt={`New upload ${index + 1}`}
                                       className="w-full h-full object-cover rounded-lg"
                                     />
                                   </div>
@@ -2626,11 +2860,15 @@ export const Exhibitors: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="flex space-x-3">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button variant="outline" onClick={closeModals}>
                     Cancel
                   </Button>
-                  
+                  {editStep === 1 && (
+                    <Button type="button" variant="outline" onClick={skipOptionalEditToReview}>
+                      Skip optional — Review
+                    </Button>
+                  )}
                   {editStep < 6 ? (
                     <Button onClick={nextEditStep}>
                       Next
@@ -2719,8 +2957,8 @@ export const Exhibitors: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedExhibitor && (
+      {/* Delete Confirmation Modal (Super Admin only) */}
+      {showDeleteModal && selectedExhibitor && isSuperAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="p-6">

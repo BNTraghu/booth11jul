@@ -24,8 +24,20 @@ import { Button } from '../components/UI/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { useReportData } from '../hooks/useReportData';
+import { useReportData, getDateRangeBounds } from '../hooks/useReportData';
 import { useMemo } from 'react';
+import {
+  getSampleReportEvents,
+  getSampleReportVenues,
+  getSampleRevenueStreams,
+  getSampleExpenseLines,
+  getSampleSavedReports,
+} from '../data/reportsSampleData';
+import {
+  CustomReportViewModal,
+  type SavedReportForView,
+  type CustomReportAnalytics,
+} from '../components/Reports/CustomReportViewModal';
 
 interface ReportData {
   period: string;
@@ -67,6 +79,14 @@ const PLAN_TYPE_COLORS: Record<string, string> = {
   Unset: 'bg-gray-500',
 };
 
+const DATE_RANGE_LABELS: Record<string, string> = {
+  last_7_days: 'Last 7 days',
+  last_30_days: 'Last 30 days',
+  last_3_months: 'Last 3 months',
+  last_6_months: 'Last 6 months',
+  last_year: 'Last year',
+};
+
 export const Reports: React.FC = () => {
   const { user, isSuperAdmin, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'financial' | 'performance' | 'custom'>('overview');
@@ -74,8 +94,26 @@ export const Reports: React.FC = () => {
   const [selectedCity, setSelectedCity] = useState('all');
   const [selectedReportOrgId, setSelectedReportOrgId] = useState<string>('all');
   const [organizations, setOrganizations] = useState<OrgOption[]>([]);
+  const [useSamplePreview, setUseSamplePreview] = useState(true);
+  const [viewingCustomReport, setViewingCustomReport] = useState<SavedReportForView | null>(null);
 
   const { events, venues, loading, error, refetch } = useReportData(selectedReportOrgId, dateRange);
+  const { start: rangeStart, end: rangeEnd } = getDateRangeBounds(dateRange);
+  const allSampleEvents = useMemo(() => getSampleReportEvents(), []);
+  const allSampleVenues = useMemo(() => getSampleReportVenues(), []);
+
+  const reportEvents = useMemo(() => {
+    if (useSamplePreview) {
+      return allSampleEvents.filter((e) => {
+        const d = e.date || '';
+        return d >= rangeStart && d <= rangeEnd;
+      });
+    }
+    return events;
+  }, [useSamplePreview, allSampleEvents, events, rangeStart, rangeEnd]);
+
+  const reportVenues = useSamplePreview ? allSampleVenues : venues;
+  const showLiveLoading = loading && !useSamplePreview;
 
   useEffect(() => {
     if (isSuperAdmin) {
@@ -89,7 +127,7 @@ export const Reports: React.FC = () => {
 
   const reportData = useMemo((): ReportData[] => {
     const byMonth: Record<string, { events: number; revenue: number; attendees: number }> = {};
-    events.forEach((e) => {
+    reportEvents.forEach((e) => {
       if (!e.date) return;
       const key = e.date.slice(0, 7);
       if (!byMonth[key]) byMonth[key] = { events: 0, revenue: 0, attendees: 0 };
@@ -110,14 +148,14 @@ export const Reports: React.FC = () => {
         events: d.events,
         revenue: d.revenue,
         attendees: d.attendees,
-        societies: venues.length,
+        societies: reportVenues.length,
         growth,
       };
     });
-  }, [events, venues.length]);
+  }, [reportEvents, reportVenues.length]);
 
   const eventPerformanceRows = useMemo((): EventPerformanceRow[] => {
-    return events
+    return reportEvents
       .slice()
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .map((e) => ({
@@ -126,12 +164,14 @@ export const Reports: React.FC = () => {
         date: e.date || '',
         attendees: e.attendees || 0,
         revenue: e.totalRevenue || 0,
+        satisfaction: e.satisfactionScore ?? undefined,
+        roi: e.roiPercent ?? undefined,
       }));
-  }, [events]);
+  }, [reportEvents]);
 
   const cityPerformance = useMemo((): CityPerformance[] => {
     const byCity: Record<string, { events: number; revenue: number; venueIds: Set<string> }> = {};
-    events.forEach((e) => {
+    reportEvents.forEach((e) => {
       const city = (e.city || '').trim() || 'Unknown';
       if (!byCity[city]) byCity[city] = { events: 0, revenue: 0, venueIds: new Set() };
       byCity[city].events += 1;
@@ -139,39 +179,40 @@ export const Reports: React.FC = () => {
       if (e.venueId) byCity[city].venueIds.add(e.venueId);
     });
     const venueCountByCity: Record<string, number> = {};
-    venues.forEach((v) => {
+    reportVenues.forEach((v) => {
       const c = (v.city || '').trim() || 'Unknown';
       venueCountByCity[c] = (venueCountByCity[c] || 0) + 1;
     });
-    const totalRev = events.reduce((s, e) => s + (e.totalRevenue || 0), 0);
-    return Object.entries(byCity)
-      .map(([city, d]) => ({
+    const growthSeeds = [14.2, -2.1, 9.8, 6.3, -0.5, 11.0, 4.4, 7.1];
+    const rows = Object.entries(byCity)
+      .map(([city, d], i) => ({
         city,
         events: d.events,
         revenue: d.revenue,
         societies: venueCountByCity[city] ?? 0,
-        growth: 0,
+        growth: useSamplePreview ? growthSeeds[i % growthSeeds.length] : 0,
       }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [events, venues]);
+    return rows;
+  }, [reportEvents, reportVenues, useSamplePreview]);
 
   const planDistribution = useMemo(() => {
     const count: Record<string, number> = {};
-    events.forEach((e) => {
+    reportEvents.forEach((e) => {
       const plan = (e.planType as string) || 'Unset';
       count[plan] = (count[plan] || 0) + 1;
     });
-    const total = events.length;
+    const total = reportEvents.length;
     return Object.entries(count).map(([type, n]) => ({
       type,
       count: n,
       percentage: total > 0 ? Math.round((n / total) * 100) : 0,
       color: PLAN_TYPE_COLORS[type] || 'bg-gray-500',
     }));
-  }, [events]);
+  }, [reportEvents]);
 
   const topVenues = useMemo(() => {
-    return venues
+    return reportVenues
       .slice()
       .sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
       .slice(0, 10)
@@ -181,11 +222,11 @@ export const Reports: React.FC = () => {
         revenue: v.totalRevenue || 0,
         growth: 0,
       }));
-  }, [venues]);
+  }, [reportVenues]);
 
   const totalRevenue = reportData.reduce((sum, d) => sum + d.revenue, 0);
-  const totalEvents = events.length;
-  const totalAttendees = events.reduce((sum, e) => sum + (e.attendees || 0), 0);
+  const totalEvents = reportEvents.length;
+  const totalAttendees = reportEvents.reduce((sum, e) => sum + (e.attendees || 0), 0);
   const avgGrowth = reportData.length > 0
     ? reportData.reduce((sum, d) => sum + d.growth, 0) / reportData.length
     : 0;
@@ -203,8 +244,144 @@ export const Reports: React.FC = () => {
 
   const avgEventSize = totalEvents > 0 ? Math.round(totalAttendees / totalEvents) : 0;
   const avgRevenuePerEvent = totalEvents > 0 ? Math.round(totalRevenue / totalEvents) : 0;
-  const completedCount = events.filter((e) => e.status === 'completed' || e.status === 'ongoing').length;
+  const completedCount = reportEvents.filter((e) => e.status === 'completed' || e.status === 'ongoing').length;
   const eventSuccessRate = totalEvents > 0 ? Math.round((completedCount / totalEvents) * 1000) / 10 : 0;
+
+  const revenueForStreams =
+    totalRevenue > 0
+      ? totalRevenue
+      : useSamplePreview && reportEvents.length === 0
+        ? 3200000
+        : 0;
+  const revenueStreams = useMemo(
+    () =>
+      useSamplePreview && revenueForStreams > 0 ? getSampleRevenueStreams(revenueForStreams) : null,
+    [useSamplePreview, revenueForStreams]
+  );
+  const expenseLines = useSamplePreview ? getSampleExpenseLines() : [];
+  const sampleSavedReports = useMemo(() => getSampleSavedReports(), []);
+
+  const customReportAnalytics = useMemo((): CustomReportAnalytics => {
+    const satVals = reportEvents
+      .map((e) => e.satisfactionScore)
+      .filter((x): x is number => typeof x === 'number');
+    const roiVals = reportEvents
+      .map((e) => e.roiPercent)
+      .filter((x): x is number => typeof x === 'number');
+    const avgSatisfaction = satVals.length ? satVals.reduce((a, b) => a + b, 0) / satVals.length : null;
+    const avgRoi = roiVals.length ? roiVals.reduce((a, b) => a + b, 0) / roiVals.length : null;
+    const capacityTotal = reportEvents.reduce((s, e) => s + (e.maxCapacity || 0), 0);
+    const capacityFillPct =
+      capacityTotal > 0 ? Math.min(100, Math.round((totalAttendees / capacityTotal) * 100)) : null;
+
+    const streams =
+      revenueStreams ??
+      (totalRevenue > 0 ? [{ label: 'Event revenue', amount: totalRevenue, color: 'bg-blue-500' }] : []);
+
+    const orgLabel = isSuperAdmin
+      ? selectedReportOrgId === 'all'
+        ? 'All organizations'
+        : organizations.find((o) => o.id === selectedReportOrgId)?.name ?? 'Selected organization'
+      : user?.organizationName ?? 'Your organization';
+
+    const topEvents = [...eventPerformanceRows]
+      .sort((a, b) => b.revenue - a.revenue)
+      .map((e) => ({
+        name: e.name,
+        date: e.date,
+        revenue: e.revenue,
+        attendees: e.attendees,
+        satisfaction: e.satisfaction,
+        roi: e.roi,
+      }));
+
+    return {
+      dateRangeLabel: DATE_RANGE_LABELS[dateRange] ?? dateRange,
+      orgLabel,
+      totalRevenue,
+      totalEvents,
+      totalAttendees,
+      avgRevenuePerEvent,
+      eventSuccessRate,
+      revenueGrowthPct: revenueGrowth,
+      attendeeGrowthPct: attendeeGrowth,
+      hasMonthOverMonth: reportData.length >= 2,
+      avgSatisfaction,
+      avgRoi,
+      capacityTotal,
+      capacityFillPct,
+      planDistribution,
+      topCities: cityPerformance,
+      topEvents,
+      topVenues: topVenues.map((v) => ({ name: v.name, revenue: v.revenue, events: v.events })),
+      revenueStreams: streams,
+      expenseLines: expenseLines.length ? expenseLines : [],
+      expensesAreIllustrative: useSamplePreview && expenseLines.length > 0,
+    };
+  }, [
+    reportEvents,
+    totalRevenue,
+    totalEvents,
+    totalAttendees,
+    avgRevenuePerEvent,
+    eventSuccessRate,
+    revenueGrowth,
+    attendeeGrowth,
+    reportData.length,
+    cityPerformance,
+    eventPerformanceRows,
+    topVenues,
+    planDistribution,
+    revenueStreams,
+    expenseLines,
+    dateRange,
+    isSuperAdmin,
+    selectedReportOrgId,
+    organizations,
+    user?.organizationName,
+    useSamplePreview,
+  ]);
+
+  const savedReportsList: SavedReportForView[] = useSamplePreview
+    ? sampleSavedReports
+    : [
+        {
+          name: 'Monthly Revenue Summary',
+          type: 'Revenue',
+          description: 'Rolling monthly revenue totals and event contribution.',
+          lastGenerated: '2024-06-01',
+          format: 'PDF',
+          rows: 48,
+          schedule: 'Monthly',
+        },
+        {
+          name: 'Q2 Performance Report',
+          type: 'Performance',
+          description: 'Quarterly attendance, satisfaction, and ROI snapshot.',
+          lastGenerated: '2024-05-30',
+          format: 'Excel',
+          rows: 120,
+          schedule: 'Quarterly',
+        },
+        {
+          name: 'Venue Engagement Analysis',
+          type: 'Venue',
+          description: 'Venue utilization and revenue ranking.',
+          lastGenerated: '2024-05-28',
+          format: 'Dashboard',
+          rows: 36,
+          schedule: 'On demand',
+        },
+        {
+          name: 'Vendor Performance Review',
+          type: 'Vendor',
+          description: 'Vendor-linked events and estimated commissions.',
+          lastGenerated: '2024-05-25',
+          format: 'PDF',
+          rows: 72,
+          schedule: 'Monthly',
+        },
+      ];
 
   if (!hasRole(['super_admin', 'admin'])) {
     return (
@@ -239,6 +416,11 @@ export const Reports: React.FC = () => {
               <>Organization: {user?.organizationName ?? 'Your organization'}</>
             )}
           </p>
+          {useSamplePreview && (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 inline-block">
+              Showing sample data — turn off &quot;Sample preview&quot; to use live data from your account.
+            </p>
+          )}
           {isSuperAdmin && (
             <div className="mt-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">View</label>
@@ -255,7 +437,16 @@ export const Reports: React.FC = () => {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={useSamplePreview}
+              onChange={(e) => setUseSamplePreview(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Sample preview
+          </label>
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
@@ -279,7 +470,7 @@ export const Reports: React.FC = () => {
       </div>
 
       {/* Key Metrics */}
-      {loading ? (
+      {showLiveLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
@@ -565,7 +756,9 @@ export const Reports: React.FC = () => {
                   <div className="flex justify-center mb-2">
                     <Clock className="h-6 w-6 text-blue-600" />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">—</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {useSamplePreview ? '38' : '—'}
+                  </div>
                   <div className="text-sm text-gray-600">days</div>
                   <div className="text-xs text-gray-500 mt-1">Avg Planning Time</div>
                 </div>
@@ -612,8 +805,12 @@ export const Reports: React.FC = () => {
                       <TableCell>{event.date ? new Date(event.date).toLocaleDateString() : '—'}</TableCell>
                       <TableCell>{event.attendees}</TableCell>
                       <TableCell>₹{event.revenue.toLocaleString()}</TableCell>
-                      <TableCell className="text-gray-500">—</TableCell>
-                      <TableCell className="text-gray-500">—</TableCell>
+                      <TableCell className="text-gray-600">
+                        {event.satisfaction != null ? `${event.satisfaction.toFixed(1)}/5` : '—'}
+                      </TableCell>
+                      <TableCell className="text-gray-600">
+                        {event.roi != null ? `${event.roi > 0 ? '+' : ''}${event.roi}%` : '—'}
+                      </TableCell>
                       <TableCell>
                         <div className="flex space-x-1">
                           <Button size="sm" variant="ghost">
@@ -641,7 +838,43 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Revenue Breakdown</h3>
             </CardHeader>
             <CardContent>
-              {totalRevenue === 0 ? (
+              {revenueStreams ? (
+                <div className="space-y-4">
+                  {totalRevenue === 0 && useSamplePreview && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                      Illustrative revenue mix — no events fall in this date range.
+                    </p>
+                  )}
+                  {revenueStreams.map((row) => {
+                    const pct =
+                      revenueForStreams > 0 ? Math.round((row.amount / revenueForStreams) * 100) : 0;
+                    return (
+                      <div key={row.label} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className={`w-4 h-4 rounded shrink-0 ${row.color}`} />
+                          <span className="text-sm font-medium text-gray-900 truncate">{row.label}</span>
+                        </div>
+                        <div className="flex items-center space-x-3 shrink-0">
+                          <div className="w-32 bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${row.color}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-gray-600 w-24 text-right">
+                            ₹{(row.amount / 100000).toFixed(1)}L
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-gray-500 mt-2">
+                    {useSamplePreview
+                      ? 'Sample split — connect real ledger data to replace this view.'
+                      : 'Other sources (vendor commissions, sponsorships, etc.) coming soon.'}
+                  </p>
+                </div>
+              ) : totalRevenue === 0 ? (
                 <p className="text-gray-500 text-center py-6">No revenue data for this period.</p>
               ) : (
                 <div className="space-y-4">
@@ -670,7 +903,38 @@ export const Reports: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">Expense Analysis</h3>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-500 text-center py-8">No expense data available. Coming soon.</p>
+              {expenseLines.length > 0 ? (
+                <div className="space-y-4">
+                  {(() => {
+                    const expTotal = expenseLines.reduce((s, x) => s + x.amount, 0);
+                    return expenseLines.map((row) => {
+                      const pct = expTotal > 0 ? Math.round((row.amount / expTotal) * 100) : 0;
+                      return (
+                        <div key={row.label} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className={`w-4 h-4 rounded shrink-0 ${row.color}`} />
+                            <span className="text-sm font-medium text-gray-900 truncate">{row.label}</span>
+                          </div>
+                          <div className="flex items-center space-x-3 shrink-0">
+                            <div className="w-32 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${row.color}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-gray-600 w-24 text-right">
+                              ₹{(row.amount / 100000).toFixed(1)}L
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                  <p className="text-xs text-gray-500 mt-2">Sample expense categories — live data when finance module is connected.</p>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No expense data available. Coming soon.</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -708,7 +972,14 @@ export const Reports: React.FC = () => {
                         <TableCell>₹{(city.revenue / 100000).toFixed(1)}L</TableCell>
                         <TableCell>{city.societies}</TableCell>
                         <TableCell>
-                          <span className="text-gray-500">—</span>
+                          {city.growth !== 0 ? (
+                            <span className={city.growth >= 0 ? 'text-green-600' : 'text-red-600'}>
+                              {city.growth > 0 ? '+' : ''}
+                              {city.growth.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="w-24 bg-gray-200 rounded-full h-2">
@@ -782,27 +1053,41 @@ export const Reports: React.FC = () => {
           <Card>
             <CardHeader>
               <h3 className="text-lg font-semibold text-gray-900">Saved Reports</h3>
-              <p className="text-sm text-gray-500 font-normal mt-1">Sample list — saved reports will be available when the feature is enabled.</p>
+              <p className="text-sm text-gray-500 font-normal mt-1">
+                {useSamplePreview
+                  ? 'Rich sample metadata — persisted saved reports when the feature ships.'
+                  : 'Sample list — saved reports will be available when the feature is enabled.'}
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  { name: 'Monthly Revenue Summary', type: 'Revenue', lastGenerated: '2024-06-01', format: 'PDF' },
-                  { name: 'Q2 Performance Report', type: 'Performance', lastGenerated: '2024-05-30', format: 'Excel' },
-                  { name: 'Venue Engagement Analysis', type: 'Venue', lastGenerated: '2024-05-28', format: 'Dashboard' },
-                  { name: 'Vendor Performance Review', type: 'Vendor', lastGenerated: '2024-05-25', format: 'PDF' }
-                ].map((report, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
+                {savedReportsList.map((report, index) => (
+                  <div key={`${report.name}-${report.lastGenerated}-${index}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-gray-50 rounded-lg">
+                    <div className="min-w-0">
                       <h4 className="font-medium text-gray-900">{report.name}</h4>
-                      <div className="flex items-center space-x-4 mt-1">
+                      {report.description ? (
+                        <p className="text-sm text-gray-600 mt-1">{report.description}</p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
                         <Badge variant="default">{report.type}</Badge>
-                        <span className="text-sm text-gray-500">Last generated: {report.lastGenerated}</span>
+                        <span className="text-sm text-gray-500">Last: {report.lastGenerated}</span>
                         <span className="text-sm text-gray-500">Format: {report.format}</span>
+                        {report.rows > 0 && (
+                          <span className="text-sm text-gray-500">{report.rows} rows</span>
+                        )}
+                        {report.schedule ? (
+                          <span className="text-sm text-gray-500">Schedule: {report.schedule}</span>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">
+                    <div className="flex space-x-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        aria-label={`View ${report.name}`}
+                        onClick={() => setViewingCustomReport(report)}
+                      >
                         <Eye className="h-4 w-4" />
                       </Button>
                       <Button size="sm" variant="outline">
@@ -819,6 +1104,13 @@ export const Reports: React.FC = () => {
           </Card>
         </div>
       )}
+
+      <CustomReportViewModal
+        open={viewingCustomReport != null}
+        onClose={() => setViewingCustomReport(null)}
+        report={viewingCustomReport}
+        analytics={customReportAnalytics}
+      />
     </div>
   );
 };

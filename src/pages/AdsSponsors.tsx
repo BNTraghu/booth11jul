@@ -21,11 +21,12 @@ import {
   Activity
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSponsors, useAdvertisements, useCampaigns } from '../hooks/useSupabaseData';
+import { useSponsors, useAdvertisements, useCampaigns, useWebsiteAds } from '../hooks/useSupabaseData';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
+import { supabase } from '../lib/supabase';
 
 interface Advertisement {
   id: string;
@@ -80,15 +81,49 @@ interface Campaign {
   };
 }
 
+interface WebsiteAd {
+  id: string;
+  title: string;
+  advertiser: string;
+  adSection: string;
+  adType: string;
+  imageUrl: string;
+  redirectUrl: string;
+  startDate: string;
+  endDate: string;
+  status: 'active' | 'paused' | 'completed' | 'draft';
+  priority: number;
+  impressions: number;
+  clicks: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export const AdsSponsors: React.FC = () => {
   const navigate = useNavigate();
   const { sponsors, loading: sponsorsLoading, refetch: refetchSponsors } = useSponsors();
   const { advertisements, loading: adsLoading, error: adsError, refetch: refetchAds } = useAdvertisements({ skipOrgFilter: true });
   const { campaigns, loading: campaignsLoading, error: campaignsError, refetch: refetchCampaigns } = useCampaigns({ skipOrgFilter: true });
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'ads' | 'sponsors'>('campaigns');
+  const { websiteAds, loading: websiteAdsLoading, error: websiteAdsError, refetch: refetchWebsiteAds } = useWebsiteAds({ skipOrgFilter: true });
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'ads' | 'website_ads' | 'sponsors'>('campaigns');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showWebsiteAdModal, setShowWebsiteAdModal] = useState(false);
+  const [isEditingWebsiteAd, setIsEditingWebsiteAd] = useState(false);
+  const [websiteAdSectionFilter, setWebsiteAdSectionFilter] = useState('all');
+  const [websiteAdForm, setWebsiteAdForm] = useState<Partial<WebsiteAd>>({
+    title: '',
+    advertiser: 'Website',
+    adSection: 'homepage_hero',
+    adType: 'banner',
+    imageUrl: '',
+    redirectUrl: '',
+    startDate: '',
+    endDate: '',
+    status: 'draft',
+    priority: 0,
+  });
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -119,6 +154,87 @@ export const AdsSponsors: React.FC = () => {
   const handleViewDetails = (item: any) => {
     setSelectedItem(item);
     setShowDetailModal(true);
+  };
+
+  const openAddWebsiteAd = () => {
+    setIsEditingWebsiteAd(false);
+    setWebsiteAdForm({
+      title: '',
+      advertiser: 'Website',
+      adSection: 'homepage_hero',
+      adType: 'banner',
+      imageUrl: '',
+      redirectUrl: '',
+      startDate: '',
+      endDate: '',
+      status: 'draft',
+      priority: 0,
+    });
+    setShowWebsiteAdModal(true);
+  };
+
+  const openEditWebsiteAd = (ad: WebsiteAd) => {
+    setIsEditingWebsiteAd(true);
+    setWebsiteAdForm({ ...ad });
+    setShowWebsiteAdModal(true);
+  };
+
+  const saveWebsiteAd = async () => {
+    if (!websiteAdForm.title?.trim() || !websiteAdForm.adSection?.trim()) {
+      alert('Title and Ad Section are required.');
+      return;
+    }
+
+    const payload = {
+      title: websiteAdForm.title.trim(),
+      advertiser: websiteAdForm.advertiser?.trim() || 'Website',
+      ad_section: websiteAdForm.adSection.trim(),
+      ad_type: websiteAdForm.adType || 'banner',
+      image_url: websiteAdForm.imageUrl?.trim() || null,
+      redirect_url: websiteAdForm.redirectUrl?.trim() || null,
+      start_date: websiteAdForm.startDate || null,
+      end_date: websiteAdForm.endDate || null,
+      status: websiteAdForm.status || 'draft',
+      priority: Number(websiteAdForm.priority || 0),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isEditingWebsiteAd && websiteAdForm.id) {
+      const { error } = await supabase
+        .from('website_ads')
+        .update(payload)
+        .eq('id', websiteAdForm.id);
+      if (error) {
+        alert(error.message);
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from('website_ads')
+        .insert(payload);
+      if (error) {
+        alert(error.message);
+        return;
+      }
+    }
+
+    setShowWebsiteAdModal(false);
+    refetchWebsiteAds();
+  };
+
+  const deleteWebsiteAd = async (id: string) => {
+    if (!window.confirm('Delete this website ad?')) {
+      return;
+    }
+    const { error } = await supabase
+      .from('website_ads')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    refetchWebsiteAds();
   };
 
   return (
@@ -230,6 +346,7 @@ export const AdsSponsors: React.FC = () => {
           {[
             { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
             { id: 'ads', label: 'Advertisements', count: advertisements.length },
+            { id: 'website_ads', label: 'Website Ads', count: websiteAds.length },
             { id: 'sponsors', label: 'Sponsors', count: sponsors.length }
           ].map((tab) => (
             <button
@@ -461,6 +578,111 @@ export const AdsSponsors: React.FC = () => {
         </Card>
       )}
 
+      {/* Website Ads Tab */}
+      {activeTab === 'website_ads' && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">Website Ads</h3>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  value={websiteAdSectionFilter}
+                  onChange={(e) => setWebsiteAdSectionFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">All Sections</option>
+                  <option value="homepage_hero">Homepage Hero</option>
+                  <option value="homepage_sidebar">Homepage Sidebar</option>
+                  <option value="events_top">Events Top</option>
+                  <option value="events_sidebar">Events Sidebar</option>
+                  <option value="footer_strip">Footer Strip</option>
+                </select>
+                <Button size="sm" onClick={openAddWebsiteAd} className="flex items-center space-x-2">
+                  <Plus className="h-4 w-4" />
+                  <span>Add Website Ad</span>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {websiteAdsError && (
+              <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm mb-4">
+                {websiteAdsError}
+              </div>
+            )}
+            {websiteAdsLoading ? (
+              <p className="text-gray-500 py-4">Loading website ads...</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ad</TableHead>
+                    <TableHead>Section</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Performance</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {websiteAds
+                    .filter((ad) => websiteAdSectionFilter === 'all' || ad.adSection === websiteAdSectionFilter)
+                    .map((ad) => {
+                      const ctr = ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0;
+                      return (
+                        <TableRow key={ad.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium text-gray-900">{ad.title}</div>
+                              <div className="text-sm text-gray-500">{ad.advertiser}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="default">{ad.adSection.replace(/_/g, ' ')}</Badge>
+                          </TableCell>
+                          <TableCell className="capitalize">{ad.adType.replace(/_/g, ' ')}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{ad.startDate ? new Date(ad.startDate).toLocaleDateString() : '-'}</div>
+                              <div className="text-gray-500">to {ad.endDate ? new Date(ad.endDate).toLocaleDateString() : '-'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{ad.priority}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{ad.impressions.toLocaleString()} impressions</div>
+                              <div>{ad.clicks.toLocaleString()} clicks</div>
+                              <div className="text-gray-500">CTR: {ctr.toFixed(2)}%</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusVariant(ad.status)}>{ad.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-1">
+                              <Button size="sm" variant="ghost" onClick={() => handleViewDetails(ad)} title="View">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => openEditWebsiteAd(ad)} title="Edit">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => deleteWebsiteAd(ad.id)} title="Delete">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sponsors Tab */}
       {activeTab === 'sponsors' && (
         <Card>
@@ -584,7 +806,63 @@ export const AdsSponsors: React.FC = () => {
             </div>
             
             <div className="p-6">
-              {selectedItem.advertiser != null ? (
+              {selectedItem.adSection != null ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Website Ad Details</h3>
+                    <dl className="space-y-3 text-sm">
+                      <div>
+                        <dt className="text-gray-500">Title</dt>
+                        <dd className="font-medium text-gray-900">{selectedItem.title}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Advertiser</dt>
+                        <dd className="text-gray-900">{selectedItem.advertiser || 'Website'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Section / Type</dt>
+                        <dd className="text-gray-900 capitalize">{String(selectedItem.adSection).replace(/_/g, ' ')} / {String(selectedItem.adType).replace(/_/g, ' ')}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Redirect URL</dt>
+                        <dd className="text-gray-900 break-all">{selectedItem.redirectUrl || '—'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Period</dt>
+                        <dd className="text-gray-900">
+                          {selectedItem.startDate && new Date(selectedItem.startDate).toLocaleDateString()} – {selectedItem.endDate && new Date(selectedItem.endDate).toLocaleDateString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Priority</dt>
+                        <dd className="text-gray-900">{selectedItem.priority ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500">Status</dt>
+                        <dd><Badge variant={getStatusVariant(selectedItem.status)}>{selectedItem.status}</Badge></dd>
+                      </div>
+                    </dl>
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => { setShowDetailModal(false); openEditWebsiteAd(selectedItem); }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Website Ad
+                    </Button>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Performance</h3>
+                    <dl className="space-y-2 text-sm">
+                      <div className="flex justify-between"><dt className="text-gray-500">Impressions</dt><dd className="font-medium text-gray-900">{selectedItem.impressions?.toLocaleString?.() ?? 0}</dd></div>
+                      <div className="flex justify-between"><dt className="text-gray-500">Clicks</dt><dd className="font-medium text-gray-900">{selectedItem.clicks?.toLocaleString?.() ?? 0}</dd></div>
+                      <div className="flex justify-between"><dt className="text-gray-500">CTR</dt><dd className="font-medium text-gray-900">{selectedItem.impressions > 0 ? ((selectedItem.clicks / selectedItem.impressions) * 100).toFixed(2) : 0}%</dd></div>
+                    </dl>
+                    {selectedItem.imageUrl && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Creative Preview</h4>
+                        <img src={selectedItem.imageUrl} alt={selectedItem.title} className="w-full h-48 object-cover rounded-lg border border-gray-200" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : selectedItem.advertiser != null ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Advertisement Details</h3>
@@ -697,6 +975,89 @@ export const AdsSponsors: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Website Ad Add/Edit Modal */}
+      {showWebsiteAdModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {isEditingWebsiteAd ? 'Edit Website Ad' : 'Add Website Ad'}
+                </h2>
+                <button
+                  onClick={() => setShowWebsiteAdModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.title || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, title: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Advertiser</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.advertiser || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, advertiser: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Section *</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.adSection || 'homepage_hero'} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, adSection: e.target.value }))}>
+                  <option value="homepage_hero">Homepage Hero</option>
+                  <option value="homepage_sidebar">Homepage Sidebar</option>
+                  <option value="events_top">Events Top</option>
+                  <option value="events_sidebar">Events Sidebar</option>
+                  <option value="footer_strip">Footer Strip</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ad Type</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.adType || 'banner'} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, adType: e.target.value }))}>
+                  <option value="banner">Banner</option>
+                  <option value="popup">Popup</option>
+                  <option value="video">Video</option>
+                  <option value="native">Native</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.imageUrl || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, imageUrl: e.target.value }))} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.redirectUrl || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, redirectUrl: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.startDate || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, startDate: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.endDate || ''} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, endDate: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.status || 'draft'} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, status: e.target.value as WebsiteAd['status'] }))}>
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={websiteAdForm.priority ?? 0} onChange={(e) => setWebsiteAdForm((p) => ({ ...p, priority: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowWebsiteAdModal(false)}>Cancel</Button>
+              <Button onClick={saveWebsiteAd}>{isEditingWebsiteAd ? 'Update Ad' : 'Create Ad'}</Button>
             </div>
           </div>
         </div>

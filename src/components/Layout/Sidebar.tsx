@@ -13,7 +13,8 @@ import {
   Megaphone,
   LogOut,
   X,
-  Building
+  Building,
+  MessageSquareQuote
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
@@ -42,9 +43,10 @@ const navigation: NavItem[] = [
   { name: 'Vendors', href: '/vendors', icon: Truck, roles: ALL_ROLES },
   { name: 'Exhibitors', href: '/exhibitors', icon: UserCheck, roles: ALL_ROLES },
   { name: 'Calendar', href: '/calendar', icon: Calendar, roles: ALL_ROLES },
-  { name: 'Plans & Billing', href: '/billing', icon: CreditCard, roles: ALL_ROLES },
+  { name: 'Plans & Billing', href: '/billing', icon: CreditCard, roles: ['super_admin'] },
   { name: 'Ads & Sponsors', href: '/ads-sponsors', icon: Megaphone, roles: ALL_ROLES },
   { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['super_admin', 'admin'] },
+  { name: 'Testimonial', href: '/testimonials', icon: MessageSquareQuote, roles: ['super_admin'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['super_admin'] },
 ];
 

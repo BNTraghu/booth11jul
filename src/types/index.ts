@@ -79,6 +79,9 @@ export interface Event {
   venueId?: string | null; // venue_id from DB
   createdBy?: string | null; // created_by from DB
   totalRevenue: number; // total_revenue from DB
+  /** Optional — analytics / reports (may come from DB or sample data) */
+  satisfactionScore?: number | null;
+  roiPercent?: number | null;
   // Address & Location
   addressLine1?: string | null; // address_line1 from DB
   addressLandmark?: string | null; // address_landmark from DB
@@ -108,7 +111,9 @@ export interface Event {
   // Stalls Configuration
   inSiteStalls?: StallConfig[] | null; // in_site_stalls from DB
   outSiteStalls?: StallConfig[] | null; // out_site_stalls from DB
-  allStalls?: string[] | null; // all_stalls from DB
+  allStalls?: string[] | null; // legacy / mixed use
+  /** Stall numbers from events.all_stalls (string array) for assignment pickers */
+  stallNumbersFromDb?: string[];
   organizationId?: string | null;
   created_at: string;
   updated_at: string;
@@ -263,7 +268,9 @@ export interface Exhibitor {
     licence?: string | null;
   } | null; // document_urls from DB
   imageUrls?: string[] | null; // image_urls from DB
-  
+  /** Primary cover image for listings / portfolio (portfolio_image_url from DB) */
+  portfolioImageUrl?: string | null;
+
   // Settings
   status: 'registered' | 'confirmed' | 'checked_in' | 'cancelled';
   paymentStatus: 'pending' | 'paid' | 'refunded'; // payment_status from DB

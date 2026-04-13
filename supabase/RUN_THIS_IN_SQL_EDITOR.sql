@@ -41,3 +41,29 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_events_organization_id   ON events(organization_id);
 CREATE INDEX IF NOT EXISTS idx_venues_organization_id   ON venues(organization_id);
 CREATE INDEX IF NOT EXISTS idx_vendors_organization_id  ON vendors(organization_id);
+
+-- 5) Storage: event flyers bucket (fixes "Bucket not found" on upload)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('event-images', 'event-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "event_images_public_read" ON storage.objects;
+CREATE POLICY "event_images_public_read"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'event-images');
+
+DROP POLICY IF EXISTS "event_images_authenticated_insert" ON storage.objects;
+CREATE POLICY "event_images_authenticated_insert"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'event-images');
+
+DROP POLICY IF EXISTS "event_images_authenticated_update" ON storage.objects;
+CREATE POLICY "event_images_authenticated_update"
+  ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'event-images')
+  WITH CHECK (bucket_id = 'event-images');
+
+DROP POLICY IF EXISTS "event_images_authenticated_delete" ON storage.objects;
+CREATE POLICY "event_images_authenticated_delete"
+  ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'event-images');

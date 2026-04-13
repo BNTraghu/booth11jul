@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { User, Event, Venue, Vendor, Exhibitor } from '../types';
+import { parseExhibitorImageUrls } from '../utils/exhibitorPortfolio';
 
 export type UseSupabaseDataOptions = {
   limit?: number;
@@ -123,8 +124,8 @@ export const useUsers = () => {
     } as User;
   });
 
-  // Only Super Admin can see other Super Admin users; other roles never see them in the list
-  const users = isSuperAdmin ? mapped : mapped.filter((u) => u.role !== 'super_admin');
+  // Never list super_admin accounts in the UI (any role)
+  const users = mapped.filter((u) => u.role !== 'super_admin');
 
   return { users, loading, error, refetch };
 };
@@ -164,7 +165,18 @@ export const useEvents = () => {
       venueId: event.venue_id,
       createdBy: event.created_by,
       totalRevenue: event.total_revenue || 0,
-      eventImageUrl: event.event_image_url,
+      // JSONB may return an array; list/edit parsing expects string or array
+      eventImageUrl: (() => {
+        const v = event.event_image_url;
+        if (v == null) return null;
+        if (typeof v === 'string') return v;
+        if (Array.isArray(v)) return JSON.stringify(v);
+        try {
+          return JSON.stringify(v);
+        } catch {
+          return String(v);
+        }
+      })(),
       layoutImageUrl: event.layout_image_url,
       // Pricing & Availability
       pricePerHour: event.price_per_hour,
@@ -179,6 +191,9 @@ export const useEvents = () => {
       inSiteStalls: event.in_site_stalls || [],
       outSiteStalls: event.out_site_stalls || [],
       allStalls: event.in_site_stalls || [], // Use in_site_stalls for the detailed stall objects
+      stallNumbersFromDb: Array.isArray(event.all_stalls)
+        ? event.all_stalls.map((s: unknown) => String(s).trim()).filter(Boolean)
+        : [],
       created_at: event.created_at,
       updated_at: event.updated_at
     };
@@ -374,8 +389,12 @@ export const useExhibitors = () => {
       aadharCard: null,
       licence: null
     },
-    imageUrls: exhibitor.image_urls || [],
-    
+    imageUrls: parseExhibitorImageUrls(
+      exhibitor.image_urls ?? exhibitor.imageUrls ?? null
+    ),
+    portfolioImageUrl:
+      exhibitor.portfolio_image_url ?? exhibitor.portfolioImageUrl ?? null,
+
     // Settings
     status: exhibitor.status,
     paymentStatus: exhibitor.payment_status,
@@ -549,4 +568,39 @@ export const useCampaigns = (opts?: { skipOrgFilter?: boolean }) => {
   }));
 
   return { campaigns, loading, error, refetch: fetchCampaigns };
+};
+
+export const useWebsiteAds = (opts?: { skipOrgFilter?: boolean }) => {
+  const { user, isSuperAdmin } = useAuth();
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'website_ads',
+    '*',
+    [user?.organizationId, isSuperAdmin, opts?.skipOrgFilter],
+    {
+      order: { column: 'created_at', ascending: false },
+      organizationId: user?.organizationId ?? null,
+      isSuperAdmin,
+      skipOrgFilter: opts?.skipOrgFilter === true,
+    }
+  );
+
+  const websiteAds = data.map((row: any) => ({
+    id: row.id,
+    title: row.title,
+    advertiser: row.advertiser ?? 'Website',
+    adSection: row.ad_section ?? '',
+    adType: row.ad_type ?? 'banner',
+    imageUrl: row.image_url ?? '',
+    redirectUrl: row.redirect_url ?? '',
+    startDate: row.start_date ?? '',
+    endDate: row.end_date ?? '',
+    status: row.status ?? 'draft',
+    priority: Number(row.priority) || 0,
+    impressions: Number(row.impressions) || 0,
+    clicks: Number(row.clicks) || 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+
+  return { websiteAds, loading, error, refetch };
 };

@@ -27,7 +27,6 @@ import {
   Eye,
   EyeOff,
   Globe,
-  Tag,
   Users,
   Truck,
   Shield
@@ -38,6 +37,9 @@ import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { uploadExhibitorPublicImage } from '../lib/exhibitorStorage';
+import { exhibitorImageUrlsColumnValue } from '../lib/exhibitorImageDb';
+import { getDefaultExhibitorProfileUrl } from '../constants/exhibitorDefaultProfile';
 import statesData from '../data/states.json';
 
 interface FormData {
@@ -101,6 +103,8 @@ interface FormData {
 
   // Upload Images
   images: File[];
+  /** Single cover / portfolio image (stored as portfolio_image_url) */
+  portfolioImage: File | null;
 
   // Settings
   status: 'interested' | 'approved' | 'declined';
@@ -113,43 +117,16 @@ interface FormErrors {
   [key: string]: string;
 }
 
-const exhibitorCategories = [
-  'Technology',
-  'Healthcare',
-  'Education',
-  'Fashion',
-  'Food & Beverage',
-  'Automotive',
-  'Home & Garden',
-  'Sports & Fitness',
-  'Travel & Tourism',
-  'Finance & Banking',
-  'Real Estate',
-  'Entertainment',
-  'Manufacturing',
-  'Retail',
-  'Services',
-  'Others'
-];
+interface EventSubcategoryRow {
+  name: string;
+  sort_order: number;
+}
 
-const subCategories = {
-  'Technology': ['Software', 'Hardware', 'AI/ML', 'IoT', 'Cybersecurity', 'Mobile Apps', 'Web Development'],
-  'Healthcare': ['Medical Devices', 'Pharmaceuticals', 'Telemedicine', 'Health Tech', 'Wellness'],
-  'Education': ['EdTech', 'Online Learning', 'Training', 'Certification', 'Academic Services'],
-  'Fashion': ['Clothing', 'Accessories', 'Footwear', 'Jewelry', 'Beauty Products'],
-  'Food & Beverage': ['Restaurants', 'Catering', 'Packaged Foods', 'Beverages', 'Organic Products'],
-  'Automotive': ['Cars', 'Motorcycles', 'Parts & Accessories', 'Services', 'Electric Vehicles'],
-  'Home & Garden': ['Furniture', 'Decor', 'Appliances', 'Gardening', 'Home Improvement'],
-  'Sports & Fitness': ['Equipment', 'Apparel', 'Fitness Centers', 'Sports Services', 'Nutrition'],
-  'Travel & Tourism': ['Hotels', 'Travel Agencies', 'Tour Operators', 'Transportation', 'Destinations'],
-  'Finance & Banking': ['Banks', 'Insurance', 'Investment', 'Fintech', 'Loans & Credit'],
-  'Real Estate': ['Residential', 'Commercial', 'Property Management', 'Construction', 'Architecture'],
-  'Entertainment': ['Events', 'Media', 'Gaming', 'Music', 'Film & Video'],
-  'Manufacturing': ['Industrial Equipment', 'Raw Materials', 'Machinery', 'Tools', 'Automation'],
-  'Retail': ['E-commerce', 'Physical Stores', 'Wholesale', 'Distribution', 'Franchising'],
-  'Services': ['Consulting', 'Marketing', 'Legal', 'Accounting', 'IT Services'],
-  'Others': ['Miscellaneous', 'Emerging Industries', 'Non-profit', 'Government', 'Research']
-};
+interface EventCategoryRow {
+  name: string;
+  sort_order: number;
+  event_subcategories?: EventSubcategoryRow[];
+}
 
 const businessTypes = ['Private Limited', 'Public Limited', 'Partnership', 'Sole Proprietorship', 'LLP', 'NGO', 'Government'];
 const companySizes = ['1-10 employees', '11-50 employees', '51-200 employees', '201-500 employees', '500+ employees'];
@@ -161,6 +138,8 @@ export const AddExhibitor: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [subCategoryOptions, setSubCategoryOptions] = useState<Record<string, string[]>>({});
 
   const [formData, setFormData] = useState<FormData>({
     // Personal Information
@@ -203,6 +182,7 @@ export const AddExhibitor: React.FC = () => {
 
     // Upload Images
     images: [],
+    portfolioImage: null,
 
     // Settings
     status: 'interested',
@@ -236,6 +216,46 @@ export const AddExhibitor: React.FC = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [newProduct, setNewProduct] = useState('');
   const [newService, setNewService] = useState('');
+  const selectedSubCategories = subCategoryOptions[formData.category] || [];
+  const selectedSubCategoryValues = formData.subCategory
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const toggleSubCategory = (subCategory: string) => {
+    const next = selectedSubCategoryValues.includes(subCategory)
+      ? selectedSubCategoryValues.filter((v) => v !== subCategory)
+      : [...selectedSubCategoryValues, subCategory];
+    handleInputChange('subCategory', next.join(', '));
+  };
+
+  React.useEffect(() => {
+    const loadEventTaxonomy = async () => {
+      const { data, error } = await supabase
+        .from('event_categories')
+        .select('name, sort_order, event_subcategories(name, sort_order)')
+        .order('sort_order', { ascending: true });
+
+      if (error) {
+        console.error('Failed to load event categories:', error);
+        return;
+      }
+
+      const categories = (data || []) as EventCategoryRow[];
+      setCategoryOptions(categories.map((c) => c.name));
+
+      const subCategoryMap: Record<string, string[]> = {};
+      categories.forEach((category) => {
+        const sortedSubs = [...(category.event_subcategories || [])].sort(
+          (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
+        );
+        subCategoryMap[category.name] = sortedSubs.map((sub) => sub.name);
+      });
+      setSubCategoryOptions(subCategoryMap);
+    };
+
+    loadEventTaxonomy();
+  }, []);
 
   // Only super admins, admins, and sales/marketing can access this page
   if (!hasRole(['super_admin', 'admin', 'sales_marketing'])) {
@@ -249,66 +269,34 @@ export const AddExhibitor: React.FC = () => {
     );
   }
 
-  const validateStep = (step: number): boolean => {
+  const validateMandatoryFields = (): boolean => {
     const newErrors: FormErrors = {};
-
-    switch (step) {
-      case 1: // Personal Information
-        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
-        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
-        if (!formData.email.trim()) newErrors.email = 'Email is required';
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
-        if (!formData.phone.trim()) newErrors.phone = 'Contact number is required';
-        else if (formData.phone.length !== 10) newErrors.phone = 'Contact number must be exactly 10 digits';
-        else if (!/^[0-9]{10}$/.test(formData.phone)) newErrors.phone = 'Contact number must contain only digits';
-
-        // Validate alternate phone if provided
-        if (formData.alternatePhone.trim()) {
-          if (formData.alternatePhone.length !== 10) newErrors.alternatePhone = 'Alternate contact number must be exactly 10 digits';
-          else if (!/^[0-9]{10}$/.test(formData.alternatePhone)) newErrors.alternatePhone = 'Alternate contact number must contain only digits';
-        }
-        break;
-
-      case 2: // Address
-        if (!formData.address1.trim()) newErrors.address1 = 'Address line 1 is required';
-        if (!formData.city) newErrors.city = 'City is required';
-        if (!formData.state) newErrors.state = 'State is required';
-        if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
-        else if (!/^[0-9]{6}$/.test(formData.pincode.trim())) newErrors.pincode = 'Pincode must be exactly 6 digits';
-        if (!formData.country) newErrors.country = 'Country is required';
-        break;
-
-      case 3: // Business Information
-        if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
-        if (!formData.category) newErrors.category = 'Category is required';
-        if (!formData.subCategory) newErrors.subCategory = 'Sub-category is required';
-        if (!formData.panNumber.trim()) newErrors.panNumber = 'PAN number is required';
-        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber.trim())) {
-          newErrors.panNumber = 'PAN must be in format: ABCDE1234F';
-        }
-        if (!formData.gstNumber.trim()) {
-          // GST is not mandatory, so no error for empty field
-        } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[Z]{1}[A-Z0-9]{1}$/.test(formData.gstNumber.trim())) {
-          newErrors.gstNumber = 'GST must be in format: 22AAAAA0000A1Z5';
-        }
-        // Booth size is not mandatory, so no validation error for empty field
-        if (!formData.businessDescription.trim()) {
-          // Business description is not mandatory, so no error for empty field
-        } else if (formData.businessDescription.trim().length < 10) {
-          newErrors.businessDescription = 'Business description must be at least 10 characters';
-        }
-        break;
-
-             case 4: // Documents
-         if (!formData.documents.panCard) newErrors.panCard = 'PAN card is required';
-         if (!formData.documents.aadharCard) newErrors.aadharCard = 'Aadhar card is required';
-         // Licence is not mandatory, so no error for empty field
-         break;
-
+    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
+    if (!formData.phone.trim()) newErrors.phone = 'Contact number is required';
+    else if (formData.phone.length !== 10) newErrors.phone = 'Contact number must be exactly 10 digits';
+    else if (!/^[0-9]{10}$/.test(formData.phone)) newErrors.phone = 'Contact number must contain only digits';
+    if (formData.alternatePhone.trim()) {
+      if (formData.alternatePhone.length !== 10) newErrors.alternatePhone = 'Alternate contact number must be exactly 10 digits';
+      else if (!/^[0-9]{10}$/.test(formData.alternatePhone)) newErrors.alternatePhone = 'Alternate contact number must contain only digits';
     }
-
+    if (!formData.companyName.trim()) newErrors.companyName = 'Company name is required';
+    if (!formData.category) newErrors.category = 'Main category is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const validateStep = (step: number): boolean => {
+    if (step === 1 || step === 6) {
+      return validateMandatoryFields();
+    }
+    if (step >= 2 && step <= 5) {
+      setErrors({});
+      return true;
+    }
+    return true;
   };
 
   const handleInputChange = (field: string, value: any) => {
@@ -351,23 +339,31 @@ export const AddExhibitor: React.FC = () => {
         }
         break;
       case 'address1':
-        validationResult = validateRequiredText(value, 'Address', 5, 200);
+        if (!value.trim()) {
+          validationResult = { isValid: true, message: '' };
+        } else {
+          validationResult = validateRequiredText(value, 'Address', 5, 200);
+        }
         break;
       case 'city':
-        validationResult = validateRequiredText(value, 'City', 2, 50);
+        if (!value.trim()) {
+          validationResult = { isValid: true, message: '' };
+        } else {
+          validationResult = validateRequiredText(value, 'City', 2, 50);
+        }
         break;
       case 'state':
-        validationResult = validateRequiredText(value, 'State', 2, 50);
+        validationResult = { isValid: true, message: '' };
         break;
       case 'pincode':
-        validationResult = validatePinCode(value);
+        if (!value.trim()) {
+          validationResult = { isValid: true, message: '' };
+        } else {
+          validationResult = validatePinCode(value);
+        }
         break;
       case 'country':
-        if (!value.trim()) {
-          validationResult = { isValid: false, message: 'Country is required' };
-        } else {
-          validationResult = { isValid: true, message: '' };
-        }
+        validationResult = { isValid: true, message: '' };
         break;
       case 'companyName':
         validationResult = validateRequiredText(value, 'Company name', 2, 100);
@@ -381,21 +377,17 @@ export const AddExhibitor: React.FC = () => {
         break;
       case 'category':
         if (!value.trim()) {
-          validationResult = { isValid: false, message: 'Category is required' };
+          validationResult = { isValid: false, message: 'Main category is required' };
         } else {
           validationResult = { isValid: true, message: '' };
         }
         break;
       case 'subCategory':
-        if (!value.trim()) {
-          validationResult = { isValid: false, message: 'Sub-category is required' };
-        } else {
-          validationResult = { isValid: true, message: '' };
-        }
+        validationResult = { isValid: true, message: '' };
         break;
       case 'panNumber':
         if (!value.trim()) {
-          validationResult = { isValid: false, message: 'PAN number is required' };
+          validationResult = { isValid: true, message: '' };
         } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.trim())) {
           validationResult = { isValid: false, message: 'PAN must be in format: ABCDE1234F' };
         } else {
@@ -615,43 +607,17 @@ export const AddExhibitor: React.FC = () => {
     }
   };
 
-  const uploadImagesToSupabase = async (images: File[], exhibitorName: string): Promise<string[]> => {
+  const uploadGalleryImagesToSupabase = async (images: File[], exhibitorName: string): Promise<string[]> => {
     const uploadedUrls: string[] = [];
-
     for (let i = 0; i < images.length; i++) {
-      const file = images[i];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${exhibitorName.replace(/\s+/g, '_')}_image_${i + 1}.${fileExt}`;
-
-      try {
-        const { data, error } = await supabase.storage
-          .from('exhibitor-images')
-          .upload(fileName, file, {
-            upsert: true
-          });
-
-        if (error) {
-          console.error('Error uploading image:', error);
-          continue;
-        }
-
-        // Get signed URL since bucket is not public
-        const { data: signedUrl, error: signedError } = await supabase.storage
-          .from('exhibitor-images')
-          .createSignedUrl(fileName, 3600); // 1 hour expiry
-
-        if (signedError) {
-          console.error('Error creating signed URL for image:', signedError);
-          continue;
-        }
-
-        uploadedUrls.push(signedUrl.signedUrl);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        continue;
-      }
+      const { url, error } = await uploadExhibitorPublicImage(
+        images[i],
+        'gallery',
+        `${exhibitorName}_img_${i + 1}`
+      );
+      if (url) uploadedUrls.push(url);
+      else console.error(`Gallery image ${i + 1} upload failed:`, error);
     }
-
     return uploadedUrls;
   };
 
@@ -700,12 +666,18 @@ export const AddExhibitor: React.FC = () => {
     }
   };
 
+  const skipOptionalToReview = () => {
+    if (validateMandatoryFields()) {
+      setCurrentStep(6);
+    }
+  };
+
   const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) {
+    if (!validateMandatoryFields()) {
       return;
     }
 
@@ -733,10 +705,34 @@ export const AddExhibitor: React.FC = () => {
         if (licenceUrl) documentUrls.licence = licenceUrl;
       }
 
-      // Upload images to Supabase Storage
-      const imageUrls = formData.images.length > 0
-        ? await uploadImagesToSupabase(formData.images, exhibitorName)
-        : [];
+      let portfolioUrl: string | null = null;
+      if (formData.portfolioImage) {
+        const pr = await uploadExhibitorPublicImage(
+          formData.portfolioImage,
+          'portfolio',
+          `${exhibitorName}_portfolio`
+        );
+        portfolioUrl = pr.url;
+        if (!portfolioUrl) {
+          throw new Error(
+            pr.error ||
+              'Portfolio image upload failed. In Supabase: create bucket "exhibitor-images" (public read) and allow authenticated uploads — see migration 20250402100000_exhibitors_image_urls_and_storage.sql.'
+          );
+        }
+      }
+
+      const imageUrlsRaw =
+        formData.images.length > 0 ? await uploadGalleryImagesToSupabase(formData.images, exhibitorName) : [];
+      const imageUrls = exhibitorImageUrlsColumnValue(imageUrlsRaw);
+
+      if (formData.images.length > 0 && imageUrls.length !== formData.images.length) {
+        throw new Error(
+          `Only ${imageUrls.length} of ${formData.images.length} gallery images uploaded. Check Storage bucket "exhibitor-images" and policies (see migration 20250402100000).`
+        );
+      }
+
+      const portfolio_image_url =
+        portfolioUrl || imageUrls[0] || getDefaultExhibitorProfileUrl();
 
       const insertData = {
         // Personal Information
@@ -775,6 +771,7 @@ export const AddExhibitor: React.FC = () => {
 
         // Image URLs
         image_urls: imageUrls,
+        portfolio_image_url: portfolio_image_url,
 
         // Settings
         status: formData.status,
@@ -849,10 +846,10 @@ export const AddExhibitor: React.FC = () => {
   };
 
   const steps = [
-    { number: 1, title: 'Personal Information', icon: User },
-    { number: 2, title: 'Address', icon: MapPin },
-    { number: 3, title: 'Business Information', icon: Building },
-    { number: 4, title: 'Documents', icon: FileText },
+    { number: 1, title: 'Personal & company', icon: User },
+    { number: 2, title: 'Address (optional)', icon: MapPin },
+    { number: 3, title: 'Business (optional)', icon: Building },
+    { number: 4, title: 'Documents (optional)', icon: FileText },
     { number: 5, title: 'Upload Images', icon: Upload },
     { number: 6, title: 'Review & Submit', icon: CheckCircle }
   ];
@@ -956,7 +953,7 @@ export const AddExhibitor: React.FC = () => {
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <User className="h-5 w-5 mr-2" />
-                  Personal Information
+                  Personal information & company
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -1050,6 +1047,61 @@ export const AddExhibitor: React.FC = () => {
                     placeholder="9876543210"
                   />
                 </div>
+
+                <div className="border-t border-gray-200 pt-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.companyName}
+                        onChange={(e) => handleInputChange('companyName', e.target.value)}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.companyName ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter company name"
+                      />
+                      {errors.companyName && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.companyName}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Main Category *
+                      </label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) => {
+                          handleInputChange('category', e.target.value);
+                          handleInputChange('subCategory', '');
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.category ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                      >
+                        <option value="">Select category</option>
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.category && (
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          {errors.category}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Everything after this step is optional — you can skip ahead to review once these required fields are complete.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1060,13 +1112,14 @@ export const AddExhibitor: React.FC = () => {
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <MapPin className="h-5 w-5 mr-2" />
-                  Address
+                  Address{' '}
+                  <span className="text-sm font-normal text-gray-500 ml-2">(optional)</span>
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address Line 1 *
+                    Address Line 1
                   </label>
                   <input
                     type="text"
@@ -1102,7 +1155,7 @@ export const AddExhibitor: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      State *
+                      State
                     </label>
                                           <select
                         value={formData.state}
@@ -1129,7 +1182,7 @@ export const AddExhibitor: React.FC = () => {
                   </div>
                                       <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        City *
+                        City
                       </label>
                       <select
                         value={formData.city}
@@ -1154,7 +1207,7 @@ export const AddExhibitor: React.FC = () => {
                     </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pincode *
+                      Pincode
                     </label>
                     <input
                       type="text"
@@ -1193,108 +1246,63 @@ export const AddExhibitor: React.FC = () => {
           {currentStep === 3 && (
             <Card>
               <CardHeader>
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <Building className="h-5 w-5 mr-2" />
-                  Business Information
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                  <Building className="h-5 w-5 shrink-0" />
+                  <span>Business Information</span>
+                  <span className="text-sm font-normal text-gray-500">(optional)</span>
                 </h3>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Company Name *
-                    </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Website <span className="text-gray-500 font-normal">(optional)</span>
+                  </label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="text"
-                      value={formData.companyName}
-                      onChange={(e) => handleInputChange('companyName', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.companyName ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                      placeholder="Enter company name"
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => handleInputChange('website', e.target.value)}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="https://company.com"
                     />
-                    {errors.companyName && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.companyName}
-                      </p>
-                    )}
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Company Website
-                    </label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="url"
-                        value={formData.website}
-                        onChange={(e) => handleInputChange('website', e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://company.com"
-                      />
-                    </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sub Category <span className="text-gray-500 font-normal">(optional)</span>
+                  </label>
+                  <div className={`max-h-40 overflow-y-auto border rounded-lg p-3 space-y-2 ${errors.subCategory ? 'border-red-300' : 'border-gray-300'} ${!formData.category ? 'bg-gray-100' : 'bg-white'}`}>
+                    {!formData.category && (
+                      <p className="text-sm text-gray-500">Select main category on Personal Information to enable sub-categories</p>
+                    )}
+                    {formData.category && selectedSubCategories.length === 0 && (
+                      <p className="text-sm text-gray-500">No sub-categories available</p>
+                    )}
+                    {formData.category && selectedSubCategories.map((subCat) => (
+                      <label key={subCat} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedSubCategoryValues.includes(subCat)}
+                          onChange={() => toggleSubCategory(subCat)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>{subCat}</span>
+                      </label>
+                    ))}
                   </div>
+                  {errors.subCategory && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.subCategory}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Category *
-                    </label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => {
-                        handleInputChange('category', e.target.value);
-                        handleInputChange('subCategory', ''); // Reset subcategory
-                      }}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.category ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                    >
-                      <option value="">Select category</option>
-                      {exhibitorCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.category && (
-                      <p className="mt-1 text-sm text-red-600 flex items-center">
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        {errors.category}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Sub Category
-                    </label>
-                    <select
-                      value={formData.subCategory}
-                      onChange={(e) => handleInputChange('subCategory', e.target.value)}
-                      disabled={!formData.category}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${errors.subCategory ? 'border-red-300' : 'border-gray-300'}`}
-                    >
-                      <option value="">Select sub-category</option>
-                      {formData.category && subCategories[formData.category as keyof typeof subCategories]?.map((subCat) => (
-                        <option key={subCat} value={subCat}>
-                          {subCat}
-                        </option>
-                      ))}
-                    </select>
-                    {errors.subCategory && (
-                      <p className="mt-1 text-sm text-red-600">
-                        {errors.subCategory}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      PAN Number *
+                      PAN Number <span className="text-gray-500 font-normal">(optional)</span>
                     </label>
                     <input
                       type="text"
@@ -1446,7 +1454,7 @@ export const AddExhibitor: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      PAN Card *
+                      PAN Card <span className="text-gray-500 font-normal">(optional)</span>
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                       <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -1482,7 +1490,7 @@ export const AddExhibitor: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Aadhar Card *
+                      Aadhar Card <span className="text-gray-500 font-normal">(optional)</span>
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                       <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -1558,7 +1566,7 @@ export const AddExhibitor: React.FC = () => {
                         <li>• Images will be automatically compressed if too large</li>
                         <li>• PDF files over 100KB need manual compression</li>
                         <li>• Accepted formats: PDF, JPG, JPEG, PNG</li>
-                        <li>• PAN Card and Aadhar Card are mandatory</li>
+                        <li>• Documents are optional unless your process requires them</li>
                       </ul>
                     </div>
                   </div>
@@ -1577,6 +1585,71 @@ export const AddExhibitor: React.FC = () => {
                 </h3>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-4">
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    Portfolio image (cover photo)
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Shown on exhibitor lists. If you skip this, the first gallery image below will be used.
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="portfolio-image-upload"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (!file.type.startsWith('image/')) {
+                        setErrors((prev) => ({ ...prev, portfolioImage: 'Please choose an image file.' }));
+                        return;
+                      }
+                      try {
+                        const compressed = await compressFile(file, 100);
+                        setFormData((prev) => ({ ...prev, portfolioImage: compressed }));
+                        setErrors((prev) => ({ ...prev, portfolioImage: '' }));
+                      } catch (err) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          portfolioImage: err instanceof Error ? err.message : 'Could not process image',
+                        }));
+                      }
+                    }}
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label
+                      htmlFor="portfolio-image-upload"
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+                    >
+                      Choose portfolio image
+                    </label>
+                    {formData.portfolioImage && (
+                      <>
+                        <div className="h-20 w-20 rounded-lg overflow-hidden border border-gray-200 bg-white">
+                          <img
+                            src={URL.createObjectURL(formData.portfolioImage)}
+                            alt="Portfolio preview"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, portfolioImage: null }))}
+                          className="text-sm text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {errors.portfolioImage && (
+                    <p className="mt-2 text-sm text-red-600 flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-1 shrink-0" />
+                      {errors.portfolioImage}
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   {/* <label className="block text-sm font-medium text-gray-700 mb-2">
                       Images
@@ -1752,18 +1825,25 @@ export const AddExhibitor: React.FC = () => {
 
                     <div>
                       <h5 className="font-medium text-gray-900 mb-2">Address</h5>
-                      <p><strong>Address:</strong> {formData.address1}</p>
-                      {formData.address2 && <p>{formData.address2}</p>}
-                      <p>{formData.city}, {formData.state} - {formData.pincode}</p>
-                      <p>{formData.country}</p>
+                      {formData.address1?.trim() || formData.city || formData.state || formData.pincode?.trim() ? (
+                        <>
+                          <p><strong>Address:</strong> {formData.address1 || '—'}</p>
+                          {formData.address2 && <p>{formData.address2}</p>}
+                          <p>{[formData.city, formData.state].filter(Boolean).join(', ') || '—'}{formData.pincode ? ` - ${formData.pincode}` : ''}</p>
+                          <p>{formData.country || '—'}</p>
+                        </>
+                      ) : (
+                        <p className="text-gray-600">Not provided</p>
+                      )}
                     </div>
 
                     <div>
                       <h5 className="font-medium text-gray-900 mb-2">Documents & Images</h5>
-                      <p><strong>PAN Card:</strong> {formData.documents.panCard ? '✅ Uploaded' : '❌ Missing'}</p>
-                      <p><strong>Aadhar Card:</strong> {formData.documents.aadharCard ? '✅ Uploaded' : '❌ Missing'}</p>
-                      <p><strong>Licence:</strong> {formData.documents.licence ? '✅ Uploaded' : 'Optional'}</p>
-                      <p><strong>Images:</strong> {formData.images.length} uploaded</p>
+                      <p><strong>PAN Card:</strong> {formData.documents.panCard ? 'Uploaded' : 'Not provided'}</p>
+                      <p><strong>Aadhar Card:</strong> {formData.documents.aadharCard ? 'Uploaded' : 'Not provided'}</p>
+                      <p><strong>Licence:</strong> {formData.documents.licence ? 'Uploaded' : 'Not provided'}</p>
+                      <p><strong>Portfolio:</strong> {formData.portfolioImage ? 'Yes' : formData.images.length ? 'Uses first gallery image' : 'None'}</p>
+                      <p><strong>Gallery images:</strong> {formData.images.length} uploaded</p>
                     </div>
                   </div>
                 </div>
@@ -1823,6 +1903,16 @@ export const AddExhibitor: React.FC = () => {
                   <span>Continue to Next Step</span>
                   <ArrowLeft className="h-4 w-4 rotate-180" />
                 </Button>
+                {currentStep === 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={skipOptionalToReview}
+                    className="w-full text-sm"
+                  >
+                    Skip optional steps — go to Review
+                  </Button>
+                )}
                 {currentStep > 1 && (
                   <Button
                     variant="outline"

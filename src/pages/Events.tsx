@@ -5,7 +5,7 @@ import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
-import { Event } from '../types';
+import { Event, Exhibitor } from '../types';
 import { supabase } from '../lib/supabase';
 import { useEvents, useVenues, useVendors, useExhibitors, useSponsors } from '../hooks/useSupabaseData';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,8 +37,8 @@ interface ExtendedEventFormData {
   // Image Field
   eventImage: File | null;
   eventImageUrl: string;
-  // Multiple Event Images Field
-  eventImages: File[];
+  // Multiple Event Images Field (null = slot loaded from DB URL only at same index)
+  eventImages: (File | null)[];
   eventImageUrls: string[];
   // Layout Image Field
   layoutImage: File | null;
@@ -62,6 +62,8 @@ interface ExtendedEventFormData {
   smokingAllowed: boolean;
   // Unified stall config
   allStalls: StallConfigRow[];
+  /** Snapshot from events.all_stalls when modal opened */
+  stallNumbersFromDb: string[];
 }
 
 interface EventRegistrationRow {
@@ -69,9 +71,11 @@ interface EventRegistrationRow {
   event_id: string;
   exhibitor_id: string | null;
   status: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
+  /** Legacy rows only; prefer exhibitors table via exhibitor_id */
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  stall_no?: string | null;
   created_at?: string;
 }
 
@@ -83,30 +87,91 @@ const SPONSOR_ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'in_kind', label: 'In-Kind Sponsor' },
 ];
 
+/** Legacy rows may still use status pending */
+const registrationIsInterested = (reg: Pick<EventRegistrationRow, 'status'>) =>
+  reg.status === 'interested' || reg.status === 'pending';
+
+const registrationStatusBadgeLabel = (reg: Pick<EventRegistrationRow, 'status'>) =>
+  registrationIsInterested(reg) ? 'interested' : reg.status;
+
 export const Events: React.FC = () => {
   const { events, loading, refetch } = useEvents();
   const { venues } = useVenues();
+  const activeVenues = venues.filter(
+    (venue) => (venue.status || '').toString().toLowerCase() === 'active'
+  );
   const { vendors } = useVendors();
-  const { exhibitors } = useExhibitors();
+  const activeVendors = vendors.filter(
+    (v) => (v.status || '').toString().toLowerCase() === 'active'
+  );
+  const { exhibitors, refetch: refetchExhibitors } = useExhibitors();
   const { sponsors } = useSponsors();
   
   // Debug vendor data
   console.log('🔍 Vendors loaded:', vendors.length, vendors);
   const [exhibitorUpdates, setExhibitorUpdates] = useState<Record<string, string>>({});
 
-  // Helper function to parse event image URLs
-  const parseEventImages = (eventImageUrl: string): string[] => {
-    if (!eventImageUrl) return [];
-    
-    try {
-      // Try to parse as JSON array (multiple images)
-      const parsed = JSON.parse(eventImageUrl);
-      return Array.isArray(parsed) ? parsed : [eventImageUrl];
-    } catch {
-      // If not JSON, treat as single image
-      return eventImageUrl ? [eventImageUrl] : [];
-    }
+  const extractUrlsFromString = (value: string): string[] => {
+    // Handles values like:
+    // - 'https://...'
+    // - '["https://...","https://..."]'
+    // - '"https://..."'
+    // - escaped JSON-ish blobs containing URLs
+    const matches = value.match(/https?:\/\/[^\s"'\\\],]+/g);
+    return (matches || []).map((url) => url.trim()).filter(Boolean);
   };
+
+  // Normalize image field regardless of DB shape:
+  // plain URL string, JSON stringified array, actual array, quoted/escaped JSON strings.
+  const parseEventImages = (eventImageUrl: unknown): string[] => {
+    if (eventImageUrl == null) return [];
+
+    if (Array.isArray(eventImageUrl)) {
+      return eventImageUrl
+        .flatMap((value) => parseEventImages(value))
+        .filter((value) => value.length > 0);
+    }
+
+    if (typeof eventImageUrl === 'object' && eventImageUrl !== null) {
+      try {
+        return parseEventImages(JSON.stringify(eventImageUrl));
+      } catch {
+        return [];
+      }
+    }
+
+    if (typeof eventImageUrl !== 'string') {
+      return [];
+    }
+
+    const normalized = eventImageUrl.trim();
+    if (!normalized) return [];
+
+    try {
+      const parsed = JSON.parse(normalized);
+      if (parsed !== eventImageUrl) {
+        return parseEventImages(parsed);
+      }
+    } catch {
+      // Not JSON; continue with plain value handling.
+    }
+
+    const extracted = extractUrlsFromString(normalized);
+    if (extracted.length > 0) {
+      return extracted;
+    }
+
+    return [normalized];
+  };
+
+  const getPrimaryEventImage = (eventImageUrl: unknown): string => {
+    const images = parseEventImages(eventImageUrl);
+    return images[0] || '';
+  };
+
+  /** Saved Supabase/public URLs (not blob: previews). */
+  const isRemoteEventImageUrl = (url: string | null | undefined): boolean =>
+    /^https?:\/\//i.test(String(url ?? '').trim());
 
   // Helper functions to get names from IDs
   const getVendorName = (vendorId: string) => {
@@ -117,6 +182,17 @@ export const Events: React.FC = () => {
   const getExhibitorName = (exhibitorId: string) => {
     const exhibitor = exhibitors.find(e => e.id === exhibitorId);
     return exhibitor ? exhibitor.companyName || `${exhibitor.firstName} ${exhibitor.lastName}` : `Exhibitor ID: ${exhibitorId}`;
+  };
+
+  const exhibitorField = (v: string | null | undefined) => {
+    const s = v != null ? String(v).trim() : '';
+    return s.length > 0 ? s : '—';
+  };
+
+  const exhibitorWebsiteHref = (url: string | null | undefined) => {
+    const s = url?.trim();
+    if (!s) return null;
+    return /^https?:\/\//i.test(s) ? s : `https://${s}`;
   };
 
   const getSponsorName = (sponsorId: string) => {
@@ -137,12 +213,46 @@ export const Events: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<ExtendedEventFormData | null>(null);
   const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
+  const editVenueOptions = editFormData?.venueId
+    ? Array.from(
+      new Map(
+        [...activeVenues, ...venues.filter((venue) => venue.id === editFormData.venueId)]
+          .map((venue) => [venue.id, venue])
+      ).values()
+    )
+    : activeVenues;
   const [editActiveTab, setEditActiveTab] = useState<'event' | 'exhibitor' | 'sponsor'>('event');
   const [viewActiveTab, setViewActiveTab] = useState<'event' | 'exhibitor'>('event');
   const [selectedExhibitorsForEdit, setSelectedExhibitorsForEdit] = useState<string[]>([]);
   const [exhibitorSearchTerm, setExhibitorSearchTerm] = useState('');
+  const [registerExhibitorPickId, setRegisterExhibitorPickId] = useState('');
+
+  const exhibitorMatchesSearch = (exhibitor: Exhibitor) => {
+    const q = exhibitorSearchTerm.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (exhibitor.companyName || '').toLowerCase().includes(q) ||
+      (exhibitor.firstName || '').toLowerCase().includes(q) ||
+      (exhibitor.lastName || '').toLowerCase().includes(q) ||
+      (exhibitor.email || '').toLowerCase().includes(q) ||
+      (exhibitor.phone || '').toLowerCase().includes(q) ||
+      (exhibitor.alternatePhone || '').toLowerCase().includes(q) ||
+      (exhibitor.category || '').toLowerCase().includes(q) ||
+      (exhibitor.subCategory || '').toLowerCase().includes(q) ||
+      (exhibitor.city || '').toLowerCase().includes(q) ||
+      (exhibitor.state || '').toLowerCase().includes(q) ||
+      (exhibitor.pincode || '').toLowerCase().includes(q)
+    );
+  };
+
   const [eventRegistrations, setEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+  /** Approve flow: pick stall when event has configured stalls */
+  const [approveStallModalReg, setApproveStallModalReg] = useState<EventRegistrationRow | null>(null);
+  const [approveModalStallChoice, setApproveModalStallChoice] = useState('');
+  /** assignStall: table/card Assign stall; stallOnly: exhibitor dropdown path */
+  const [approveModalIntent, setApproveModalIntent] = useState<'assignStall' | 'stallOnly' | null>(null);
+  const [postStallFlowExhibitorId, setPostStallFlowExhibitorId] = useState<string | null>(null);
   // Event sponsors: { sponsorId, role } for current event (edit modal)
   const [eventSponsors, setEventSponsors] = useState<{ sponsorId: string; role: string }[]>([]);
   const [loadingEventSponsors, setLoadingEventSponsors] = useState(false);
@@ -157,6 +267,15 @@ export const Events: React.FC = () => {
 
   // Vendors/Exhibitors selection
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
+  const editVendorOptions = (() => {
+    const selectedSet = new Set(selectedVendors);
+    const inactiveSelected = vendors.filter(
+      (v) =>
+        selectedSet.has(v.id) &&
+        (v.status || '').toString().toLowerCase() !== 'active'
+    );
+    return [...activeVendors, ...inactiveSelected];
+  })();
   const [selectedExhibitors, setSelectedExhibitors] = useState<string[]>([]);
 
   const toggleVendor = (id: string) => {
@@ -177,7 +296,7 @@ export const Events: React.FC = () => {
     setLoadingRegistrations(true);
     supabase
       .from('event_registrations')
-      .select('id, event_id, exhibitor_id, status, name, email, phone, created_at')
+      .select('id, event_id, exhibitor_id, status, stall_no, created_at')
       .eq('event_id', editFormData.id)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
@@ -246,41 +365,184 @@ export const Events: React.FC = () => {
     return () => { cancelled = true; };
   }, [showViewModal, selectedEvent?.id]);
 
-  const handleApproveRegistration = async (reg: EventRegistrationRow) => {
-    if (!reg.exhibitor_id || !editFormData) return;
-    const eventId = editFormData.id;
-    const currentIds = selectedExhibitorsForEdit || [];
-    if (currentIds.includes(reg.exhibitor_id)) {
-      await supabase.from('event_registrations').update({ status: 'approved' }).eq('id', reg.id);
-      setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'approved' } : r));
-      return;
+  const getConfiguredStallNumbers = (): string[] => {
+    if (!editFormData) return [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const s of editFormData.allStalls || []) {
+      const row = s as StallConfigRow & { stall_no?: string };
+      const n = String(row.stallNo ?? row.stall_no ?? '').trim();
+      if (n && !seen.has(n)) {
+        seen.add(n);
+        out.push(n);
+      }
     }
+    if (out.length > 0) return out;
+    for (const n of editFormData.stallNumbersFromDb || []) {
+      const t = String(n).trim();
+      if (t && !seen.has(t)) {
+        seen.add(t);
+        out.push(t);
+      }
+    }
+    if (out.length > 0) return out;
+    const planned = editFormData.noOfStalls || 0;
+    if (planned > 0 && (!editFormData.allStalls || editFormData.allStalls.length === 0)) {
+      return Array.from({ length: Math.min(Math.max(planned, 1), 200) }, (_, i) => String(i + 1));
+    }
+    if (editFormData.allStalls && editFormData.allStalls.length > 0) {
+      return editFormData.allStalls.map((_, i) => `Stall ${i + 1}`);
+    }
+    return [];
+  };
+
+  const getTakenStallNumbers = (excludeRegId?: string): Set<string> => {
+    const taken = new Set<string>();
+    for (const r of eventRegistrations) {
+      if (excludeRegId && r.id === excludeRegId) continue;
+      const s = r.stall_no?.trim();
+      if (s) taken.add(s);
+    }
+    return taken;
+  };
+
+  const getAvailableStallsForNewApproval = (reg: EventRegistrationRow): string[] => {
+    const cfg = getConfiguredStallNumbers();
+    const taken = getTakenStallNumbers(reg.id);
+    return cfg.filter((n) => !taken.has(n));
+  };
+
+  /** Approve registration only (no stall). Stall is a separate step when the event has stalls. */
+  const approveRegistrationOnly = async (reg: EventRegistrationRow): Promise<boolean> => {
+    if (!reg.exhibitor_id || !editFormData) return false;
+    if (reg.status === 'approved') return true;
+    const eventId = editFormData.id;
+    const updatePayload = { status: 'approved' as const, stall_no: null as string | null };
+    const currentIds = selectedExhibitorsForEdit || [];
+
+    if (currentIds.includes(reg.exhibitor_id)) {
+      const { error } = await supabase.from('event_registrations').update(updatePayload).eq('id', reg.id);
+      if (error) {
+        console.error('Error approving registration:', error);
+        showNotification(error.message, 'error');
+        return false;
+      }
+      setEventRegistrations((prev) =>
+        prev.map((r) => (r.id === reg.id ? { ...r, status: 'approved', stall_no: null } : r)),
+      );
+      return true;
+    }
+
     const newIds = [...currentIds, reg.exhibitor_id];
-    const { error: updateRegError } = await supabase.from('event_registrations').update({ status: 'approved' }).eq('id', reg.id);
+    const { error: updateRegError } = await supabase.from('event_registrations').update(updatePayload).eq('id', reg.id);
     if (updateRegError) {
       console.error('Error approving registration:', updateRegError);
-      return;
+      showNotification(updateRegError.message, 'error');
+      return false;
     }
     const { error: updateEventError } = await supabase.from('events').update({ exhibitor_ids: newIds }).eq('id', eventId);
     if (updateEventError) {
       console.error('Error adding exhibitor to event:', updateEventError);
-      return;
+      showNotification(updateEventError.message, 'error');
+      return false;
     }
     setSelectedExhibitorsForEdit(newIds);
-    setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'approved' } : r));
+    setEventRegistrations((prev) =>
+      prev.map((r) => (r.id === reg.id ? { ...r, status: 'approved', stall_no: null } : r)),
+    );
     await refetch();
     if (selectedEvent?.id === eventId) {
-      setSelectedEvent(prev => prev ? { ...prev, exhibitors: newIds } : null);
+      setSelectedEvent((prev) => (prev ? { ...prev, exhibitors: newIds } : null));
     }
+    return true;
+  };
+
+  const startApproveRegistration = (reg: EventRegistrationRow) => {
+    if (!reg.exhibitor_id || !editFormData) return;
+    setApproveModalIntent(null);
+    setPostStallFlowExhibitorId(null);
+    void (async () => {
+      const ok = await approveRegistrationOnly(reg);
+      if (!ok) return;
+      const stalls = getConfiguredStallNumbers().length > 0;
+      showNotification(
+        stalls ? 'Registration approved. Use Assign stall to pick a stall.' : 'Registration approved.',
+        'success',
+      );
+      if (!stalls && reg.exhibitor_id) await syncExhibitorApprovedStatus(reg.exhibitor_id);
+    })();
+  };
+
+  const startAssignStallModal = (reg: EventRegistrationRow) => {
+    if (!reg.exhibitor_id || !editFormData || reg.status !== 'approved') return;
+    if (reg.stall_no?.trim()) return;
+    if (getConfiguredStallNumbers().length === 0) return;
+    const available = getAvailableStallsForNewApproval(reg);
+    if (available.length === 0) {
+      showNotification('All stalls are already assigned. Change or clear an assignment first.', 'error');
+      return;
+    }
+    setApproveModalIntent('assignStall');
+    setPostStallFlowExhibitorId(null);
+    setApproveModalStallChoice(available[0] ?? '');
+    setApproveStallModalReg(reg);
+  };
+
+  const syncExhibitorApprovedStatus = async (exhibitorId: string) => {
+    const { error } = await supabase.from('exhibitors').update({ status: 'approved' }).eq('id', exhibitorId);
+    if (error) {
+      showNotification('Registration saved but exhibitor status could not be updated: ' + error.message, 'error');
+      return;
+    }
+    setExhibitorUpdates((prev) => ({ ...prev, [exhibitorId]: 'approved' }));
+    await refetchExhibitors();
+  };
+
+  const handleUpdateRegistrationStall = async (reg: EventRegistrationRow, newStallRaw: string): Promise<boolean> => {
+    const newStall = newStallRaw.trim() || null;
+    if (newStall) {
+      const configured = new Set(getConfiguredStallNumbers());
+      if (!configured.has(newStall)) {
+        showNotification('That stall is not in this event layout.', 'error');
+        return false;
+      }
+      const taken = getTakenStallNumbers(reg.id);
+      if (taken.has(newStall)) {
+        showNotification('That stall is already assigned.', 'error');
+        return false;
+      }
+    }
+    const { error } = await supabase.from('event_registrations').update({ stall_no: newStall }).eq('id', reg.id);
+    if (error) {
+      console.error('Error updating stall assignment:', error);
+      showNotification(
+        error.message.includes('unique') ? 'That stall is already assigned.' : error.message,
+        'error',
+      );
+      return false;
+    }
+    setEventRegistrations((prev) =>
+      prev.map((r) => (r.id === reg.id ? { ...r, stall_no: newStall } : r)),
+    );
+    showNotification(newStall ? 'Stall assignment updated.' : 'Stall unassigned.', 'success');
+    if (newStall && reg.exhibitor_id && reg.status === 'approved') {
+      await syncExhibitorApprovedStatus(reg.exhibitor_id);
+    }
+    return true;
   };
 
   const handleRejectRegistration = async (reg: EventRegistrationRow) => {
-    const { error } = await supabase.from('event_registrations').update({ status: 'rejected' }).eq('id', reg.id);
+    const { error } = await supabase
+      .from('event_registrations')
+      .update({ status: 'rejected', stall_no: null })
+      .eq('id', reg.id);
     if (error) {
       console.error('Error rejecting registration:', error);
       return;
     }
-    setEventRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: 'rejected' } : r));
+    setEventRegistrations((prev) =>
+      prev.map((r) => (r.id === reg.id ? { ...r, status: 'rejected', stall_no: null } : r)),
+    );
   };
 
   // Stalls management functions
@@ -446,6 +708,8 @@ export const Events: React.FC = () => {
     console.log('🔍 Database event object:', (event as any));
     setSelectedEvent(event);
 
+    const eventImageUrls = parseEventImages(event.eventImageUrl);
+
     // Map Event to ExtendedEventFormData with default values for missing fields
     const editData = {
       id: event.id,
@@ -469,19 +733,10 @@ export const Events: React.FC = () => {
       totalRevenue: event.totalRevenue,
       // Image Field
       eventImage: null,
-      eventImageUrl: event.eventImageUrl || '',
-      // Multiple Event Images Field
-      eventImages: [],
-      eventImageUrls: event.eventImageUrl ? (() => {
-        try {
-          // Try to parse as JSON array (multiple images)
-          const parsed = JSON.parse(event.eventImageUrl);
-          return Array.isArray(parsed) ? parsed : [event.eventImageUrl];
-        } catch {
-          // If not JSON, treat as single image
-          return event.eventImageUrl ? [event.eventImageUrl] : [];
-        }
-      })() : [],
+      eventImageUrl: eventImageUrls[0] || '',
+      // Multiple Event Images Field — parallel to eventImageUrls; null = existing remote URL at index
+      eventImages: eventImageUrls.map(() => null),
+      eventImageUrls,
       // Layout Image Field
       layoutImage: null,
       layoutImageUrl: event.layoutImageUrl || '',
@@ -502,14 +757,15 @@ export const Events: React.FC = () => {
       cateringAllowed: event.cateringAllowed || false,
       alcoholAllowed: event.alcoholAllowed || false,
       smokingAllowed: event.smokingAllowed || false,
-      // Unified stall config
-      allStalls: (event.inSiteStalls || []).map((stall: any) => ({
-        id: stall.id || Date.now().toString(),
-        stallNo: stall.stallNo || '',
-        stallSize: stall.stallSize || '',
-        stallCategory: stall.stallCategory || '',
-        price: stall.price || 0
-      }))
+      // Unified stall config (support snake_case from JSONB)
+      allStalls: (event.inSiteStalls || []).map((stall: any, idx: number) => ({
+        id: stall.id != null ? String(stall.id) : `stall-${idx}`,
+        stallNo: String(stall.stallNo ?? stall.stall_no ?? '').trim(),
+        stallSize: String(stall.stallSize ?? stall.stall_size ?? ''),
+        stallCategory: String(stall.stallCategory ?? stall.stall_category ?? ''),
+        price: typeof stall.price === 'number' ? stall.price : Number(stall.price) || 0
+      })),
+      stallNumbersFromDb: event.stallNumbersFromDb || []
     };
 
     console.log('📝 Mapped stalls data:', editData.allStalls);
@@ -634,87 +890,38 @@ export const Events: React.FC = () => {
         return;
       }
 
-      let imageUrl = editFormData.eventImageUrl;
-
-      // Upload image to Supabase storage if a new image is selected
-      if (editFormData.eventImage) {
-        try {
-          console.log('📤 Uploading new image...');
-          const fileExt = editFormData.eventImage.name.split('.').pop();
-          const fileName = `${Date.now()}.${fileExt}`;
-          const filePath = `event-images/${fileName}`;
-
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('event-images')
-            .upload(filePath, editFormData.eventImage);
-
-          if (uploadError) {
-            console.error('❌ Image upload failed:', uploadError);
-            // Continue without image upload for now
-            imageUrl = editFormData.eventImageUrl || '';
-            console.log('⚠️ Continuing without new image upload');
-          } else {
-            // Get public URL
-            const { data: urlData } = supabase.storage
-              .from('event-images')
-              .getPublicUrl(filePath);
-
-            imageUrl = urlData.publicUrl;
-            console.log('✅ Image uploaded successfully:', imageUrl);
-          }
-        } catch (error) {
-          console.error('❌ Image upload error:', error);
-          // Continue without image upload
-          imageUrl = editFormData.eventImageUrl || '';
-          console.log('⚠️ Continuing without new image upload due to error');
+      const uploadFlyerFile = async (file: File): Promise<string | null> => {
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}.${fileExt}`;
+        const filePath = `event-images/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, file);
+        if (uploadError) {
+          console.error('❌ Flyer upload failed:', uploadError);
+          showNotification('Flyer upload failed: ' + uploadError.message, 'error');
+          return null;
         }
-      } else {
-        imageUrl = editFormData.eventImageUrl || '';
-      }
+        const { data: urlData } = supabase.storage.from('event-images').getPublicUrl(filePath);
+        return urlData.publicUrl;
+      };
 
-      // Upload multiple images to Supabase storage
-      let multipleImageUrls: string[] = [];
-      if (editFormData.eventImages.length > 0) {
-        try {
-          console.log('📤 Uploading multiple images...');
-          
-          for (let i = 0; i < editFormData.eventImages.length; i++) {
-            const file = editFormData.eventImages[i];
-            const fileExt = file.name.split('.').pop();
-            const fileName = `flyer_${Date.now()}_${i}.${fileExt}`;
-            const filePath = `event-images/${fileName}`;
-
-            console.log(`📤 Uploading image ${i + 1}/${editFormData.eventImages.length}:`, filePath);
-
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('event-images')
-              .upload(filePath, file);
-
-            if (uploadError) {
-              console.error(`❌ Image ${i + 1} upload failed:`, uploadError);
-              // Continue with other images
-            } else {
-              console.log(`✅ Image ${i + 1} upload successful:`, uploadData.path);
-              const { data: urlData } = supabase.storage
-                .from('event-images')
-                .getPublicUrl(filePath);
-              multipleImageUrls.push(urlData.publicUrl);
-            }
-          }
-        } catch (error) {
-          console.error('❌ Multiple image upload error:', error);
-          // Continue with existing URLs if available
-          multipleImageUrls = editFormData.eventImageUrls.filter(url => url.startsWith('http'));
+      // Walk flyer slots in order: keep remote URLs, upload new files (parallel indices)
+      const finalImageUrls: string[] = [];
+      for (let i = 0; i < editFormData.eventImageUrls.length; i++) {
+        const url = (editFormData.eventImageUrls[i] || '').trim();
+        const file = editFormData.eventImages[i];
+        if (isRemoteEventImageUrl(url)) {
+          finalImageUrls.push(url);
+        } else if (file instanceof File) {
+          const uploaded = await uploadFlyerFile(file);
+          if (uploaded) finalImageUrls.push(uploaded);
         }
-      } else {
-        // Use existing URLs if no new images
-        multipleImageUrls = editFormData.eventImageUrls.filter(url => url.startsWith('http'));
       }
-
-      // Combine single image and multiple images
-      const finalImageUrls = multipleImageUrls.length > 0 
-        ? multipleImageUrls 
-        : (imageUrl ? [imageUrl] : []);
+      if (finalImageUrls.length === 0 && editFormData.eventImage instanceof File) {
+        const uploaded = await uploadFlyerFile(editFormData.eventImage);
+        if (uploaded) finalImageUrls.push(uploaded);
+      } else if (finalImageUrls.length === 0 && isRemoteEventImageUrl(editFormData.eventImageUrl)) {
+        finalImageUrls.push(editFormData.eventImageUrl.trim());
+      }
 
       let layoutImageUrl = editFormData.layoutImageUrl;
 
@@ -877,6 +1084,10 @@ export const Events: React.FC = () => {
     setNewSponsorRole('co_sponsor');
     setViewEventSponsors([]);
     setStallToRemove(null);
+    setApproveStallModalReg(null);
+    setApproveModalIntent(null);
+    setPostStallFlowExhibitorId(null);
+    setRegisterExhibitorPickId('');
   };
 
   // Exhibitor selection handlers for edit modal
@@ -896,47 +1107,63 @@ export const Events: React.FC = () => {
     }
   };
 
-  // Status update handler
+  // Status update: Interested resets registration+stall; Approved approves reg first (stall separate); stall modal only when approved without stall
   const updateExhibitorStatusEdit = async (exhibitorId: string, newStatus: string) => {
-    // try {
-    //   const { error } = await supabase
-    //     .from('exhibitors')
-    //     .update({ status: newStatus })
-    //     .eq('id', exhibitorId);
+    const reg = editFormData ? eventRegistrations.find((r) => r.exhibitor_id === exhibitorId) : undefined;
 
-    //   if (error) {
-    //     console.error('Error updating exhibitor status:', error);
-    //     showNotification('Failed to update status: ' + error.message, 'error');
-    //   } else {
-    //     // You may want to refresh exhibitors data here
-    //     console.log('Exhibitor status updated successfully');
-    //     showNotification('Status updated successfully!', 'success');
-    //     // Force refresh of exhibitors data
-    //     window.location.reload(); // Quick fix - reload the page
-    //     // OR better: refetch exhibitors data specifically
-    //     refetch();
-    //   }
-    // } catch (err) {
-    //   console.error('Error updating exhibitor status:', err);
-    //   showNotification('Error updating status', 'error');
-    // }
+    if (newStatus === 'interested' && reg) {
+      const { error } = await supabase
+        .from('event_registrations')
+        .update({ status: 'interested', stall_no: null })
+        .eq('id', reg.id);
+      if (error) {
+        console.error(error);
+        showNotification('Could not set registration to interested: ' + error.message, 'error');
+        return;
+      }
+      setEventRegistrations((prev) =>
+        prev.map((r) => (r.id === reg.id ? { ...r, status: 'interested', stall_no: null } : r)),
+      );
+    }
+
+    if (newStatus === 'approved' && editFormData && reg) {
+      const stallsConfigured = getConfiguredStallNumbers().length > 0;
+      if (registrationIsInterested(reg) || reg.status === 'rejected') {
+        const ok = await approveRegistrationOnly(reg);
+        if (!ok) return;
+        if (!stallsConfigured) await syncExhibitorApprovedStatus(exhibitorId);
+        else showNotification('Registration approved. Use Assign stall to pick a stall.', 'success');
+        return;
+      }
+      if (reg.status === 'approved' && !reg.stall_no?.trim() && stallsConfigured) {
+        const available = getAvailableStallsForNewApproval(reg);
+        if (available.length === 0) {
+          showNotification('All stalls are already assigned. Change or clear an assignment first.', 'error');
+          return;
+        }
+        setApproveModalStallChoice(available[0] ?? '');
+        setApproveModalIntent('stallOnly');
+        setPostStallFlowExhibitorId(exhibitorId);
+        setApproveStallModalReg(reg);
+        return;
+      }
+    }
 
     try {
-      // Update local state immediately for UI responsiveness
-      setExhibitorUpdates(prev => ({ ...prev, [exhibitorId]: newStatus }));
+      setExhibitorUpdates((prev) => ({ ...prev, [exhibitorId]: newStatus }));
 
-      const { error } = await supabase
-        .from('exhibitors')
-        .update({ status: newStatus })
-        .eq('id', exhibitorId);
+      const { error } = await supabase.from('exhibitors').update({ status: newStatus }).eq('id', exhibitorId);
 
       if (error) {
         console.error('Error updating exhibitor status:', error);
         showNotification('Failed to update status: ' + error.message, 'error');
-        // Revert local state on error
-        setExhibitorUpdates(prev => ({ ...prev, [exhibitorId]: exhibitors.find(e => e.id === exhibitorId)?.status || 'pending' }));
+        setExhibitorUpdates((prev) => ({
+          ...prev,
+          [exhibitorId]: exhibitors.find((e) => e.id === exhibitorId)?.status || 'pending',
+        }));
       } else {
         showNotification('Status updated successfully!', 'success');
+        await refetchExhibitors();
       }
     } catch (err) {
       console.error('Error updating exhibitor status:', err);
@@ -1064,8 +1291,9 @@ export const Events: React.FC = () => {
       const newImages = [...prev.eventImages];
       const newImageUrls = [...prev.eventImageUrls];
       
-      // Revoke the object URL to free memory
-      URL.revokeObjectURL(newImageUrls[index]);
+      if (newImageUrls[index]?.startsWith('blob:')) {
+        URL.revokeObjectURL(newImageUrls[index]);
+      }
       
       newImages.splice(index, 1);
       newImageUrls.splice(index, 1);
@@ -1172,6 +1400,75 @@ export const Events: React.FC = () => {
     }, 5000);
   };
 
+  /** Cards below: interested for this event (interested registration and/or profile interested/pending). */
+  const exhibitorIsInterestedForEventView = (exhibitor: Exhibitor): boolean => {
+    const eff = (exhibitorUpdates[exhibitor.id] || exhibitor.status || '').toString().toLowerCase();
+    const reg = eventRegistrations.find((r) => r.exhibitor_id === exhibitor.id);
+    const onEvent = selectedExhibitorsForEdit.includes(exhibitor.id);
+    return (
+      (reg != null && registrationIsInterested(reg)) ||
+      (onEvent && (eff === 'interested' || eff === 'pending'))
+    );
+  };
+
+  const addExhibitorRegistrationForEvent = async (exhibitorId: string) => {
+    if (!editFormData?.id || !exhibitorId) return;
+    const ex = exhibitors.find((e) => e.id === exhibitorId);
+    if (!ex) return;
+    if (eventRegistrations.some((r) => r.exhibitor_id === exhibitorId)) {
+      showNotification('This exhibitor is already registered for this event.', 'info');
+      setRegisterExhibitorPickId('');
+      return;
+    }
+    const prevSelected = selectedExhibitorsForEdit;
+    const needsEventRow = !prevSelected.includes(exhibitorId);
+    const newIds = needsEventRow ? [...prevSelected, exhibitorId] : [...prevSelected];
+
+    if (needsEventRow) {
+      const { error: evErr } = await supabase
+        .from('events')
+        .update({ exhibitor_ids: newIds })
+        .eq('id', editFormData.id);
+      if (evErr) {
+        console.error(evErr);
+        showNotification('Could not add exhibitor to event: ' + evErr.message, 'error');
+        return;
+      }
+      setSelectedExhibitorsForEdit(newIds);
+      if (selectedEvent?.id === editFormData.id) {
+        setSelectedEvent((prev) => (prev ? { ...prev, exhibitors: newIds } : null));
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('event_registrations')
+      .insert({
+        event_id: editFormData.id,
+        exhibitor_id: exhibitorId,
+        status: 'interested',
+      })
+      .select('id, event_id, exhibitor_id, status, stall_no, created_at')
+      .single();
+
+    if (error) {
+      if (needsEventRow) {
+        await supabase.from('events').update({ exhibitor_ids: prevSelected }).eq('id', editFormData.id);
+        setSelectedExhibitorsForEdit(prevSelected);
+        if (selectedEvent?.id === editFormData.id) {
+          setSelectedEvent((prev) => (prev ? { ...prev, exhibitors: prevSelected } : null));
+        }
+      }
+      console.error(error);
+      showNotification('Could not create registration: ' + error.message, 'error');
+      return;
+    }
+
+    setEventRegistrations((prev) => [data as EventRegistrationRow, ...prev]);
+    setRegisterExhibitorPickId('');
+    showNotification('Exhibitor registered for this event as interested.', 'success');
+    void refetch();
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
@@ -1266,13 +1563,13 @@ export const Events: React.FC = () => {
             <Card key={event.id} className="hover:shadow-md transition-shadow duration-200">
               <CardContent className="p-4 sm:p-6">
                 {/* Event Image */}
-                                                  {(() => {
+                  {(() => {
                    const images = parseEventImages(event.eventImageUrl || '');
                    return images.length > 0 ? (
                      <div className="mb-4">
                        {images.length === 1 ? (
                          <img
-                           src={images[0]}
+                          src={getPrimaryEventImage(event.eventImageUrl)}
                            alt={event.title}
                            className="w-full h-32 object-cover rounded-lg border border-gray-200"
                          />
@@ -1574,11 +1871,11 @@ export const Events: React.FC = () => {
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedEvent.eventImageUrl && (
+                    {parseEventImages(selectedEvent.eventImageUrl).length > 0 && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Event Image</label>
                         <img
-                          src={selectedEvent.eventImageUrl}
+                          src={getPrimaryEventImage(selectedEvent.eventImageUrl)}
                           alt="Event"
                           className="w-full h-48 object-cover rounded-lg border border-gray-200"
                         />
@@ -2001,7 +2298,7 @@ export const Events: React.FC = () => {
       {/* Edit Event Modal */}
       {showEditModal && editFormData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-900">Edit Event</h2>
@@ -2126,6 +2423,7 @@ export const Events: React.FC = () => {
                           <TableRow>
                             <TableHead>Exhibitor</TableHead>
                             <TableHead>Email</TableHead>
+                            <TableHead>Stall</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Actions</TableHead>
                           </TableRow>
@@ -2138,14 +2436,26 @@ export const Events: React.FC = () => {
                               </TableCell>
                               <TableCell>{reg.email || (reg.exhibitor_id ? exhibitors.find(e => e.id === reg.exhibitor_id)?.email : null) || '—'}</TableCell>
                               <TableCell>
-                                <Badge variant={reg.status === 'approved' ? 'success' : reg.status === 'rejected' ? 'error' : 'warning'}>
-                                  {reg.status}
+                                {reg.status === 'approved' && reg.stall_no?.trim() ? (
+                                  <span className="text-sm font-medium text-gray-900">{reg.stall_no.trim()}</span>
+                                ) : (
+                                  <span className="text-sm text-gray-500">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    reg.status === 'approved' ? 'success' : reg.status === 'rejected' ? 'error' : 'warning'
+                                  }
+                                  className="capitalize"
+                                >
+                                  {registrationStatusBadgeLabel(reg)}
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {reg.status === 'pending' && (
-                                  <div className="flex gap-2">
-                                    <Button size="sm" onClick={() => handleApproveRegistration(reg)}>
+                                {registrationIsInterested(reg) && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" onClick={() => startApproveRegistration(reg)}>
                                       Approve
                                     </Button>
                                     <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
@@ -2153,6 +2463,13 @@ export const Events: React.FC = () => {
                                     </Button>
                                   </div>
                                 )}
+                                {reg.status === 'approved' &&
+                                  !reg.stall_no?.trim() &&
+                                  getConfiguredStallNumbers().length > 0 && (
+                                    <Button size="sm" onClick={() => startAssignStallModal(reg)}>
+                                      Assign stall
+                                    </Button>
+                                  )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -2288,7 +2605,7 @@ export const Events: React.FC = () => {
                       <select
                         value={editFormData.venueId}
                         onChange={(e) => {
-                          const selectedVenue = venues.find(v => v.id === e.target.value);
+                          const selectedVenue = editVenueOptions.find(v => v.id === e.target.value);
                           setEditFormData({
                             ...editFormData,
                             venueId: e.target.value,
@@ -2299,7 +2616,7 @@ export const Events: React.FC = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="">Select a venue</option>
-                        {venues.map((venue) => (
+                        {editVenueOptions.map((venue) => (
                           <option key={venue.id} value={venue.id}>
                             {venue.name} - {venue.location ? venue.location : venue.city?venue.city:''}
                           </option>
@@ -2628,13 +2945,17 @@ export const Events: React.FC = () => {
                 <div className="space-y-4 border-2 border-blue-200 bg-blue-50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <Users className="h-5 w-5 mr-2" />
-                    Select Vendors ({vendors.length} available)
+                    Select Vendors ({activeVendors.length} active
+                    {editVendorOptions.length > activeVendors.length
+                      ? `, ${editVendorOptions.length - activeVendors.length} inactive on event`
+                      : ''}
+                    )
                   </h3>
 
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-white">
-                    {vendors.length === 0 ? (
-                      <div className="text-sm text-gray-500 col-span-full">No vendors available</div>
-                    ) : vendors.map(vendor => (
+                    {editVendorOptions.length === 0 ? (
+                      <div className="text-sm text-gray-500 col-span-full">No active vendors available</div>
+                    ) : editVendorOptions.map(vendor => (
                       <label key={vendor.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
                         <input
                           type="checkbox"
@@ -2644,6 +2965,9 @@ export const Events: React.FC = () => {
                         />
                         <span className="text-sm text-gray-700 truncate">
                           {vendor.name}
+                          {(vendor.status || '').toString().toLowerCase() !== 'active' && (
+                            <span className="text-xs text-amber-600 ml-1">(inactive)</span>
+                          )}
                           {selectedVendors.includes(vendor.id) && (
                             <span className="text-xs text-green-600 ml-1">✓</span>
                           )}
@@ -2993,42 +3317,181 @@ export const Events: React.FC = () => {
               </div>
             )}
 
-            {/* Exhibitor Tab */}
+            {/* Exhibitor Tab — single scrollable view: registrations + full exhibitor details */}
             {editActiveTab === 'exhibitor' && (
-              <div className="p-6 space-y-6 overflow-y-auto"> {/* max-h-[70vh] */}
-                {/* Navigation Header */}
-                <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+              <div className="p-6 space-y-6 overflow-y-auto">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between pb-4 border-b border-gray-200">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Manage Event Exhibitors</h3>
                     <p className="text-sm text-gray-600">
-                      Select and manage interested exhibitors for this event. Currently {selectedExhibitorsForEdit.length} exhibitor(s) selected.
+                      Registrations table lists everyone with a record. The cards below show only{' '}
+                      <strong>interested</strong> exhibitors (interested registration or profile Interested / Pending).{' '}
+                      <strong>{selectedExhibitorsForEdit.length}</strong> exhibitor(s) linked to this event.
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setEditActiveTab('event')}
-                    className="flex items-center space-x-2"
+                    className="flex items-center space-x-2 shrink-0"
                   >
                     <CalendarIcon className="h-4 w-4" />
                     <span>Back to Event</span>
                   </Button>
                 </div>
 
-                {/* Search Bar */}
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/90 px-4 py-3 text-sm text-indigo-950">
+                  <p className="font-medium text-indigo-900">Stall assignment</p>
+                  <p className="mt-1 text-indigo-800/90">
+                    <strong>Approve</strong> sets registration to approved (no stall yet). Then use <strong>Assign stall</strong>{' '}
+                    (or the card action). After a stall is saved, assignment stays hidden until status is{' '}
+                    <strong>Interested</strong> again.
+                  </p>
+                  {getConfiguredStallNumbers().length === 0 ? (
+                    <p className="mt-2 text-amber-800 bg-amber-100/80 border border-amber-200 rounded-md px-2 py-1.5">
+                      No stall numbers are available yet. On the <strong>Event</strong> tab, add rows under{' '}
+                      <strong>Stalls configuration</strong> and fill each <strong>Stall No.</strong>, or set{' '}
+                      <strong>Number of stalls</strong> so stalls 1…N are offered automatically.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-indigo-700">
+                      {getConfiguredStallNumbers().length} stall number(s) available for this event.
+                    </p>
+                  )}
+                </div>
+
+                {/* Registrations for this event */}
+                <div className="space-y-3">
+                  <h4 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                    <User className="h-5 w-5 text-gray-600" />
+                    Exhibitor registrations
+                  </h4>
+                  {loadingRegistrations ? (
+                    <p className="text-sm text-gray-500">Loading registrations…</p>
+                  ) : eventRegistrations.length === 0 ? (
+                    <p className="text-sm text-gray-500">No exhibitor registrations for this event.</p>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Exhibitor</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Stall</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {eventRegistrations.map((reg) => (
+                            <TableRow key={reg.id}>
+                              <TableCell className="font-medium">
+                                {reg.exhibitor_id ? getExhibitorName(reg.exhibitor_id) : reg.name || '—'}
+                              </TableCell>
+                              <TableCell className="break-all max-w-[14rem]">
+                                {reg.email || (reg.exhibitor_id ? exhibitors.find((e) => e.id === reg.exhibitor_id)?.email : null) || '—'}
+                              </TableCell>
+                              <TableCell>
+                                {reg.status === 'approved' && reg.stall_no?.trim() ? (
+                                  <span className="text-sm font-medium text-gray-900">{reg.stall_no.trim()}</span>
+                                ) : (
+                                  <span className="text-sm text-gray-500">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    reg.status === 'approved' ? 'success' : reg.status === 'rejected' ? 'error' : 'warning'
+                                  }
+                                  className="capitalize"
+                                >
+                                  {registrationStatusBadgeLabel(reg)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {registrationIsInterested(reg) && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button size="sm" onClick={() => startApproveRegistration(reg)}>
+                                      Approve
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
+                                      Reject
+                                    </Button>
+                                  </div>
+                                )}
+                                {reg.status === 'approved' &&
+                                  !reg.stall_no?.trim() &&
+                                  getConfiguredStallNumbers().length > 0 && (
+                                    <Button size="sm" onClick={() => startAssignStallModal(reg)}>
+                                      Assign stall
+                                    </Button>
+                                  )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-900">Register an exhibitor for this event</h4>
+                  <p className="text-xs text-gray-600">
+                    Pick anyone from your exhibitor directory. They are added to the event with status{' '}
+                    <strong>Interested</strong> so they appear in the table and in the interested list below.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Exhibitor</label>
+                      <select
+                        value={registerExhibitorPickId}
+                        onChange={(e) => setRegisterExhibitorPickId(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      >
+                        <option value="">Choose an exhibitor…</option>
+                        {exhibitors
+                          .filter((e) => !eventRegistrations.some((r) => r.exhibitor_id === e.id))
+                          .sort((a, b) =>
+                            (a.companyName || `${a.firstName} ${a.lastName}`).localeCompare(
+                              b.companyName || `${b.firstName} ${b.lastName}`,
+                              undefined,
+                              { sensitivity: 'base' },
+                            ),
+                          )
+                          .map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.companyName || `${e.firstName} ${e.lastName}`.trim() || e.email || e.id}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={!registerExhibitorPickId}
+                      onClick={() => void addExhibitorRegistrationForEvent(registerExhibitorPickId)}
+                      className="shrink-0"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add to event
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
                     type="text"
-                    placeholder="Search exhibitors by company, name, email, or phone..."
+                    placeholder="Search interested exhibitors by company, name, email, phone, category…"
                     value={exhibitorSearchTerm}
                     onChange={(e) => setExhibitorSearchTerm(e.target.value)}
                     className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   />
                   {exhibitorSearchTerm && (
                     <button
+                      type="button"
                       onClick={() => setExhibitorSearchTerm('')}
                       className="absolute inset-y-0 right-0 pr-3 flex items-center"
                     >
@@ -3037,173 +3500,298 @@ export const Events: React.FC = () => {
                   )}
                 </div>
 
-                {/* Selection Summary */}
                 <div className="p-4 bg-blue-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-blue-700">
-                      <strong>{selectedExhibitorsForEdit.length}</strong> exhibitor(s) selected for this event
+                  <div className="flex flex-wrap justify-between gap-2 items-center">
+                    <p className="text-sm text-blue-800">
+                      Cards: <strong>interested only</strong> · {selectedExhibitorsForEdit.length} linked to this event
                     </p>
                     {exhibitorSearchTerm && (
                       <p className="text-xs text-gray-600">
                         {(() => {
-                          const filteredExhibitors = exhibitors.filter((exhibitor) => {
-                          const searchLower = exhibitorSearchTerm.toLowerCase();
-                          return (
-                            (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                            (exhibitor.category || '').toLowerCase().includes(searchLower)
-                          );
-                          });
-                          return `Showing ${filteredExhibitors.length} of ${exhibitors.length} exhibitors`;
+                          const n = exhibitors.filter((ex) => exhibitorMatchesSearch(ex) && exhibitorIsInterestedForEventView(ex)).length;
+                          return `${n} interested match search`;
                         })()}
                       </p>
                     )}
                   </div>
-                  {/* <p className="text-xs text-blue-600 mt-2">
-                    Only exhibitors with "interested" status are displayed in this list
-                  </p> */}
                 </div>
 
-                {/* Exhibitors Table */}
-                <div className="overflow-x-auto">
+                <div className="space-y-4">
                   {(() => {
-                    // Show all exhibitors but allow filtering by search
-                    const allExhibitors = exhibitors;
-                    
-                    // Apply search filter
-                    const filteredExhibitors = allExhibitors.filter((exhibitor) => {
-                                  if (!exhibitorSearchTerm) return true;
-                                  const searchLower = exhibitorSearchTerm.toLowerCase();
-                                  return (
-                                    (exhibitor.companyName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.firstName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.lastName || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.email || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.phone || '').toLowerCase().includes(searchLower) ||
-                                    (exhibitor.category || '').toLowerCase().includes(searchLower)
-                                  );
-                                });
+                    const interestedExhibitors = exhibitors.filter(
+                      (ex) => exhibitorMatchesSearch(ex) && exhibitorIsInterestedForEventView(ex),
+                    );
 
-                    if (allExhibitors.length === 0) {
-                                  return (
-                        <div className="text-center py-8">
+                    if (exhibitors.length === 0) {
+                      return (
+                        <div className="text-center py-10 border border-dashed border-gray-200 rounded-lg">
                           <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">No exhibitors found</p>
+                          <p className="text-gray-600">No exhibitors in the system</p>
                         </div>
                       );
                     }
 
-                    if (filteredExhibitors.length === 0) {
+                    if (interestedExhibitors.length === 0) {
                       return (
-                        <div className="text-center py-8">
-                          <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">No exhibitors match your search</p>
-                          <p className="text-sm text-gray-500">Try adjusting your search terms</p>
+                        <div className="text-center py-10 border border-dashed border-gray-200 rounded-lg">
+                          <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600">No interested exhibitors to show</p>
+                          <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+                            Interested exhibitors have an <strong>interested</strong> registration for this event, or are on
+                            the event with profile status Interested / Pending. Use &quot;Register an exhibitor&quot; above to add
+                            someone, or change the status on an assigned exhibitor.
+                          </p>
+                          {exhibitorSearchTerm && (
+                            <p className="text-sm text-gray-500 mt-2">No matches for your search in that list.</p>
+                          )}
                         </div>
                       );
                     }
 
                     return (
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              <input
-                                type="checkbox"
-                                checked={filteredExhibitors.length > 0 &&
-                                  filteredExhibitors.every(ex => selectedExhibitorsForEdit.includes(ex.id))}
-                                onChange={(e) => {
+                      <>
+                        <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-gray-100">
+                          <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={
+                                interestedExhibitors.length > 0 &&
+                                interestedExhibitors.every((ex) => selectedExhibitorsForEdit.includes(ex.id))
+                              }
+                              onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedExhibitorsForEdit(prev => [
-                                    ...new Set([...prev, ...filteredExhibitors.map(ex => ex.id)])
+                                  setSelectedExhibitorsForEdit((prev) => [
+                                    ...new Set([...prev, ...interestedExhibitors.map((ex) => ex.id)]),
                                   ]);
                                 } else {
-                                  setSelectedExhibitorsForEdit(prev =>
-                                    prev.filter(id => !filteredExhibitors.find(ex => ex.id === id))
+                                  setSelectedExhibitorsForEdit((prev) =>
+                                    prev.filter((id) => !interestedExhibitors.find((ex) => ex.id === id)),
                                   );
                                 }
                               }}
                               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Company
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Contact Person
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Email
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Phone
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Category
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Payment Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                          {filteredExhibitors.map((exhibitor) => (
-                            <tr key={exhibitor.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedExhibitorsForEdit.includes(exhibitor.id)}
-                                  onChange={() => toggleExhibitorSelectionEdit(exhibitor.id)}
-                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="font-medium text-gray-900">
-                                  {exhibitor.companyName || 'N/A'}
+                            Select all interested matching search ({interestedExhibitors.length})
+                          </label>
+                        </div>
+
+                        <div className="space-y-4">
+                          {interestedExhibitors.map((exhibitor) => {
+                            const assigned = selectedExhibitorsForEdit.includes(exhibitor.id);
+                            const href = exhibitorWebsiteHref(exhibitor.website);
+                            return (
+                              <div
+                                key={exhibitor.id}
+                                className={`rounded-lg border p-4 shadow-sm ${
+                                  assigned ? 'border-green-300 bg-green-50/50' : 'border-gray-200 bg-white'
+                                }`}
+                              >
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="flex gap-3 min-w-0 flex-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={assigned}
+                                      onChange={() => toggleExhibitorSelectionEdit(exhibitor.id)}
+                                      className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 shrink-0"
+                                      aria-label={`Assign ${exhibitor.companyName || 'exhibitor'} to event`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                                        <span className="text-lg font-semibold text-gray-900 break-words">
+                                          {exhibitorField(exhibitor.companyName)}
+                                        </span>
+                                        {assigned && (
+                                          <Badge variant="success" className="text-xs">
+                                            On this event
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-gray-600 mt-1">
+                                        Contact:{' '}
+                                        {`${exhibitor.firstName || ''} ${exhibitor.lastName || ''}`.trim() || '—'}
+                                      </p>
+                                      {(() => {
+                                        const reg = eventRegistrations.find((r) => r.exhibitor_id === exhibitor.id);
+                                        if (!reg) return null;
+                                        const stallPickerOpts = getConfiguredStallNumbers();
+                                        const showAssignStall =
+                                          reg.status === 'approved' &&
+                                          !reg.stall_no?.trim() &&
+                                          stallPickerOpts.length > 0;
+                                        return (
+                                          <div className="mt-2 rounded-md border border-indigo-200 bg-white/80 px-2.5 py-2 text-xs">
+                                            <span className="font-semibold text-indigo-900">Event registration</span>
+                                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                              <Badge
+                                                variant={
+                                                  reg.status === 'approved'
+                                                    ? 'success'
+                                                    : reg.status === 'rejected'
+                                                      ? 'error'
+                                                      : 'warning'
+                                                }
+                                                className="text-[10px] capitalize"
+                                              >
+                                                {registrationStatusBadgeLabel(reg)}
+                                              </Badge>
+                                              <span className="text-gray-500">Stall:</span>
+                                              {reg.status === 'approved' && reg.stall_no?.trim() ? (
+                                                <span className="text-gray-800 font-medium">{reg.stall_no.trim()}</span>
+                                              ) : (
+                                                <span className="text-gray-800 font-medium">—</span>
+                                              )}
+                                              {registrationIsInterested(reg) && (
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  className="h-7 text-xs"
+                                                  onClick={() => startApproveRegistration(reg)}
+                                                >
+                                                  Approve
+                                                </Button>
+                                              )}
+                                              {showAssignStall && (
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="h-7 text-xs"
+                                                  onClick={() => startAssignStallModal(reg)}
+                                                >
+                                                  Assign stall
+                                                </Button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0 w-full lg:w-auto">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-xs text-gray-500">Exhibitor status</span>
+                                      <select
+                                        value={exhibitorUpdates[exhibitor.id] || exhibitor.status}
+                                        onChange={(e) => updateExhibitorStatusEdit(exhibitor.id, e.target.value)}
+                                        className="text-sm border border-gray-300 rounded-md px-2 py-1.5 min-w-[10rem] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      >
+                                        <option value="interested">Interested</option>
+                                        <option value="approved">Approved</option>
+                                        <option value="declined">Declined</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-xs text-gray-500">Payment</span>
+                                      <Badge
+                                        variant={getPaymentStatusVariant(exhibitor.paymentStatus)}
+                                        className="w-fit justify-center capitalize"
+                                      >
+                                        {exhibitor.paymentStatus || 'pending'}
+                                      </Badge>
+                                    </div>
+                                  </div>
                                 </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">
-                                  {`${exhibitor.firstName || ''} ${exhibitor.lastName || ''}`.trim() || 'N/A'}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">{exhibitor.email || 'N/A'}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">{exhibitor.phone || 'N/A'}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">{exhibitor.category || 'N/A'}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <select
-                                  value={exhibitorUpdates[exhibitor.id] || exhibitor.status}
-                                  onChange={(e) => updateExhibitorStatusEdit(exhibitor.id, e.target.value)}
-                                  className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                  <option value="interested">Interested</option>
-                                  <option value="approved">Approved</option>
-                                  <option value="declined">Declined</option>
-                                </select>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-gray-900">
-                                  <Badge variant={getPaymentStatusVariant(exhibitor.paymentStatus)} className="w-20 justify-center font-xs">
-                                    {exhibitor.paymentStatus || 'PENDING'}
-                                  </Badge>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
+
+                                <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-3 text-sm border-t border-gray-100 pt-4">
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</dt>
+                                    <dd className="text-gray-900 mt-0.5 break-all">
+                                      {exhibitor.email ? (
+                                        <a href={`mailto:${exhibitor.email}`} className="text-blue-700 hover:underline">
+                                          {exhibitor.email}
+                                        </a>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</dt>
+                                    <dd className="text-gray-900 mt-0.5">
+                                      {exhibitor.phone ? (
+                                        <a href={`tel:${exhibitor.phone}`} className="text-blue-700 hover:underline">
+                                          {exhibitor.phone}
+                                        </a>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Alternate phone</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.alternatePhone)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Category</dt>
+                                    <dd className="text-gray-900 mt-0.5 break-words">{exhibitorField(exhibitor.category)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sub-category</dt>
+                                    <dd className="text-gray-900 mt-0.5 break-words">{exhibitorField(exhibitor.subCategory)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Website</dt>
+                                    <dd className="text-gray-900 mt-0.5 break-all">
+                                      {href ? (
+                                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
+                                          {exhibitor.website}
+                                        </a>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </dd>
+                                  </div>
+                                  <div className="sm:col-span-2 xl:col-span-3">
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</dt>
+                                    <dd className="text-gray-900 mt-0.5 break-words">
+                                      {[
+                                        exhibitorField(exhibitor.address1),
+                                        exhibitorField(exhibitor.address2),
+                                      ]
+                                        .filter((line) => line !== '—')
+                                        .join(', ') || '—'}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">City</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.city)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">State</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.state)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pincode</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.pincode)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Country</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.country)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Booth size</dt>
+                                    <dd className="text-gray-900 mt-0.5">{exhibitorField(exhibitor.boothSize)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">PAN</dt>
+                                    <dd className="text-gray-900 mt-0.5 font-mono text-xs">{exhibitorField(exhibitor.panNumber)}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">GST</dt>
+                                    <dd className="text-gray-900 mt-0.5 font-mono text-xs">{exhibitorField(exhibitor.gstNumber)}</dd>
+                                  </div>
+                                  <div className="sm:col-span-2 xl:col-span-3">
+                                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Business description</dt>
+                                    <dd className="text-gray-900 mt-0.5 whitespace-pre-wrap break-words line-clamp-6" title={exhibitor.businessDescription || undefined}>
+                                      {exhibitorField(exhibitor.businessDescription)}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
                     );
                   })()}
                 </div>
@@ -3310,6 +3898,80 @@ export const Events: React.FC = () => {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {approveStallModalReg && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="stall-approve-title"
+                  className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4"
+                >
+                  <h3 id="stall-approve-title" className="text-lg font-semibold text-gray-900">
+                    Assign stall
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Registration is approved. Pick a stall for{' '}
+                    <strong>
+                      {approveStallModalReg.exhibitor_id
+                        ? getExhibitorName(approveStallModalReg.exhibitor_id)
+                        : approveStallModalReg.name ?? 'this exhibitor'}
+                    </strong>
+                    . To change or reassign later, set exhibitor status back to <strong>Interested</strong> (clears the
+                    stall). Each stall can only go to one exhibitor at a time.
+                  </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stall number</label>
+                    <select
+                      value={approveModalStallChoice}
+                      onChange={(e) => setApproveModalStallChoice(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {getAvailableStallsForNewApproval(approveStallModalReg).map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => {
+                        setApproveStallModalReg(null);
+                        setApproveModalIntent(null);
+                        setPostStallFlowExhibitorId(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        const reg = approveStallModalReg;
+                        const intent = approveModalIntent;
+                        const stall = approveModalStallChoice.trim();
+                        const needStall = getConfiguredStallNumbers().length > 0;
+                        if ((intent === 'assignStall' || intent === 'stallOnly') && needStall && !stall) {
+                          showNotification('Select a stall number.', 'error');
+                          return;
+                        }
+                        setApproveStallModalReg(null);
+                        setApproveModalIntent(null);
+                        setPostStallFlowExhibitorId(null);
+                        if (!reg) return;
+                        if (intent === 'assignStall' || intent === 'stallOnly') {
+                          await handleUpdateRegistrationStall(reg, stall);
+                        }
+                      }}
+                    >
+                      Save stall assignment
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 

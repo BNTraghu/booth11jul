@@ -8,9 +8,10 @@ export const Register: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [event, setEvent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
+  const [formData, setFormData] = useState({ email: '' });
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const eventId = searchParams.get('id');
 
@@ -36,22 +37,57 @@ export const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!formData.name || !formData.email) {
-      setError('Name and email are required.');
+    const email = formData.email.trim();
+    if (!email) {
+      setError('Email is required.');
       return;
     }
+    setSubmitting(true);
+    try {
+      const { data: rows, error: exErr } = await supabase
+        .from('exhibitors')
+        .select('id')
+        .eq('email', email)
+        .limit(2);
 
-    const { error } = await supabase.from('event_registrations').insert({
-      event_id: event.id,
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-    });
+      if (exErr) {
+        setError('Could not verify exhibitor profile.');
+        return;
+      }
+      const exhibitor = rows?.[0];
+      if (!exhibitor) {
+        setError(
+          'No exhibitor account uses this email. Create an exhibitor profile in the portal first, then register here.',
+        );
+        return;
+      }
 
-    if (error) {
-      setError('Registration failed.');
-    } else {
+      const { data: existing } = await supabase
+        .from('event_registrations')
+        .select('id')
+        .eq('event_id', event.id)
+        .eq('exhibitor_id', exhibitor.id)
+        .maybeSingle();
+
+      if (existing) {
+        setError('You are already registered for this event.');
+        return;
+      }
+
+      const { error: insErr } = await supabase.from('event_registrations').insert({
+        event_id: event.id,
+        exhibitor_id: exhibitor.id,
+        status: 'interested',
+      });
+
+      if (insErr) {
+        console.error(insErr);
+        setError(insErr.message || 'Registration failed.');
+        return;
+      }
       setSuccess(true);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -65,48 +101,39 @@ export const Register: React.FC = () => {
           <CheckCircle className="h-8 w-8 text-green-600" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900">Registration Successful!</h2>
-        <p className="text-gray-600 mt-2">You are registered for: <strong>{event.title}</strong></p>
+        <p className="text-gray-600 mt-2">
+          You are registered for: <strong>{event.title}</strong>
+        </p>
       </div>
     );
   }
 
   return (
     <div className="p-6 max-w-lg mx-auto bg-white shadow rounded mt-12">
-      <h1 className="text-xl font-bold text-gray-900 mb-4">
-        Register for {event.title}
-      </h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-4">Register for {event.title}</h1>
       <p className="text-sm text-gray-600 mb-6">{event.description}</p>
+      <p className="text-sm text-gray-600 mb-4">
+        Enter the <strong>same email</strong> as your exhibitor profile. We link this event to your exhibitor record — no
+        duplicate contact fields.
+      </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
-          type="text"
-          placeholder="Full Name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="w-full p-3 border border-gray-300 rounded"
-          required
-        />
-        <input
           type="email"
-          placeholder="Email Address"
+          placeholder="Email (must match exhibitor profile)"
           value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          onChange={(e) => setFormData({ email: e.target.value })}
           className="w-full p-3 border border-gray-300 rounded"
           required
-        />
-        <input
-          type="tel"
-          placeholder="Phone Number (optional)"
-          value={formData.phone}
-          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-          className="w-full p-3 border border-gray-300 rounded"
         />
         {error && (
           <div className="text-red-600 flex items-center text-sm">
-            <AlertCircle className="w-4 h-4 mr-2" />
+            <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
             {error}
           </div>
         )}
-        <Button type="submit" className="w-full">Submit Registration</Button>
+        <Button type="submit" className="w-full" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit registration'}
+        </Button>
       </form>
     </div>
   );

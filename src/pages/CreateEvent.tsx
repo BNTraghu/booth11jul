@@ -100,6 +100,9 @@ export const CreateEvent: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { venues, loading: venuesLoading } = useVenues();
+  const activeVenues = venues.filter(
+    (venue) => (venue.status || '').toString().toLowerCase() === 'active'
+  );
   const { vendors, loading: vendorsLoading } = useVendors();
   // const { exhibitors, loading: exhibitorsLoading } = useExhibitors();
   
@@ -322,7 +325,7 @@ export const CreateEvent: React.FC = () => {
     // Auto-populate venue name and city when venue is selected
     if (field === 'venueId' && value) {
 
-      const selectedVenue = venues.find(v => v.id === value);
+      const selectedVenue = activeVenues.find(v => v.id === value);
 
       if (selectedVenue) {
 
@@ -517,84 +520,37 @@ export const CreateEvent: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      let imageUrl = formData.eventImageUrl;
-
-      // Upload image to Supabase storage if a new image is selected
-      if (formData.eventImage) {
-        try {
-          const fileExt = formData.eventImage.name.split('.').pop();
-          const fileName = `${Date.now()}.${fileExt}`;
-          const filePath = `event-images/${fileName}`;
-
-          console.log('📤 Attempting image upload:', filePath);
-
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('event-images')
-            .upload(filePath, formData.eventImage);
-
-          if (uploadError) {
-            console.error('❌ Image upload failed:', uploadError);
-            // Continue without image upload for now
-            imageUrl = formData.eventImageUrl || '';
-          } else {
-            console.log('✅ Image upload successful:', uploadData.path);
-            const { data: urlData } = supabase.storage
-              .from('event-images')
-              .getPublicUrl(filePath);
-            imageUrl = urlData.publicUrl;
-          }
-        } catch (error) {
-          console.error('❌ Image upload error:', error);
-          // Continue without image upload
-          imageUrl = formData.eventImageUrl || '';
+      const uploadFlyerFile = async (file: File): Promise<string | null> => {
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}.${fileExt}`;
+        const filePath = `event-images/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, file);
+        if (uploadError) {
+          console.error('❌ Flyer upload failed:', uploadError);
+          showNotification('Flyer upload failed: ' + uploadError.message, 'error');
+          return null;
         }
-      } else {
-        imageUrl = formData.eventImageUrl || '';
-      }
+        const { data: urlData } = supabase.storage.from('event-images').getPublicUrl(filePath);
+        return urlData.publicUrl;
+      };
 
-      // Upload multiple images to Supabase storage
-      let multipleImageUrls: string[] = [];
-      if (formData.eventImages.length > 0) {
-        try {
-          console.log('📤 Uploading multiple images...');
-          
-          for (let i = 0; i < formData.eventImages.length; i++) {
-            const file = formData.eventImages[i];
-            const fileExt = file.name.split('.').pop();
-            const fileName = `flyer_${Date.now()}_${i}.${fileExt}`;
-            const filePath = `event-images/${fileName}`;
+      const isRemote = (url: string) => /^https?:\/\//i.test(url.trim());
 
-            console.log(`📤 Uploading image ${i + 1}/${formData.eventImages.length}:`, filePath);
-
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('event-images')
-              .upload(filePath, file);
-
-            if (uploadError) {
-              console.error(`❌ Image ${i + 1} upload failed:`, uploadError);
-              // Continue with other images
-            } else {
-              console.log(`✅ Image ${i + 1} upload successful:`, uploadData.path);
-              const { data: urlData } = supabase.storage
-                .from('event-images')
-                .getPublicUrl(filePath);
-              multipleImageUrls.push(urlData.publicUrl);
-            }
-          }
-        } catch (error) {
-          console.error('❌ Multiple image upload error:', error);
-          // Continue with existing URLs if available
-          multipleImageUrls = formData.eventImageUrls.filter(url => url.startsWith('http'));
+      const finalImageUrls: string[] = [];
+      for (let i = 0; i < formData.eventImageUrls.length; i++) {
+        const url = (formData.eventImageUrls[i] || '').trim();
+        const file = formData.eventImages[i];
+        if (isRemote(url)) {
+          finalImageUrls.push(url);
+        } else if (file instanceof File) {
+          const uploaded = await uploadFlyerFile(file);
+          if (uploaded) finalImageUrls.push(uploaded);
         }
-      } else {
-        // Use existing URLs if no new images
-        multipleImageUrls = formData.eventImageUrls.filter(url => url.startsWith('http'));
       }
-
-      // Combine single image and multiple images
-      const finalImageUrls = multipleImageUrls.length > 0 
-        ? multipleImageUrls 
-        : (imageUrl ? [imageUrl] : []);
+      if (finalImageUrls.length === 0 && formData.eventImage instanceof File) {
+        const uploaded = await uploadFlyerFile(formData.eventImage);
+        if (uploaded) finalImageUrls.push(uploaded);
+      }
 
       let layoutImageUrl = formData.layoutImageUrl;
 
@@ -1184,7 +1140,7 @@ export const CreateEvent: React.FC = () => {
                     <option value="">
                       {venuesLoading ? 'Loading venues...' : 'Select a venue'}
                     </option>
-                    {venues.map((venue) => (
+                    {activeVenues.map((venue) => (
                       <option key={venue.id} value={venue.id}>
                          {venue.name} - {venue?.location?venue.location:venue.city} {/*(Capacity: {venue.memberCount}) */}
                       </option>

@@ -473,7 +473,6 @@ export const Users: React.FC = () => {
 
   const allRoleKeys = ['super_admin', 'admin', 'support_tech', 'sales_marketing', 'accounting', 'logistics', 'accounts', 'sales', 'marketing', 'city_head'];
   const roleStats = {
-    super_admin: users.filter(u => u.role === 'super_admin').length,
     admin: users.filter(u => u.role === 'admin').length,
     support_tech: users.filter(u => u.role === 'support_tech').length,
     sales_marketing: users.filter(u => u.role === 'sales_marketing').length,
@@ -736,17 +735,11 @@ export const Users: React.FC = () => {
       </div>
 
       {/* User Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
             <div className="text-xl sm:text-2xl font-bold text-gray-900">{users.length}</div>
             <div className="text-xs sm:text-sm text-gray-600">Total Users</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-xl sm:text-2xl font-bold text-red-600">{roleStats.super_admin}</div>
-            <div className="text-xs sm:text-sm text-gray-600">Super Admins</div>
           </CardContent>
         </Card>
         <Card>
@@ -803,7 +796,6 @@ export const Users: React.FC = () => {
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">All Roles</option>
-              <option value="super_admin">Super Admin</option>
               <option value="admin">Org Admin</option>
               <option value="accounts">Accounts</option>
               <option value="sales">Sales</option>
@@ -820,7 +812,7 @@ export const Users: React.FC = () => {
 
       {/* Filter Bar */}
       <div className="flex flex-wrap gap-2">
-        {['all', 'super_admin', 'admin', 'accounts', 'sales', 'marketing', 'city_head', 'support_tech', 'sales_marketing', 'accounting', 'logistics'].map((role) => (
+        {['all', 'admin', 'accounts', 'sales', 'marketing', 'city_head', 'support_tech', 'sales_marketing', 'accounting', 'logistics'].map((role) => (
           <button
             key={role}
             onClick={() => setFilter(role)}

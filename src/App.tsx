@@ -30,6 +30,7 @@ import { AddSponsor } from './pages/AddSponsor';
 import { EditSponsor } from './pages/EditSponsor';
 import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
+import { Testimonials } from './pages/Testimonials';
 import { BRDDownload } from './pages/BRDDownload';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -37,6 +38,19 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <Layout>{children}</Layout>;
+};
+
+const SuperAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isSuperAdmin } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!isSuperAdmin) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Layout>{children}</Layout>;
@@ -117,14 +131,14 @@ const AppRoutes: React.FC = () => {
         </ProtectedRoute>
       } />
       <Route path="/billing" element={
-        <ProtectedRoute>
+        <SuperAdminRoute>
           <Billing />
-        </ProtectedRoute>
+        </SuperAdminRoute>
       } />
       <Route path="/billing/plans/create" element={
-        <ProtectedRoute>
+        <SuperAdminRoute>
           <CreatePlan />
-        </ProtectedRoute>
+        </SuperAdminRoute>
       } />
       <Route path="/ads-sponsors" element={
         <ProtectedRoute>
@@ -159,6 +173,11 @@ const AppRoutes: React.FC = () => {
       <Route path="/reports" element={
         <ProtectedRoute>
           <Reports />
+        </ProtectedRoute>
+      } />
+      <Route path="/testimonials" element={
+        <ProtectedRoute>
+          <Testimonials />
         </ProtectedRoute>
       } />
       <Route path="/settings" element={
