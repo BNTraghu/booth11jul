@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
+import { EventVendorPurchaseOrderModal } from '../components/Events/EventVendorPurchaseOrderModal';
 import { Event, Exhibitor } from '../types';
 import { supabase } from '../lib/supabase';
 import { useEvents, useVenues, useVendors, useExhibitors, useSponsors } from '../hooks/useSupabaseData';
@@ -64,6 +65,7 @@ interface ExtendedEventFormData {
   allStalls: StallConfigRow[];
   /** Snapshot from events.all_stalls when modal opened */
   stallNumbersFromDb: string[];
+  organizationId?: string | null;
 }
 
 interface EventRegistrationRow {
@@ -106,7 +108,8 @@ export const Events: React.FC = () => {
   );
   const { exhibitors, refetch: refetchExhibitors } = useExhibitors();
   const { sponsors } = useSponsors();
-  
+  const { user } = useAuth();
+
   // Debug vendor data
   console.log('🔍 Vendors loaded:', vendors.length, vendors);
   const [exhibitorUpdates, setExhibitorUpdates] = useState<Record<string, string>>({});
@@ -281,6 +284,31 @@ export const Events: React.FC = () => {
   const toggleVendor = (id: string) => {
     setSelectedVendors(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
   };
+
+  const [poVendorModal, setPoVendorModal] = useState<{ vendorId: string; mode: 'list' | 'create' } | null>(null);
+  /** Vendors that have ≥1 purchase_order for the event currently open in Edit modal */
+  const [eventVendorIdsWithPO, setEventVendorIdsWithPO] = useState<string[]>([]);
+
+  const refreshEventVendorIdsWithPO = useCallback(async (eventId: string) => {
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select('vendor_id')
+      .eq('event_id', eventId);
+    if (error || !data) {
+      setEventVendorIdsWithPO([]);
+      return;
+    }
+    const ids = [...new Set((data as { vendor_id: string }[]).map((r) => r.vendor_id))];
+    setEventVendorIdsWithPO(ids);
+  }, []);
+
+  useEffect(() => {
+    if (!showEditModal || !editFormData?.id) {
+      setEventVendorIdsWithPO([]);
+      return;
+    }
+    void refreshEventVendorIdsWithPO(editFormData.id);
+  }, [showEditModal, editFormData?.id, refreshEventVendorIdsWithPO]);
 
   const toggleExhibitor = (id: string) => {
     setSelectedExhibitors(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
@@ -765,7 +793,8 @@ export const Events: React.FC = () => {
         stallCategory: String(stall.stallCategory ?? stall.stall_category ?? ''),
         price: typeof stall.price === 'number' ? stall.price : Number(stall.price) || 0
       })),
-      stallNumbersFromDb: event.stallNumbersFromDb || []
+      stallNumbersFromDb: event.stallNumbersFromDb || [],
+      organizationId: event.organizationId ?? null,
     };
 
     console.log('📝 Mapped stalls data:', editData.allStalls);
@@ -1088,6 +1117,8 @@ export const Events: React.FC = () => {
     setApproveModalIntent(null);
     setPostStallFlowExhibitorId(null);
     setRegisterExhibitorPickId('');
+    setPoVendorModal(null);
+    setEventVendorIdsWithPO([]);
   };
 
   // Exhibitor selection handlers for edit modal
@@ -2981,6 +3012,41 @@ export const Events: React.FC = () => {
                   <p className="text-xs text-gray-600">
                     Select vendors to associate with this event
                   </p>
+                  {selectedVendors.length > 0 && (
+                    <div className="mt-3 space-y-2 border-t border-blue-200/80 pt-3">
+                      <p className="text-sm font-medium text-gray-800">Purchase orders (selected vendors)</p>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {selectedVendors.map((vendorId) => (
+                          <div
+                            key={vendorId}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white border border-gray-200 px-3 py-2"
+                          >
+                            <span className="text-sm text-gray-800 truncate min-w-0 flex-1">{getVendorName(vendorId)}</span>
+                            <div className="flex shrink-0 gap-2">
+                              {eventVendorIdsWithPO.includes(vendorId) && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setPoVendorModal({ vendorId, mode: 'list' })}
+                                >
+                                  <FileText className="h-3.5 w-3.5 mr-1" />
+                                  View POs
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setPoVendorModal({ vendorId, mode: 'create' })}
+                              >
+                                Create PO
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Selected Exhibitors Display */}
@@ -3984,6 +4050,24 @@ export const Events: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {poVendorModal && editFormData && (
+        <EventVendorPurchaseOrderModal
+          isOpen
+          onClose={() => setPoVendorModal(null)}
+          eventId={editFormData.id}
+          eventTitle={editFormData.title}
+          vendorId={poVendorModal.vendorId}
+          vendorName={getVendorName(poVendorModal.vendorId)}
+          organizationId={editFormData.organizationId ?? null}
+          userId={user?.id ?? null}
+          initialMode={poVendorModal.mode}
+          onSaved={() => {
+            showNotification('Purchase order saved.', 'success');
+            if (editFormData?.id) void refreshEventVendorIdsWithPO(editFormData.id);
+          }}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

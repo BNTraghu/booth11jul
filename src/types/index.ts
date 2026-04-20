@@ -181,6 +181,36 @@ export interface Venue {
   updated_at: string;
 }
 
+export type PurchaseOrderStatus = 'draft' | 'sent' | 'acknowledged' | 'cancelled';
+
+export interface PurchaseOrderLine {
+  id?: string;
+  purchase_order_id?: string;
+  line_no: number;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  organization_id: string;
+  event_id: string;
+  vendor_id: string;
+  po_number: string;
+  status: PurchaseOrderStatus;
+  currency: string;
+  notes?: string | null;
+  subtotal: number;
+  tax_total: number;
+  grand_total: number;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  purchase_order_lines?: PurchaseOrderLine[];
+}
+
 export interface Vendor {
   id: string;
   name: string;
