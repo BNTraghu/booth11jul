@@ -604,3 +604,82 @@ export const useWebsiteAds = (opts?: { skipOrgFilter?: boolean }) => {
 
   return { websiteAds, loading, error, refetch };
 };
+
+export const useVendorSubscriptionPlans = () => {
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'vendor_subscription_plans',
+    '*',
+    [],
+    {
+      order: { column: 'rank_order', ascending: true },
+      skipOrgFilter: true,
+      isSuperAdmin: true,
+    },
+  );
+
+  const plans = data.map((row: any) => ({
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    description: row.description ?? '',
+    monthlyPriceInr: Number(row.monthly_price_inr) || 0,
+    trialDays: Number(row.trial_days) || 0,
+    isActive: row.is_active !== false,
+    isPopular: row.is_popular === true,
+    rankOrder: Number(row.rank_order) || 0,
+    features: Array.isArray(row.features) ? row.features.map((f: unknown) => String(f)) : [],
+    limits: row.limits && typeof row.limits === 'object' ? row.limits : {},
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+
+  return { plans, loading, error, refetch };
+};
+
+export const useVendorSubscriptions = () => {
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'vendor_subscriptions',
+    '*, organization:organizations(name), plan:vendor_subscription_plans(name, code)',
+    [],
+    { order: { column: 'created_at', ascending: false }, skipOrgFilter: true, isSuperAdmin: true },
+  );
+
+  const subscriptions = data.map((row: any) => ({
+    id: row.id,
+    organizationName: row.organization?.name ?? '—',
+    planName: row.plan?.name ?? '—',
+    planCode: row.plan?.code ?? '',
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+    autoRenew: row.auto_renew === true,
+    monthlyAmountInr: Number(row.monthly_price_inr) || 0,
+    trialEndsAt: row.trial_ends_at ?? null,
+  }));
+
+  return { subscriptions, loading, error, refetch };
+};
+
+export const useVendorBillingInvoices = () => {
+  const { data, loading, error, refetch } = useSupabaseData<any>(
+    'vendor_billing_invoices',
+    '*, organization:organizations(name), plan:vendor_subscription_plans(name)',
+    [],
+    { order: { column: 'created_at', ascending: false }, skipOrgFilter: true, isSuperAdmin: true },
+  );
+
+  const invoices = data.map((row: any) => ({
+    id: row.id,
+    invoiceNumber: row.invoice_number,
+    organizationName: row.organization?.name ?? '—',
+    planName: row.plan?.name ?? '—',
+    amountInr: Number(row.amount_inr) || 0,
+    issueDate: row.issue_date,
+    dueDate: row.due_date,
+    paidAt: row.paid_at ?? null,
+    paymentMethod: row.payment_method ?? null,
+    status: row.status,
+  }));
+
+  return { invoices, loading, error, refetch };
+};

@@ -24,6 +24,7 @@ import {
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Badge } from '../components/UI/Badge';
+import { supabase } from '../lib/supabase';
 
 interface PlanFeature {
   id: string;
@@ -128,6 +129,13 @@ const supportLevels = {
   priority: { label: 'Priority Support', description: '24/7 priority support', icon: '⚡' },
   dedicated: { label: 'Dedicated Manager', description: 'Dedicated account manager', icon: '👤' }
 };
+
+const slugifyCode = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 
 export const CreatePlan: React.FC = () => {
   const navigate = useNavigate();
@@ -261,11 +269,48 @@ export const CreatePlan: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('Creating plan:', formData);
-      
+      const code = slugifyCode(formData.name);
+      if (!code) {
+        setErrors({ submit: 'Plan name must include letters or numbers.' });
+        return;
+      }
+      const includedFeatures = formData.features
+        .filter((f) => f.included && f.name.trim().length > 0)
+        .map((f) => f.name.trim());
+      const limits = {
+        max_events: formData.maxEvents,
+        max_attendees: formData.maxAttendees,
+        max_societies: formData.maxSocieties,
+        support_level: formData.supportLevel,
+        billing_cycle: formData.billingCycle,
+        setup_fee_inr: formData.setupFee,
+        discount_percentage: formData.discountPercentage,
+        custom_branding: formData.customBranding,
+        api_access: formData.apiAccess,
+        advanced_reporting: formData.advancedReporting,
+        white_label: formData.whiteLabel,
+        promotional_video_ads: includedFeatures.some((f) =>
+          /video|advert|campaign/i.test(f),
+        ),
+      };
+
+      const { error } = await supabase.from('vendor_subscription_plans').insert({
+        code,
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        monthly_price_inr: Math.max(0, Math.round(formData.price)),
+        trial_days: Math.max(0, formData.trialDays || 0),
+        is_active: formData.isActive,
+        is_popular: formData.isPopular,
+        rank_order: 999,
+        features: includedFeatures,
+        limits,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       setSubmitSuccess(true);
       
       // Redirect after success
@@ -273,9 +318,9 @@ export const CreatePlan: React.FC = () => {
         navigate('/billing');
       }, 2000);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating plan:', error);
-      setErrors({ submit: 'Failed to create plan. Please try again.' });
+      setErrors({ submit: error?.message || 'Failed to create plan. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
