@@ -90,11 +90,100 @@ const SPONSOR_ROLE_OPTIONS: { value: string; label: string }[] = [
 ];
 
 /** Legacy rows may still use status pending */
-const registrationIsInterested = (reg: Pick<EventRegistrationRow, 'status'>) =>
-  reg.status === 'interested' || reg.status === 'pending';
+const registrationIsInterested = (reg: Pick<EventRegistrationRow, 'status'>) => {
+  const s = String(reg.status ?? '').trim().toLowerCase();
+  if (s === 'approved' || s === 'rejected') return false;
+  return s === 'interested' || s === 'pending';
+};
 
 const registrationStatusBadgeLabel = (reg: Pick<EventRegistrationRow, 'status'>) =>
-  registrationIsInterested(reg) ? 'interested' : reg.status;
+  registrationIsInterested(reg) ? 'interested' : String(reg.status ?? '').trim().toLowerCase();
+
+/** Normalize DB/API quirks so Edit always matches saved state (case, whitespace). */
+const normalizeRegistrationRow = (r: EventRegistrationRow): EventRegistrationRow => {
+  const stallRaw = r.stall_no;
+  const stall_no =
+    stallRaw != null && String(stallRaw).trim() !== '' ? String(stallRaw).trim() : null;
+  let statusRaw = String(r.status ?? '').trim().toLowerCase();
+  if (statusRaw === '') statusRaw = stall_no ? 'approved' : 'pending';
+  // Stall assignment is only allowed after approval in this app — heal bad rows that have stall but old status.
+  if (stall_no && (statusRaw === 'interested' || statusRaw === 'pending')) {
+    statusRaw = 'approved';
+  }
+  return { ...r, status: statusRaw, stall_no };
+};
+
+/** If duplicate event_registrations exist for the same exhibitor, keep the most meaningful row. */
+const dedupeRegistrationsByExhibitor = (rows: EventRegistrationRow[]): EventRegistrationRow[] => {
+  const by = new Map<string, EventRegistrationRow>();
+  const score = (r: EventRegistrationRow) => {
+    const s = String(r.status ?? '').toLowerCase();
+    const hasStall = Boolean(r.stall_no?.trim());
+    if (s === 'approved' && hasStall) return 5;
+    if (s === 'approved') return 4;
+    if (s === 'rejected') return 3;
+    if (hasStall) return 2;
+    if (s === 'interested' || s === 'pending') return 1;
+    return 0;
+  };
+  for (const r of rows) {
+    if (!r.exhibitor_id) continue;
+    const cur = by.get(r.exhibitor_id);
+    if (!cur) {
+      by.set(r.exhibitor_id, r);
+      continue;
+    }
+    const sc = score(r);
+    const scc = score(cur);
+    if (sc > scc) by.set(r.exhibitor_id, r);
+    else if (sc === scc && String(r.created_at || '') > String(cur.created_at || '')) {
+      by.set(r.exhibitor_id, r);
+    }
+  }
+  return Array.from(by.values()).sort((a, b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || '')),
+  );
+};
+
+const processFetchedRegistrations = (rows: EventRegistrationRow[]): EventRegistrationRow[] =>
+  dedupeRegistrationsByExhibitor(rows.map(normalizeRegistrationRow).filter((r) => r.exhibitor_id != null));
+
+const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const notification = document.createElement('div');
+  notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
+    type === 'error' ? 'bg-red-500 text-white' :
+      'bg-blue-500 text-white'
+    }`;
+
+  notification.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${message}</span>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          ✕
+        </button>
+      </div>
+    `;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.classList.remove('translate-x-full');
+  }, 100);
+
+  setTimeout(() => {
+    if (notification.parentElement) {
+      notification.classList.add('translate-x-full');
+      setTimeout(() => {
+        if (notification.parentElement) {
+          notification.remove();
+        }
+      }, 300);
+    }
+  }, 5000);
+};
 
 export const Events: React.FC = () => {
   const { events, loading, refetch } = useEvents();
@@ -253,9 +342,6 @@ export const Events: React.FC = () => {
   /** Approve flow: pick stall when event has configured stalls */
   const [approveStallModalReg, setApproveStallModalReg] = useState<EventRegistrationRow | null>(null);
   const [approveModalStallChoice, setApproveModalStallChoice] = useState('');
-  /** assignStall: table/card Assign stall; stallOnly: exhibitor dropdown path */
-  const [approveModalIntent, setApproveModalIntent] = useState<'assignStall' | 'stallOnly' | null>(null);
-  const [postStallFlowExhibitorId, setPostStallFlowExhibitorId] = useState<string | null>(null);
   // Event sponsors: { sponsorId, role } for current event (edit modal)
   const [eventSponsors, setEventSponsors] = useState<{ sponsorId: string; role: string }[]>([]);
   const [loadingEventSponsors, setLoadingEventSponsors] = useState(false);
@@ -263,7 +349,9 @@ export const Events: React.FC = () => {
   const [newSponsorRole, setNewSponsorRole] = useState<string>('co_sponsor');
   const [viewEventSponsors, setViewEventSponsors] = useState<{ sponsorId: string; role: string }[]>([]);
   const [loadingViewSponsors, setLoadingViewSponsors] = useState(false);
-  
+  const [viewEventRegistrations, setViewEventRegistrations] = useState<EventRegistrationRow[]>([]);
+  const [loadingViewRegistrations, setLoadingViewRegistrations] = useState(false);
+
   // Stall removal modal state
   const [showDeleteStallModal, setShowDeleteStallModal] = useState(false);
   const [stallToRemove, setStallToRemove] = useState<{ index: number; stallNumber: string } | null>(null);
@@ -332,11 +420,14 @@ export const Events: React.FC = () => {
         setLoadingRegistrations(false);
         if (error) {
           console.error('Error fetching event registrations:', error);
+          showNotification(
+            'Could not load exhibitor registrations for this event. Check your connection and database access.',
+            'error',
+          );
           setEventRegistrations([]);
           return;
         }
-        const rows = (data as EventRegistrationRow[]) || [];
-        setEventRegistrations(rows.filter((r) => r.exhibitor_id != null));
+        setEventRegistrations(processFetchedRegistrations((data as EventRegistrationRow[]) || []));
       });
     return () => { cancelled = true; };
   }, [showEditModal, editFormData?.id]);
@@ -393,6 +484,34 @@ export const Events: React.FC = () => {
     return () => { cancelled = true; };
   }, [showViewModal, selectedEvent?.id]);
 
+  // Load registration + stall assignments for View Event (same source as Edit)
+  useEffect(() => {
+    if (!showViewModal || !selectedEvent?.id) {
+      setViewEventRegistrations([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingViewRegistrations(true);
+    supabase
+      .from('event_registrations')
+      .select('id, event_id, exhibitor_id, status, stall_no, created_at')
+      .eq('event_id', selectedEvent.id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingViewRegistrations(false);
+        if (error) {
+          console.error('Error fetching view event registrations:', error);
+          setViewEventRegistrations([]);
+          return;
+        }
+        setViewEventRegistrations(processFetchedRegistrations((data as EventRegistrationRow[]) || []));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showViewModal, selectedEvent?.id]);
+
   const getConfiguredStallNumbers = (): string[] => {
     if (!editFormData) return [];
     const out: string[] = [];
@@ -440,32 +559,55 @@ export const Events: React.FC = () => {
     return cfg.filter((n) => !taken.has(n));
   };
 
+  const updateRegistrationAndSyncState = async (
+    reg: EventRegistrationRow,
+    patch: Partial<Pick<EventRegistrationRow, 'status' | 'stall_no'>>,
+    failureLabel: string,
+  ): Promise<EventRegistrationRow | null> => {
+    const { data, error } = await supabase
+      .from('event_registrations')
+      .update(patch)
+      .eq('id', reg.id)
+      .select('id, event_id, exhibitor_id, status, stall_no, created_at')
+      .maybeSingle();
+    if (error) {
+      console.error(`Error ${failureLabel}:`, error);
+      showNotification(error.message, 'error');
+      return null;
+    }
+    if (!data) {
+      showNotification(
+        `Could not ${failureLabel}. Database did not return the updated row (possible permissions issue).`,
+        'error',
+      );
+      return null;
+    }
+    const normalized = normalizeRegistrationRow(data as EventRegistrationRow);
+    setEventRegistrations((prev) =>
+      processFetchedRegistrations([
+        ...prev.filter((r) => r.id !== normalized.id),
+        normalized,
+      ]),
+    );
+    return normalized;
+  };
+
   /** Approve registration only (no stall). Stall is a separate step when the event has stalls. */
   const approveRegistrationOnly = async (reg: EventRegistrationRow): Promise<boolean> => {
     if (!reg.exhibitor_id || !editFormData) return false;
-    if (reg.status === 'approved') return true;
+    if (String(reg.status ?? '').trim().toLowerCase() === 'approved') return true;
     const eventId = editFormData.id;
     const updatePayload = { status: 'approved' as const, stall_no: null as string | null };
     const currentIds = selectedExhibitorsForEdit || [];
 
     if (currentIds.includes(reg.exhibitor_id)) {
-      const { error } = await supabase.from('event_registrations').update(updatePayload).eq('id', reg.id);
-      if (error) {
-        console.error('Error approving registration:', error);
-        showNotification(error.message, 'error');
-        return false;
-      }
-      setEventRegistrations((prev) =>
-        prev.map((r) => (r.id === reg.id ? { ...r, status: 'approved', stall_no: null } : r)),
-      );
-      return true;
+      const updated = await updateRegistrationAndSyncState(reg, updatePayload, 'approving registration');
+      return Boolean(updated);
     }
 
     const newIds = [...currentIds, reg.exhibitor_id];
-    const { error: updateRegError } = await supabase.from('event_registrations').update(updatePayload).eq('id', reg.id);
-    if (updateRegError) {
-      console.error('Error approving registration:', updateRegError);
-      showNotification(updateRegError.message, 'error');
+    const updated = await updateRegistrationAndSyncState(reg, updatePayload, 'approving registration');
+    if (!updated) {
       return false;
     }
     const { error: updateEventError } = await supabase.from('events').update({ exhibitor_ids: newIds }).eq('id', eventId);
@@ -475,9 +617,6 @@ export const Events: React.FC = () => {
       return false;
     }
     setSelectedExhibitorsForEdit(newIds);
-    setEventRegistrations((prev) =>
-      prev.map((r) => (r.id === reg.id ? { ...r, status: 'approved', stall_no: null } : r)),
-    );
     await refetch();
     if (selectedEvent?.id === eventId) {
       setSelectedEvent((prev) => (prev ? { ...prev, exhibitors: newIds } : null));
@@ -487,8 +626,6 @@ export const Events: React.FC = () => {
 
   const startApproveRegistration = (reg: EventRegistrationRow) => {
     if (!reg.exhibitor_id || !editFormData) return;
-    setApproveModalIntent(null);
-    setPostStallFlowExhibitorId(null);
     void (async () => {
       const ok = await approveRegistrationOnly(reg);
       if (!ok) return;
@@ -502,7 +639,7 @@ export const Events: React.FC = () => {
   };
 
   const startAssignStallModal = (reg: EventRegistrationRow) => {
-    if (!reg.exhibitor_id || !editFormData || reg.status !== 'approved') return;
+    if (!reg.exhibitor_id || !editFormData || String(reg.status ?? '').trim().toLowerCase() !== 'approved') return;
     if (reg.stall_no?.trim()) return;
     if (getConfiguredStallNumbers().length === 0) return;
     const available = getAvailableStallsForNewApproval(reg);
@@ -510,9 +647,22 @@ export const Events: React.FC = () => {
       showNotification('All stalls are already assigned. Change or clear an assignment first.', 'error');
       return;
     }
-    setApproveModalIntent('assignStall');
-    setPostStallFlowExhibitorId(null);
     setApproveModalStallChoice(available[0] ?? '');
+    setApproveStallModalReg(reg);
+  };
+
+  /** Re-pick stall for an already-approved exhibitor (same modal as assign). */
+  const startChangeStallModal = (reg: EventRegistrationRow) => {
+    if (!reg.exhibitor_id || !editFormData || String(reg.status ?? '').trim().toLowerCase() !== 'approved') return;
+    const current = reg.stall_no?.trim();
+    if (!current) return;
+    if (getConfiguredStallNumbers().length === 0) return;
+    const available = getAvailableStallsForNewApproval(reg);
+    if (available.length === 0) {
+      showNotification('No stalls available to choose from.', 'error');
+      return;
+    }
+    setApproveModalStallChoice(available.includes(current) ? current : available[0] ?? '');
     setApproveStallModalReg(reg);
   };
 
@@ -540,37 +690,70 @@ export const Events: React.FC = () => {
         return false;
       }
     }
-    const { error } = await supabase.from('event_registrations').update({ stall_no: newStall }).eq('id', reg.id);
-    if (error) {
-      console.error('Error updating stall assignment:', error);
-      showNotification(
-        error.message.includes('unique') ? 'That stall is already assigned.' : error.message,
-        'error',
-      );
+    const updated = await updateRegistrationAndSyncState(
+      reg,
+      { stall_no: newStall, status: 'approved' },
+      'saving stall assignment',
+    );
+    if (!updated) {
+      showNotification('Stall assignment was not saved. Please try again.', 'error');
       return false;
     }
-    setEventRegistrations((prev) =>
-      prev.map((r) => (r.id === reg.id ? { ...r, stall_no: newStall } : r)),
-    );
     showNotification(newStall ? 'Stall assignment updated.' : 'Stall unassigned.', 'success');
-    if (newStall && reg.exhibitor_id && reg.status === 'approved') {
-      await syncExhibitorApprovedStatus(reg.exhibitor_id);
+    if (newStall && updated.exhibitor_id && String(updated.status ?? '').trim().toLowerCase() === 'approved') {
+      await syncExhibitorApprovedStatus(updated.exhibitor_id);
     }
     return true;
   };
 
-  const handleRejectRegistration = async (reg: EventRegistrationRow) => {
-    const { error } = await supabase
-      .from('event_registrations')
-      .update({ status: 'rejected', stall_no: null })
-      .eq('id', reg.id);
-    if (error) {
-      console.error('Error rejecting registration:', error);
+  /** Remove this exhibitor’s registration from the event (lets you add a different exhibitor later). */
+  const removeExhibitorRegistrationFromEvent = async (reg: EventRegistrationRow) => {
+    if (!editFormData?.id || !reg.exhibitor_id) return;
+    const name = getExhibitorName(reg.exhibitor_id);
+    if (
+      !window.confirm(
+        `Remove "${name}" from this event? Their registration and stall assignment will be cleared. You can add them again from the directory if needed.`,
+      )
+    ) {
       return;
     }
-    setEventRegistrations((prev) =>
-      prev.map((r) => (r.id === reg.id ? { ...r, status: 'rejected', stall_no: null } : r)),
+    const { error } = await supabase.from('event_registrations').delete().eq('id', reg.id);
+    if (error) {
+      console.error(error);
+      showNotification('Could not remove registration: ' + error.message, 'error');
+      return;
+    }
+    const newIds = (selectedExhibitorsForEdit || []).filter((id) => id !== reg.exhibitor_id);
+    const { error: evErr } = await supabase
+      .from('events')
+      .update({ exhibitor_ids: newIds })
+      .eq('id', editFormData.id);
+    if (evErr) {
+      showNotification('Registration removed but updating the event exhibitor list failed: ' + evErr.message, 'error');
+    }
+    setSelectedExhibitorsForEdit(newIds);
+    setEventRegistrations((prev) => prev.filter((r) => r.id !== reg.id));
+    setExhibitorUpdates((prev) => {
+      const next = { ...prev };
+      delete next[reg.exhibitor_id!];
+      return next;
+    });
+    if (selectedEvent?.id === editFormData.id) {
+      setSelectedEvent((prev) => (prev ? { ...prev, exhibitors: newIds } : null));
+    }
+    void refetch();
+    showNotification('Exhibitor removed from this event.', 'success');
+  };
+
+  const handleRejectRegistration = async (reg: EventRegistrationRow) => {
+    const updated = await updateRegistrationAndSyncState(
+      reg,
+      { status: 'rejected', stall_no: null },
+      'rejecting registration',
     );
+    if (!updated) {
+      return;
+    }
   };
 
   // Stalls management functions
@@ -808,6 +991,7 @@ export const Events: React.FC = () => {
     console.log('📸 Current eventImageUrl:', event.eventImageUrl);
 
     setEditFormData(editData);
+    setExhibitorUpdates({});
     setShowEditModal(true);
   };
 
@@ -1114,11 +1298,10 @@ export const Events: React.FC = () => {
     setViewEventSponsors([]);
     setStallToRemove(null);
     setApproveStallModalReg(null);
-    setApproveModalIntent(null);
-    setPostStallFlowExhibitorId(null);
     setRegisterExhibitorPickId('');
     setPoVendorModal(null);
     setEventVendorIdsWithPO([]);
+    setExhibitorUpdates({});
   };
 
   // Exhibitor selection handlers for edit modal
@@ -1143,38 +1326,32 @@ export const Events: React.FC = () => {
     const reg = editFormData ? eventRegistrations.find((r) => r.exhibitor_id === exhibitorId) : undefined;
 
     if (newStatus === 'interested' && reg) {
-      const { error } = await supabase
-        .from('event_registrations')
-        .update({ status: 'interested', stall_no: null })
-        .eq('id', reg.id);
-      if (error) {
-        console.error(error);
-        showNotification('Could not set registration to interested: ' + error.message, 'error');
+      const updated = await updateRegistrationAndSyncState(
+        reg,
+        { status: 'interested', stall_no: null },
+        'setting registration to interested',
+      );
+      if (!updated) {
         return;
       }
-      setEventRegistrations((prev) =>
-        prev.map((r) => (r.id === reg.id ? { ...r, status: 'interested', stall_no: null } : r)),
-      );
     }
 
     if (newStatus === 'approved' && editFormData && reg) {
       const stallsConfigured = getConfiguredStallNumbers().length > 0;
-      if (registrationIsInterested(reg) || reg.status === 'rejected') {
+      if (registrationIsInterested(reg) || String(reg.status ?? '').trim().toLowerCase() === 'rejected') {
         const ok = await approveRegistrationOnly(reg);
         if (!ok) return;
         if (!stallsConfigured) await syncExhibitorApprovedStatus(exhibitorId);
         else showNotification('Registration approved. Use Assign stall to pick a stall.', 'success');
         return;
       }
-      if (reg.status === 'approved' && !reg.stall_no?.trim() && stallsConfigured) {
+      if (String(reg.status ?? '').trim().toLowerCase() === 'approved' && !reg.stall_no?.trim() && stallsConfigured) {
         const available = getAvailableStallsForNewApproval(reg);
         if (available.length === 0) {
           showNotification('All stalls are already assigned. Change or clear an assignment first.', 'error');
           return;
         }
         setApproveModalStallChoice(available[0] ?? '');
-        setApproveModalIntent('stallOnly');
-        setPostStallFlowExhibitorId(exhibitorId);
         setApproveStallModalReg(reg);
         return;
       }
@@ -1391,54 +1568,15 @@ export const Events: React.FC = () => {
     }) : null);
   };
 
-  // Notification function
-  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const notification = document.createElement('div');
-    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform transition-all duration-300 translate-x-full ${type === 'success' ? 'bg-green-500 text-white' :
-      type === 'error' ? 'bg-red-500 text-white' :
-        'bg-blue-500 text-white'
-      }`;
-
-    notification.innerHTML = `
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <span class="mr-2">${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
-          <span>${message}</span>
-        </div>
-        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
-          ✕
-        </button>
-      </div>
-    `;
-
-    document.body.appendChild(notification);
-
-    // Animate in
-    setTimeout(() => {
-      notification.classList.remove('translate-x-full');
-    }, 100);
-
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      if (notification.parentElement) {
-        notification.classList.add('translate-x-full');
-        setTimeout(() => {
-          if (notification.parentElement) {
-            notification.remove();
-          }
-        }, 300);
-      }
-    }, 5000);
-  };
-
   /** Cards below: interested for this event (interested registration and/or profile interested/pending). */
   const exhibitorIsInterestedForEventView = (exhibitor: Exhibitor): boolean => {
     const eff = (exhibitorUpdates[exhibitor.id] || exhibitor.status || '').toString().toLowerCase();
     const reg = eventRegistrations.find((r) => r.exhibitor_id === exhibitor.id);
     const onEvent = selectedExhibitorsForEdit.includes(exhibitor.id);
+    if (reg != null && !registrationIsInterested(reg)) return false;
     return (
       (reg != null && registrationIsInterested(reg)) ||
-      (onEvent && (eff === 'interested' || eff === 'pending'))
+      (!reg && onEvent && (eff === 'interested' || eff === 'pending'))
     );
   };
 
@@ -1494,7 +1632,7 @@ export const Events: React.FC = () => {
       return;
     }
 
-    setEventRegistrations((prev) => [data as EventRegistrationRow, ...prev]);
+    setEventRegistrations((prev) => processFetchedRegistrations([data as EventRegistrationRow, ...prev]));
     setRegisterExhibitorPickId('');
     showNotification('Exhibitor registered for this event as interested.', 'success');
     void refetch();
@@ -1953,21 +2091,43 @@ export const Events: React.FC = () => {
                     <User className="h-5 w-5 mr-2" />
                     Selected Exhibitors
                   </h3>
+                  {loadingViewRegistrations ? (
+                    <p className="text-sm text-gray-500">Loading exhibitor registrations…</p>
+                  ) : null}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4">
                     {selectedEvent.exhibitors && selectedEvent.exhibitors.length > 0 ? (
-                      selectedEvent.exhibitors.map((exhibitorId: string, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <div className="flex-1 min-w-0">
+                      selectedEvent.exhibitors.map((exhibitorId: string, index: number) => {
+                        const reg = viewEventRegistrations.find((r) => r.exhibitor_id === exhibitorId);
+                        const st = String(reg?.status ?? '').toLowerCase();
+                        return (
+                          <div
+                            key={index}
+                            className="flex flex-col gap-1 p-3 bg-green-50 border border-green-200 rounded-lg"
+                          >
                             <div className="font-medium text-gray-900 text-sm truncate">
                               {getExhibitorName(exhibitorId)}
                             </div>
+                            {reg ? (
+                              <div className="text-xs text-gray-700 space-y-0.5">
+                                <div>
+                                  Registration:{' '}
+                                  <span className="font-medium capitalize">{st || '—'}</span>
+                                </div>
+                                {st === 'approved' && reg.stall_no?.trim() ? (
+                                  <div>
+                                    Stall: <span className="font-semibold text-gray-900">{reg.stall_no.trim()}</span>
+                                  </div>
+                                ) : st === 'approved' && !reg.stall_no?.trim() ? (
+                                  <div className="text-amber-800">Stall not assigned yet</div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-amber-800">No registration row (open Edit to sync)</p>
+                            )}
                           </div>
-                          {/* <Badge variant="success" className="text-xs">
-                            <Check className="h-4 w-4" />
-                          </Badge> */}
-                        </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div className="col-span-full text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
                         <User className="h-8 w-8 text-gray-400 mx-auto mb-2" />
@@ -2484,23 +2644,40 @@ export const Events: React.FC = () => {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {registrationIsInterested(reg) && (
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button size="sm" onClick={() => startApproveRegistration(reg)}>
-                                      Approve
-                                    </Button>
-                                    <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
-                                      Reject
-                                    </Button>
-                                  </div>
-                                )}
-                                {reg.status === 'approved' &&
-                                  !reg.stall_no?.trim() &&
-                                  getConfiguredStallNumbers().length > 0 && (
-                                    <Button size="sm" onClick={() => startAssignStallModal(reg)}>
-                                      Assign stall
-                                    </Button>
+                                <div className="flex flex-col gap-2">
+                                  {registrationIsInterested(reg) && (
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button size="sm" onClick={() => startApproveRegistration(reg)}>
+                                        Approve
+                                      </Button>
+                                      <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
+                                        Reject
+                                      </Button>
+                                    </div>
                                   )}
+                                  {reg.status === 'approved' && getConfiguredStallNumbers().length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {reg.stall_no?.trim() ? (
+                                        <Button size="sm" variant="outline" onClick={() => startChangeStallModal(reg)}>
+                                          Change stall
+                                        </Button>
+                                      ) : (
+                                        <Button size="sm" onClick={() => startAssignStallModal(reg)}>
+                                          Assign stall
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                  {reg.exhibitor_id && (
+                                    <button
+                                      type="button"
+                                      className="text-left text-xs text-red-600 hover:underline"
+                                      onClick={() => void removeExhibitorRegistrationFromEvent(reg)}
+                                    >
+                                      Remove from event
+                                    </button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -3409,9 +3586,9 @@ export const Events: React.FC = () => {
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/90 px-4 py-3 text-sm text-indigo-950">
                   <p className="font-medium text-indigo-900">Stall assignment</p>
                   <p className="mt-1 text-indigo-800/90">
-                    <strong>Approve</strong> sets registration to approved (no stall yet). Then use <strong>Assign stall</strong>{' '}
-                    (or the card action). After a stall is saved, assignment stays hidden until status is{' '}
-                    <strong>Interested</strong> again.
+                    <strong>Approve</strong> sets registration to approved (no stall yet). Then <strong>Assign stall</strong>.
+                    Saved stalls load again when you open Edit. Use <strong>Change stall</strong> to switch stalls, or{' '}
+                    <strong>Remove from event</strong> to unregister and add a different exhibitor.
                   </p>
                   {getConfiguredStallNumbers().length === 0 ? (
                     <p className="mt-2 text-amber-800 bg-amber-100/80 border border-amber-200 rounded-md px-2 py-1.5">
@@ -3475,23 +3652,40 @@ export const Events: React.FC = () => {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {registrationIsInterested(reg) && (
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button size="sm" onClick={() => startApproveRegistration(reg)}>
-                                      Approve
-                                    </Button>
-                                    <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
-                                      Reject
-                                    </Button>
-                                  </div>
-                                )}
-                                {reg.status === 'approved' &&
-                                  !reg.stall_no?.trim() &&
-                                  getConfiguredStallNumbers().length > 0 && (
-                                    <Button size="sm" onClick={() => startAssignStallModal(reg)}>
-                                      Assign stall
-                                    </Button>
+                                <div className="flex flex-col gap-2">
+                                  {registrationIsInterested(reg) && (
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button size="sm" onClick={() => startApproveRegistration(reg)}>
+                                        Approve
+                                      </Button>
+                                      <Button size="sm" variant="outline" onClick={() => handleRejectRegistration(reg)}>
+                                        Reject
+                                      </Button>
+                                    </div>
                                   )}
+                                  {reg.status === 'approved' && getConfiguredStallNumbers().length > 0 && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {reg.stall_no?.trim() ? (
+                                        <Button size="sm" variant="outline" onClick={() => startChangeStallModal(reg)}>
+                                          Change stall
+                                        </Button>
+                                      ) : (
+                                        <Button size="sm" onClick={() => startAssignStallModal(reg)}>
+                                          Assign stall
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                  {reg.exhibitor_id && (
+                                    <button
+                                      type="button"
+                                      className="text-left text-xs text-red-600 hover:underline"
+                                      onClick={() => void removeExhibitorRegistrationFromEvent(reg)}
+                                    >
+                                      Remove from event
+                                    </button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -3680,10 +3874,10 @@ export const Events: React.FC = () => {
                                         const reg = eventRegistrations.find((r) => r.exhibitor_id === exhibitor.id);
                                         if (!reg) return null;
                                         const stallPickerOpts = getConfiguredStallNumbers();
-                                        const showAssignStall =
-                                          reg.status === 'approved' &&
-                                          !reg.stall_no?.trim() &&
-                                          stallPickerOpts.length > 0;
+                                        const approved = reg.status === 'approved';
+                                        const showStallRow = approved && stallPickerOpts.length > 0;
+                                        const showAssignStall = showStallRow && !reg.stall_no?.trim();
+                                        const showChangeStall = showStallRow && Boolean(reg.stall_no?.trim());
                                         return (
                                           <div className="mt-2 rounded-md border border-indigo-200 bg-white/80 px-2.5 py-2 text-xs">
                                             <span className="font-semibold text-indigo-900">Event registration</span>
@@ -3727,7 +3921,27 @@ export const Events: React.FC = () => {
                                                   Assign stall
                                                 </Button>
                                               )}
+                                              {showChangeStall && (
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="h-7 text-xs"
+                                                  onClick={() => startChangeStallModal(reg)}
+                                                >
+                                                  Change stall
+                                                </Button>
+                                              )}
                                             </div>
+                                            {reg.exhibitor_id && (
+                                              <button
+                                                type="button"
+                                                className="mt-1.5 text-[11px] text-red-600 hover:underline"
+                                                onClick={() => void removeExhibitorRegistrationFromEvent(reg)}
+                                              >
+                                                Remove from event
+                                              </button>
+                                            )}
                                           </div>
                                         );
                                       })()}
@@ -3976,17 +4190,20 @@ export const Events: React.FC = () => {
                   className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4"
                 >
                   <h3 id="stall-approve-title" className="text-lg font-semibold text-gray-900">
-                    Assign stall
+                    {approveStallModalReg.stall_no?.trim() ? 'Change stall' : 'Assign stall'}
                   </h3>
                   <p className="text-sm text-gray-600">
-                    Registration is approved. Pick a stall for{' '}
+                    {approveStallModalReg.stall_no?.trim()
+                      ? 'Pick a new stall for '
+                      : 'Registration is approved. Pick a stall for '}
                     <strong>
                       {approveStallModalReg.exhibitor_id
                         ? getExhibitorName(approveStallModalReg.exhibitor_id)
                         : approveStallModalReg.name ?? 'this exhibitor'}
                     </strong>
-                    . To change or reassign later, set exhibitor status back to <strong>Interested</strong> (clears the
-                    stall). Each stall can only go to one exhibitor at a time.
+                    . Each stall can only go to one exhibitor. Use <strong>Change stall</strong> in the table to reassign
+                    without losing approval, or <strong>Remove from event</strong> to drop this exhibitor and add someone
+                    else.
                   </p>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Stall number</label>
@@ -4008,8 +4225,6 @@ export const Events: React.FC = () => {
                       type="button"
                       onClick={() => {
                         setApproveStallModalReg(null);
-                        setApproveModalIntent(null);
-                        setPostStallFlowExhibitorId(null);
                       }}
                     >
                       Cancel
@@ -4018,19 +4233,16 @@ export const Events: React.FC = () => {
                       type="button"
                       onClick={async () => {
                         const reg = approveStallModalReg;
-                        const intent = approveModalIntent;
                         const stall = approveModalStallChoice.trim();
                         const needStall = getConfiguredStallNumbers().length > 0;
-                        if ((intent === 'assignStall' || intent === 'stallOnly') && needStall && !stall) {
+                        if (!reg) return;
+                        if (needStall && !stall) {
                           showNotification('Select a stall number.', 'error');
                           return;
                         }
-                        setApproveStallModalReg(null);
-                        setApproveModalIntent(null);
-                        setPostStallFlowExhibitorId(null);
-                        if (!reg) return;
-                        if (intent === 'assignStall' || intent === 'stallOnly') {
-                          await handleUpdateRegistrationStall(reg, stall);
+                        const ok = await handleUpdateRegistrationStall(reg, stall);
+                        if (ok) {
+                          setApproveStallModalReg(null);
                         }
                       }}
                     >
