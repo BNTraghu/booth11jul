@@ -51,6 +51,31 @@ const testConnection = async () => {
 // Run the test
 testConnection();
 
+export type EventFlyerPayload = {
+  size?: string;
+  content: {
+    title: string;
+    subtitle?: string;
+    date: string;
+    time?: string;
+    venue: string;
+    organizer?: string;
+    stalls?: string;
+    sponsors?: string;
+    cta?: string;
+  };
+  meta?: {
+    eventId?: string;
+  };
+};
+
+export const generateEventFlyer = async (payload: EventFlyerPayload) => {
+  const { data, error } = await supabase.functions.invoke('generate-event-flyer', {
+    body: payload,
+  });
+  return { data, error };
+};
+
 // Database types based on our schema
 export interface Database {
   public: {

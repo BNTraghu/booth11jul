@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, User, AlertCircle, Image as ImageIcon, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Users, Calendar, DollarSign, Search, Filter, X, Save, AlertTriangle, Building2, ArrowLeft, AlertCircle, Image as ImageIcon, FileText, Mail, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
@@ -10,6 +10,23 @@ import { supabase } from '../lib/supabase';
 import { useVenues } from '../hooks/useSupabaseData';
 import { COUNTRIES } from '../data/locations';
 import statesData from '../data/states.json';
+
+/** Match Add New Venue — default checkbox options */
+const defaultFacilities = [
+  'Auditorium',
+  'Community Hall',
+  'Garden Area',
+  'Parking',
+  'Outdoor Space'
+];
+
+const defaultAmenities = [
+  'Security',
+  'Catering Kitchen',
+  'Sound System',
+  'Air Conditioning',
+  'Fire Safety'
+];
 
 interface ExtendedVenueFormData {
   id: string;
@@ -82,6 +99,8 @@ export const Venues: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editFormData, setEditFormData] = useState<ExtendedVenueFormData | null>(null);
   const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
+  const [customFacility, setCustomFacility] = useState('');
+  const [customAmenity, setCustomAmenity] = useState('');
 
   const filteredVenues = venues.filter(venue => {
     const matchesFilter = filter === 'all' || venue.status === filter;
@@ -824,6 +843,56 @@ export const Venues: React.FC = () => {
     }));
   };
 
+  const handleEditFacilityToggle = (facility: string) => {
+    if (!editFormData) return;
+    setEditFormData(prev => {
+      if (!prev) return prev;
+      const has = prev.facilities.includes(facility);
+      return {
+        ...prev,
+        facilities: has ? prev.facilities.filter(f => f !== facility) : [...prev.facilities, facility]
+      };
+    });
+  };
+
+  const handleAddCustomFacilityEdit = () => {
+    if (!editFormData || !customFacility.trim()) return;
+    const f = customFacility.trim();
+    if (editFormData.facilities.includes(f)) return;
+    setEditFormData({ ...editFormData, facilities: [...editFormData.facilities, f] });
+    setCustomFacility('');
+  };
+
+  const handleRemoveCustomFacilityEdit = (facility: string) => {
+    if (!editFormData || defaultFacilities.includes(facility)) return;
+    setEditFormData({ ...editFormData, facilities: editFormData.facilities.filter(x => x !== facility) });
+  };
+
+  const handleEditAmenityToggle = (amenity: string) => {
+    if (!editFormData) return;
+    setEditFormData(prev => {
+      if (!prev) return prev;
+      const has = prev.amenities.includes(amenity);
+      return {
+        ...prev,
+        amenities: has ? prev.amenities.filter(a => a !== amenity) : [...prev.amenities, amenity]
+      };
+    });
+  };
+
+  const handleAddCustomAmenityEdit = () => {
+    if (!editFormData || !customAmenity.trim()) return;
+    const a = customAmenity.trim();
+    if (editFormData.amenities.includes(a)) return;
+    setEditFormData({ ...editFormData, amenities: [...editFormData.amenities, a] });
+    setCustomAmenity('');
+  };
+
+  const handleRemoveCustomAmenityEdit = (amenity: string) => {
+    if (!editFormData || defaultAmenities.includes(amenity)) return;
+    setEditFormData({ ...editFormData, amenities: editFormData.amenities.filter(x => x !== amenity) });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
@@ -1360,7 +1429,7 @@ export const Venues: React.FC = () => {
       {/* Edit Venue Modal */}
       {showEditModal && editFormData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <div>
@@ -1378,10 +1447,8 @@ export const Venues: React.FC = () => {
 
 
               <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-6">
-                <div className="grid grid-cols-1 gap-6">
-                  {/* Main Form */}
-                  <div className="space-y-6">
-                    {/* Basic Information */}
+                <div className="space-y-6">
+                    {/* Basic Information — layout matches Add New Venue */}
                     <Card>
                       <CardHeader>
                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -1391,15 +1458,12 @@ export const Venues: React.FC = () => {
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Venue Name *
-                          </label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Venue Name *</label>
                           <input
                             type="text"
                             value={editFormData.name}
                             onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.name ? 'border-red-300' : 'border-gray-300'
-                              }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.name ? 'border-red-300' : 'border-gray-300'}`}
                             placeholder="Enter venue name"
                           />
                           {editErrors.name && (
@@ -1409,17 +1473,13 @@ export const Venues: React.FC = () => {
                             </p>
                           )}
                         </div>
-
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Address Line 1 *
-                          </label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1 *</label>
                           <input
                             type="text"
                             value={editFormData.addressLine1}
                             onChange={(e) => setEditFormData({ ...editFormData, addressLine1: e.target.value })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine1 ? 'border-red-300' : 'border-gray-300'
-                              }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine1 ? 'border-red-300' : 'border-gray-300'}`}
                             placeholder="Flat/Lane/Building..."
                           />
                           {editErrors.addressLine1 && (
@@ -1429,18 +1489,14 @@ export const Venues: React.FC = () => {
                             </p>
                           )}
                         </div>
-
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Address Line 2
-                          </label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 2</label>
                           <input
                             type="text"
                             value={editFormData.addressLine2}
                             onChange={(e) => setEditFormData({ ...editFormData, addressLine2: e.target.value })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine2 ? 'border-red-300' : 'border-gray-300'
-                              }`}
-                            placeholder="Apartment, Suite, Floor"
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.addressLine2 ? 'border-red-300' : 'border-gray-300'}`}
+                            placeholder="Apartment, suite, etc."
                           />
                           {editErrors.addressLine2 && (
                             <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -1449,125 +1505,125 @@ export const Venues: React.FC = () => {
                             </p>
                           )}
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            State *
-                          </label>
-                          <select
-                            value={editFormData.state}
-                            onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value, city: '' })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.state ? 'border-red-300' : 'border-gray-300'
-                              }`}
-                          >
-                            <option value="">Select state</option>
-                            {statesData.map(state => (
-                              <option key={state.id} value={state.name}>{state.name}</option>
-                            ))}
-                          </select>
-                          {editErrors.state && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.state}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            City *
-                          </label>
-                          <select
-                            value={editFormData.city}
-                            onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                            disabled={!editFormData.state}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${editErrors.city ? 'border-red-300' : 'border-gray-300'
-                              }`}
-                          >
-                            <option value="">Select city</option>
-                            {editFormData.state && statesData
-                              .find(s => s.name === editFormData.state)?.cities
-                              .map(city => (
-                                <option key={city} value={city}>{city}</option>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">State *</label>
+                            <select
+                              value={editFormData.state}
+                              onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value, city: '' })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.state ? 'border-red-300' : 'border-gray-300'}`}
+                            >
+                              <option value="">Select State</option>
+                              {statesData.map((state) => (
+                                <option key={state.id} value={state.name}>{state.name}</option>
                               ))}
-                          </select>
-                          {editErrors.city && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.city}
-                            </p>
-                          )}
+                            </select>
+                            {editErrors.state && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.state}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">City *</label>
+                            <select
+                              value={editFormData.city}
+                              onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                              disabled={!editFormData.state}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 ${editErrors.city ? 'border-red-300' : 'border-gray-300'}`}
+                            >
+                              <option value="">Select City</option>
+                              {editFormData.state &&
+                                statesData
+                                  .find((s) => s.name === editFormData.state)
+                                  ?.cities.map((city) => (
+                                    <option key={city} value={city}>{city}</option>
+                                  ))}
+                            </select>
+                            {editErrors.city && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.city}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Country *</label>
+                            <select
+                              value={editFormData.country}
+                              onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.country ? 'border-red-300' : 'border-gray-300'}`}
+                            >
+                              {COUNTRIES.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Pincode *</label>
+                            <input
+                              type="text"
+                              value={editFormData.pincode}
+                              onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value })}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.pincode ? 'border-red-300' : 'border-gray-300'}`}
+                              placeholder="6-digit PIN"
+                              maxLength={6}
+                            />
+                            {editErrors.pincode && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.pincode}
+                              </p>
+                            )}
+                          </div>
                         </div>
-
-
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Country *
-                          </label>
-                          <select
-                            value={editFormData.country}
-                            onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.country ? 'border-red-300' : 'border-gray-300'
-                              }`}
-                          >
-                            {COUNTRIES.map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
+                      </CardContent>
+                      <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">No. of Flats</label>
+                            <input
+                              type="number"
+                              value={editFormData.noOfFlats}
+                              onChange={(e) => setEditFormData({ ...editFormData, noOfFlats: parseInt(e.target.value, 10) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter number of flats"
+                              min={0}
+                            />
+                          </div>
                         </div>
-
+                      </CardContent>
+                      <CardContent className="space-y-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Pincode *
-                          </label>
-                          <input
-                            type="text"
-                            value={editFormData.pincode}
-                            onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value })}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.pincode ? 'border-red-300' : 'border-gray-300'
-                              }`}
-                            placeholder="Enter pincode"
-                          />
-                          {editErrors.pincode && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.pincode}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Location *
-                          </label>
-                          <input
-                            type="text"
-                            value={editFormData.location}
-                            onChange={(e) => setEditFormData({...editFormData, location: e.target.value})}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                              editErrors.location ? 'border-red-300' : 'border-gray-300'
-                            }`}
-                            placeholder="City, State, Country"
-                          />
-                          {editErrors.location && (
-                            <p className="mt-1 text-sm text-red-600 flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-1" />
-                              {editErrors.location}
-                            </p>
-                          )}
-                        </div> */}
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Description
-                          </label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
                           <textarea
                             value={editFormData.description}
                             onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                            rows={4}
+                            rows={3}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Describe the venue..."
+                            placeholder="Describe the venue and its features..."
                           />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                            <select
+                              value={editFormData.status}
+                              onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as 'active' | 'inactive' | 'pending' })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                            {editErrors.status && (
+                              <p className="mt-1 text-sm text-red-600 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-1" />
+                                {editErrors.status}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1575,23 +1631,17 @@ export const Venues: React.FC = () => {
                     {/* Contact Information */}
                     <Card>
                       <CardHeader>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                          <User className="h-5 w-5 mr-2" />
-                          Contact Information
-                        </h3>
+                        <h3 className="text-lg font-semibold text-gray-900">Contact Information</h3>
                       </CardHeader>
                       <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Contact Person *
-                            </label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Contact Person *</label>
                             <input
                               type="text"
                               value={editFormData.contactPerson}
                               onChange={(e) => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.contactPerson ? 'border-red-300' : 'border-gray-300'
-                                }`}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.contactPerson ? 'border-red-300' : 'border-gray-300'}`}
                               placeholder="Enter contact person name"
                             />
                             {editErrors.contactPerson && (
@@ -1601,11 +1651,8 @@ export const Venues: React.FC = () => {
                               </p>
                             )}
                           </div>
-
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Role
-                            </label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                             <input
                               type="text"
                               value={editFormData.contactRole}
@@ -1615,20 +1662,19 @@ export const Venues: React.FC = () => {
                             />
                           </div>
                         </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Email *
-                            </label>
-                            <input
-                              type="email"
-                              value={editFormData.email}
-                              onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.email ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                              placeholder="Enter email address"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                              <input
+                                type="email"
+                                value={editFormData.email}
+                                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                                className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.email ? 'border-red-300' : 'border-gray-300'}`}
+                                placeholder="Enter email address"
+                              />
+                            </div>
                             {editErrors.email && (
                               <p className="mt-1 text-sm text-red-600 flex items-center">
                                 <AlertCircle className="h-4 w-4 mr-1" />
@@ -1636,19 +1682,18 @@ export const Venues: React.FC = () => {
                               </p>
                             )}
                           </div>
-
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Phone *
-                            </label>
-                            <input
-                              type="tel"
-                              value={editFormData.phone}
-                              onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.phone ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                              placeholder="Enter phone number"
-                            />
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">+91</span>
+                              <input
+                                type="tel"
+                                value={editFormData.phone}
+                                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                                className={`w-full pl-14 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${editErrors.phone ? 'border-red-300' : 'border-gray-300'}`}
+                                placeholder="9876543210"
+                              />
+                            </div>
                             {editErrors.phone && (
                               <p className="mt-1 text-sm text-red-600 flex items-center">
                                 <AlertCircle className="h-4 w-4 mr-1" />
@@ -1682,190 +1727,6 @@ export const Venues: React.FC = () => {
                       </CardContent>
                     </Card>
 
-                    {/* Facilities & Amenities */}
-                    <Card>
-                      <CardHeader>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                          <Building2 className="h-5 w-5 mr-2" />
-                          Facilities & Amenities
-                        </h3>
-                      </CardHeader>
-                      <CardContent className="space-y-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Facilities (comma-separated)
-                          </label>
-                          <input
-                            type="text"
-                            value={editFormData.facilities.join(', ')}
-                            onChange={(e) => setEditFormData({ ...editFormData, facilities: e.target.value.split(', ').map(f => f.trim()).filter(f => f) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Auditorium, Community Hall, Garden Area"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Amenities (comma-separated)
-                          </label>
-                          <input
-                            type="text"
-                            value={editFormData.amenities.join(', ')}
-                            onChange={(e) => setEditFormData({ ...editFormData, amenities: e.target.value.split(', ').map(f => f.trim()).filter(f => f) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Wi-Fi, Power Outlets, Lighting"
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Extended Details */}
-                    {/*<Card>
-                       <CardHeader>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                          <MapPin className="h-5 w-5 mr-2" />
-                          Extended Details
-                        </h3>
-                      </CardHeader> 
-                      <CardContent className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Landmark
-                            </label>
-                            <input
-                              type="text"
-                              value={editFormData.addressLandmark}
-                              onChange={(e) => setEditFormData({...editFormData, addressLandmark: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Nearby landmark"
-                            />
-                          </div>
-
-                          {/* <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Area (sq ft)
-                            </label>
-                            <input
-                              type="number"
-                              value={editFormData.areaSqFt}
-                              onChange={(e) => setEditFormData({...editFormData, areaSqFt: parseInt(e.target.value) || 0})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Total area"
-                              min="0"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Kind of Space
-                            </label>
-                            <input
-                              type="text"
-                              value={editFormData.kindOfSpace}
-                              onChange={(e) => setEditFormData({...editFormData, kindOfSpace: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="e.g., Indoor, Outdoor, Mixed"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Pricing Per Day
-                            </label>
-                            <input
-                              type="number"
-                              value={editFormData.pricingPerDay}
-                              onChange={(e) => setEditFormData({...editFormData, pricingPerDay: parseInt(e.target.value) || 0})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Daily rate"
-                              min="0"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Number of Stalls
-                            </label>
-                            <input
-                              type="number"
-                              value={editFormData.noOfStalls}
-                              onChange={(e) => setEditFormData({...editFormData, noOfStalls: parseInt(e.target.value) || 0})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Available stalls"
-                              min="0"
-                            />
-                          </div> 
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Available Hours
-                            </label>
-                            <input
-                              type="text"
-                              value={editFormData.availableHours}
-                              onChange={(e) => setEditFormData({...editFormData, availableHours: e.target.value})}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="e.g., 9:00 AM - 11:00 PM"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editFormData.isCovered}
-                              onChange={(e) => setEditFormData({...editFormData, isCovered: e.target.checked})}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">Covered Space</span>
-                          </label>
-
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editFormData.facilityCovered}
-                              onChange={(e) => setEditFormData({...editFormData, facilityCovered: e.target.checked})}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">Facility Covered</span>
-                          </label>
-
-                          {/* <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editFormData.cateringAllowed}
-                              onChange={(e) => setEditFormData({...editFormData, cateringAllowed: e.target.checked})}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">Catering Allowed</span>
-                          </label>
-
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editFormData.alcoholAllowed}
-                              onChange={(e) => setEditFormData({...editFormData, alcoholAllowed: e.target.checked})}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">Alcohol Allowed</span>
-                          </label>
-
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editFormData.smokingAllowed}
-                              onChange={(e) => setEditFormData({...editFormData, smokingAllowed: e.target.checked})}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">Smoking Allowed</span>
-                          </label> 
-                        </div>
-                      </CardContent>
-                    </Card>*/}
-                    {/* Photos & Documents */}
-                    {/* Additional Contact Information */}
                     <Card>
                       <CardHeader>
                         <div className="flex items-center justify-between">
@@ -1970,11 +1831,128 @@ export const Venues: React.FC = () => {
                         {editFormData.customContacts.length > 0 && (
                           <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
                             <p className="flex items-center">
-                              <AlertCircle className="h-4 w-4 mr-2" />
+                              <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                               Additional contacts will be stored with the venue and can be used for event coordination.
                             </p>
                           </div>
                         )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Facilities & Amenities — same control style as Add New Venue */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900">Facilities & Amenities</h3>
+                      </CardHeader>
+                      <CardContent className="space-y-8">
+                        <div>
+                          <h4 className="text-md font-medium text-gray-800 mb-4">Facilities</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {defaultFacilities.map((facility) => (
+                              <label key={facility} className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editFormData.facilities.includes(facility)}
+                                  onChange={() => handleEditFacilityToggle(facility)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <span className="text-sm text-gray-700">{facility}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Add Custom Facility</label>
+                            <div className="flex space-x-2">
+                              <input
+                                type="text"
+                                value={customFacility}
+                                onChange={(e) => setCustomFacility(e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Enter custom facility"
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCustomFacilityEdit())}
+                              />
+                              <Button type="button" onClick={handleAddCustomFacilityEdit} variant="outline" className="flex items-center space-x-2">
+                                <Plus className="h-4 w-4" />
+                                <span>Add</span>
+                              </Button>
+                            </div>
+                          </div>
+                          {editFormData.facilities.filter((f) => !defaultFacilities.includes(f)).length > 0 && (
+                            <div className="mt-4">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Custom Facilities</label>
+                              <div className="flex flex-wrap gap-2">
+                                {editFormData.facilities
+                                  .filter((f) => !defaultFacilities.includes(f))
+                                  .map((facility) => (
+                                    <div key={facility} className="flex items-center space-x-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-md">
+                                      <span className="text-sm">{facility}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveCustomFacilityEdit(facility)}
+                                        className="text-blue-600 hover:text-blue-800"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="border-t border-gray-200 pt-6">
+                          <h4 className="text-md font-medium text-gray-800 mb-4">Amenities</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {defaultAmenities.map((amenity) => (
+                              <label key={amenity} className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editFormData.amenities.includes(amenity)}
+                                  onChange={() => handleEditAmenityToggle(amenity)}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                />
+                                <span className="text-sm text-gray-700">{amenity}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Add Custom Amenity</label>
+                            <div className="flex space-x-2">
+                              <input
+                                type="text"
+                                value={customAmenity}
+                                onChange={(e) => setCustomAmenity(e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                placeholder="Enter custom amenity"
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCustomAmenityEdit())}
+                              />
+                              <Button type="button" onClick={handleAddCustomAmenityEdit} variant="outline" className="flex items-center space-x-2">
+                                <Plus className="h-4 w-4" />
+                                <span>Add</span>
+                              </Button>
+                            </div>
+                          </div>
+                          {editFormData.amenities.filter((a) => !defaultAmenities.includes(a)).length > 0 && (
+                            <div className="mt-4">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Custom Amenities</label>
+                              <div className="flex flex-wrap gap-2">
+                                {editFormData.amenities
+                                  .filter((a) => !defaultAmenities.includes(a))
+                                  .map((amenity) => (
+                                    <div key={amenity} className="flex items-center space-x-1 bg-green-100 text-green-800 px-2 py-1 rounded-md">
+                                      <span className="text-sm">{amenity}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveCustomAmenityEdit(amenity)}
+                                        className="text-green-600 hover:text-green-800"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
 
@@ -1988,22 +1966,22 @@ export const Venues: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
-                            <input type="text" value={editFormData.bankName} onChange={(e) => setEditFormData({ ...editFormData, bankName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankName ? 'border-red-300' : 'border-gray-300'}`} />
+                            <input type="text" value={editFormData.bankName} onChange={(e) => setEditFormData({ ...editFormData, bankName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankName ? 'border-red-300' : 'border-gray-300'}`} placeholder="Enter bank name" />
                             {editErrors.bankName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankName}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
-                            <input type="text" value={editFormData.bankAccountNumber} onChange={(e) => setEditFormData({ ...editFormData, bankAccountNumber: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankAccountNumber ? 'border-red-300' : 'border-gray-300'}`} />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Account Number</label>
+                            <input type="text" value={editFormData.bankAccountNumber} onChange={(e) => setEditFormData({ ...editFormData, bankAccountNumber: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankAccountNumber ? 'border-red-300' : 'border-gray-300'}`} placeholder="Enter bank account number" />
                             {editErrors.bankAccountNumber && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankAccountNumber}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Name in Bank</label>
-                            <input type="text" value={editFormData.bankHolderName} onChange={(e) => setEditFormData({ ...editFormData, bankHolderName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankHolderName ? 'border-red-300' : 'border-gray-300'}`} />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Holder Name</label>
+                            <input type="text" value={editFormData.bankHolderName} onChange={(e) => setEditFormData({ ...editFormData, bankHolderName: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankHolderName ? 'border-red-300' : 'border-gray-300'}`} placeholder="Enter bank holder name" />
                             {editErrors.bankHolderName && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankHolderName}</p>)}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC</label>
-                            <input type="text" value={editFormData.bankIfsc} onChange={(e) => setEditFormData({ ...editFormData, bankIfsc: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankIfsc ? 'border-red-300' : 'border-gray-300'}`} />
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank IFSC</label>
+                            <input type="text" value={editFormData.bankIfsc} onChange={(e) => setEditFormData({ ...editFormData, bankIfsc: e.target.value })} className={`w-full px-3 py-2 border rounded-lg ${editErrors.bankIfsc ? 'border-red-300' : 'border-gray-300'}`} placeholder="Enter bank IFSC" />
                             {editErrors.bankIfsc && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.bankIfsc}</p>)}
                           </div>
                           {/* <div>
@@ -2015,21 +1993,14 @@ export const Venues: React.FC = () => {
                       </CardContent>
                     </Card>
 
-                    {/* Photos & Documents */}
+                    {/* Venue Photos — same structure as Add New Venue */}
                     <Card>
-                      <CardHeader>
-                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                          <ImageIcon className="h-5 w-5 mr-2" />
-                          Photos & Documents
-                        </h3>
+                      <CardHeader className="flex flex-row items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-900">Venue Photos</h3>
+                        <p className="text-sm text-gray-600">Upload JPG, JPEG, PNG files up to 5 MB each</p>
                       </CardHeader>
-                      <CardContent className="space-y-6">
-                        {/* Photos uploader */}
+                      <CardContent className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Venue Photos</label>
-
-
-
                           <div
                             className="border-2 border-dashed rounded-lg p-4 text-center text-gray-500 hover:bg-gray-50 cursor-pointer"
                             onDragOver={(e) => e.preventDefault()}
@@ -2129,15 +2100,25 @@ export const Venues: React.FC = () => {
                             </div>
                           )}
                         </div>
+                      </CardContent>
+                    </Card>
 
-                        {/* Documents uploader */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Venue Documents</label>
-                          <div className="space-y-2">
+                    {/* Venue Documents */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900">Venue Documents</h3>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="flex flex-row items-center justify-between flex-wrap gap-2">
                             <Button type="button" variant="outline" size="sm" className="w-fit flex items-center space-x-2" onClick={() => setEditFormData({ ...editFormData, documents: [...editFormData.documents, { name: '', url: '', type: '', size: 0, _file: null } as any] })}>
                               <Plus className="h-4 w-4" />
                               <span>Add Document</span>
                             </Button>
+                            <p className="text-sm text-gray-600">Accepted: PDF or images. Max 10MB per file</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
                             {editFormData.documents && editFormData.documents.length > 0 ? (
                               <div className="space-y-2 text-sm">
                                 {editFormData.documents.map((d: any, idx: number) => (
@@ -2159,7 +2140,7 @@ export const Venues: React.FC = () => {
                                         const f = e.target.files?.[0];
                                         if (!f) return;
                                         const allowed = f.type === 'application/pdf' || f.type === 'application/octet-stream' || /image\/(jpeg|jpg|png)/i.test(f.type);
-                                        const valid = f.size <= 20 * 1024 * 1024;
+                                        const valid = f.size <= 10 * 1024 * 1024;
                                         if (!allowed || !valid) return;
                                         const docs = [...editFormData.documents] as any[];
                                         docs[idx] = { ...docs[idx], url: URL.createObjectURL(f), type: f.type, size: f.size, _file: f };
@@ -2198,30 +2179,238 @@ export const Venues: React.FC = () => {
                                 <p className="text-xs text-gray-500">Upload documents like permits, licenses, etc.</p>
                               </div>
                             )}
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
 
-                    {/* Status */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Status
-                      </label>
-                      <select
-                        value={editFormData.status}
-                        onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as 'active' | 'inactive' | 'pending' })}
-                        className="w-full px-3 py-2 border rounded-lg"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                      {editErrors.status && (<p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{editErrors.status}</p>)}
-                    </div>
+                    {/* Extra venue details, map text & policies (fields not on main Add form card) */}
+                    <Card>
+                      <CardHeader>
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                          <MapPin className="h-5 w-5 mr-2" />
+                          Venue details & location
+                        </h3>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Landmark</label>
+                            <input
+                              type="text"
+                              value={editFormData.addressLandmark}
+                              onChange={(e) => setEditFormData({ ...editFormData, addressLandmark: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Near hospital/mall etc."
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Location (summary)</label>
+                            <input
+                              type="text"
+                              value={editFormData.location}
+                              onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="City, State, Country"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Standard Address Format</label>
+                          <textarea
+                            value={editFormData.addressStandard}
+                            onChange={(e) => setEditFormData({ ...editFormData, addressStandard: e.target.value })}
+                            rows={2}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="123, Street, City, PIN"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Area (sq ft)
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.areaSqFt}
+                              onChange={(e) => setEditFormData({ ...editFormData, areaSqFt: parseInt(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Total area"
+                              min="0"
+                            />
+                          </div>
 
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Kind of Space
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.kindOfSpace}
+                              onChange={(e) => setEditFormData({ ...editFormData, kindOfSpace: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="e.g., Indoor, Outdoor, Mixed"
+                            />
+                          </div>
 
-                  </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Pricing Per Day
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.pricingPerDay}
+                              onChange={(e) => setEditFormData({ ...editFormData, pricingPerDay: parseInt(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Daily rate"
+                              min="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Facility Area (sq ft)
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.facilityAreaSqFt}
+                              onChange={(e) => setEditFormData({ ...editFormData, facilityAreaSqFt: parseInt(e.target.value, 10) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter facility area"
+                              min={0}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              No. of Stalls
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.noOfStalls}
+                              onChange={(e) => setEditFormData({ ...editFormData, noOfStalls: parseInt(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Available stalls"
+                              min="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Available Hours
+                            </label>
+                            <input
+                              type="text"
+                              value={editFormData.availableHours}
+                              onChange={(e) => setEditFormData({ ...editFormData, availableHours: e.target.value })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="e.g., 9:00 AM - 11:00 PM"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Parking Spaces
+                            </label>
+                            <input
+                              type="number"
+                              value={editFormData.parkingSpaces}
+                              onChange={(e) => setEditFormData({ ...editFormData, parkingSpaces: parseInt(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Available parking spaces"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.isCovered}
+                              onChange={(e) => setEditFormData({ ...editFormData, isCovered: e.target.checked })}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Covered Space</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.facilityCovered}
+                              onChange={(e) => setEditFormData({ ...editFormData, facilityCovered: e.target.checked })}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Facility Covered</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.cateringAllowed}
+                              onChange={(e) => setEditFormData({ ...editFormData, cateringAllowed: e.target.checked })}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Catering Allowed</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.alcoholAllowed}
+                              onChange={(e) => setEditFormData({ ...editFormData, alcoholAllowed: e.target.checked })}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Alcohol Allowed</span>
+                          </label>
+
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editFormData.smokingAllowed}
+                              onChange={(e) => setEditFormData({ ...editFormData, smokingAllowed: e.target.checked })}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">Smoking Allowed</span>
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Latitude</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={editFormData.latitude}
+                              onChange={(e) => setEditFormData({ ...editFormData, latitude: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Latitude"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Longitude</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={editFormData.longitude}
+                              onChange={(e) => setEditFormData({ ...editFormData, longitude: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Longitude"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Formatted Address</label>
+                          <textarea
+                            rows={2}
+                            value={editFormData.formattedAddress}
+                            onChange={(e) => setEditFormData({ ...editFormData, formattedAddress: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Google formatted address"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
                 </div>
                 <div className="space-y-3">
                   <Button

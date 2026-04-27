@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, MapPin, Calendar as CalendarIcon, Users, Filter, Search, X, Save, AlertTriangle, Upload, Image, Clock, Building2, DollarSign, IndianRupee, IndianRupeeIcon, CheckCircle, Info, ArrowLeft, User, AlertCircle, Check, FileText, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardContent } from '../components/UI/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/UI/Table';
 import { Badge } from '../components/UI/Badge';
 import { Button } from '../components/UI/Button';
 import { EventVendorPurchaseOrderModal } from '../components/Events/EventVendorPurchaseOrderModal';
+import { EventFlyerGeneratorModal } from '../components/Events/EventFlyerGeneratorModal';
 import { Event, Exhibitor } from '../types';
 import { supabase } from '../lib/supabase';
 import { useEvents, useVenues, useVendors, useExhibitors, useSponsors } from '../hooks/useSupabaseData';
@@ -303,6 +304,8 @@ export const Events: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showFlyerModal, setShowFlyerModal] = useState(false);
+  const [flyerEvent, setFlyerEvent] = useState<Event | null>(null);
   const [editFormData, setEditFormData] = useState<ExtendedEventFormData | null>(null);
   const [editErrors, setEditErrors] = useState<{ [key: string]: string }>({});
   const editVenueOptions = editFormData?.venueId
@@ -351,6 +354,11 @@ export const Events: React.FC = () => {
   const [loadingViewSponsors, setLoadingViewSponsors] = useState(false);
   const [viewEventRegistrations, setViewEventRegistrations] = useState<EventRegistrationRow[]>([]);
   const [loadingViewRegistrations, setLoadingViewRegistrations] = useState(false);
+  const [bulkStallSize, setBulkStallSize] = useState('');
+  const [bulkStallCategory, setBulkStallCategory] = useState('');
+  const [bulkStallPrice, setBulkStallPrice] = useState<number>(0);
+  const [bulkStallQty, setBulkStallQty] = useState<number>(1);
+  const [bulkStallPrefix, setBulkStallPrefix] = useState('A');
 
   // Stall removal modal state
   const [showDeleteStallModal, setShowDeleteStallModal] = useState(false);
@@ -855,6 +863,61 @@ export const Events: React.FC = () => {
     setShowDeleteStallModal(true);
   };
 
+  const addBulkStalls = () => {
+    if (!editFormData) return;
+    const size = bulkStallSize.trim();
+    const category = bulkStallCategory.trim();
+    const price = Number(bulkStallPrice) || 0;
+    const qty = Math.max(1, Math.floor(Number(bulkStallQty) || 0));
+    const prefix = (bulkStallPrefix || 'A').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'A';
+
+    if (!size) {
+      showNotification('Select stall size for bulk add.', 'error');
+      return;
+    }
+    if (price <= 0) {
+      showNotification('Enter a valid stall price greater than 0.', 'error');
+      return;
+    }
+
+    setEditFormData((prev) => {
+      if (!prev) return null;
+      const existing = prev.allStalls || [];
+      const existingNos = new Set(existing.map((s) => String(s.stallNo || '').trim().toUpperCase()).filter(Boolean));
+      const prefixedNums = existing
+        .map((s) => String(s.stallNo || '').trim().toUpperCase())
+        .filter((s) => s.startsWith(prefix))
+        .map((s) => Number(s.slice(prefix.length)))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      let nextNum = prefixedNums.length > 0 ? Math.max(...prefixedNums) + 1 : 1;
+
+      const generated: StallConfigRow[] = [];
+      while (generated.length < qty) {
+        const stallNo = `${prefix}${nextNum}`;
+        nextNum += 1;
+        if (existingNos.has(stallNo)) continue;
+        existingNos.add(stallNo);
+        generated.push({
+          id: `${Date.now()}-${generated.length}-${stallNo}`,
+          stallNo,
+          stallSize: size,
+          stallCategory: category,
+          price,
+        });
+      }
+
+      const merged = [...existing, ...generated];
+      const nextPlanned = Math.max(prev.noOfStalls || 0, merged.length);
+      return {
+        ...prev,
+        noOfStalls: nextPlanned,
+        allStalls: merged,
+      };
+    });
+
+    showNotification(`${qty} stall(s) created: ${prefix} series.`, 'success');
+  };
+
   const confirmRemoveStall = () => {
     if (stallToRemove && editFormData) {
       const { index, stallNumber } = stallToRemove;
@@ -903,6 +966,11 @@ export const Events: React.FC = () => {
   const handleView = (event: Event) => {
     setSelectedEvent(event);
     setShowViewModal(true);
+  };
+
+  const handleOpenFlyerModal = (event: Event) => {
+    setFlyerEvent(event);
+    setShowFlyerModal(true);
   };
 
   const handleEdit = (event: Event) => {
@@ -1284,6 +1352,8 @@ export const Events: React.FC = () => {
     setShowViewModal(false);
     setShowEditModal(false);
     setShowDeleteModal(false);
+    setShowFlyerModal(false);
+    setFlyerEvent(null);
     setShowDeleteStallModal(false);
     setSelectedEvent(null);
     setEditFormData(null);
@@ -1796,6 +1866,9 @@ export const Events: React.FC = () => {
                     <Button size="sm" variant="ghost" onClick={() => handleView(event)}>
                       <Eye className="h-4 w-4" />
                     </Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleOpenFlyerModal(event)} title="Generate flyer">
+                      <Sparkles className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => handleEdit(event)}>
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -1880,6 +1953,9 @@ export const Events: React.FC = () => {
                       <div className="flex space-x-1">
                         <Button size="sm" variant="ghost" onClick={() => handleView(event)}>
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleOpenFlyerModal(event)} title="Generate flyer">
+                          <Sparkles className="h-4 w-4" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleEdit(event)}>
                           <Edit className="h-4 w-4" />
@@ -2485,6 +2561,15 @@ export const Events: React.FC = () => {
           </div> */}
         </div>
       )}
+
+      <EventFlyerGeneratorModal
+        isOpen={showFlyerModal}
+        event={flyerEvent}
+        onClose={() => {
+          setShowFlyerModal(false);
+          setFlyerEvent(null);
+        }}
+      />
 
       {/* Edit Event Modal */}
       {showEditModal && editFormData && (
@@ -3448,6 +3533,85 @@ export const Events: React.FC = () => {
                       >
                         <span>+ Add Stall</span>
                       </Button>
+                    </div>
+
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-blue-900">Bulk Add Stalls</h4>
+                      <p className="text-xs text-blue-800">
+                        Enter one setup and quantity. Stalls are auto-created like A1, A2, A3...
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs text-gray-700 mb-1">Size</label>
+                          <select
+                            value={bulkStallSize}
+                            onChange={(e) => setBulkStallSize(e.target.value)}
+                            className="w-full px-3 py-2 border rounded"
+                          >
+                            <option value="">Select</option>
+                            <option value="Small (6x6 ft)">Small (6x6 ft)</option>
+                            <option value="Medium (8x8 ft)">Medium (8x8 ft)</option>
+                            <option value="Large (10x10 ft)">Large (10x10 ft)</option>
+                            <option value="Extra Large (12x12 ft)">Extra Large (12x12 ft)</option>
+                            <option value="Custom">Custom</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-700 mb-1">Price (₹)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={bulkStallPrice}
+                            onChange={(e) => setBulkStallPrice(Number(e.target.value) || 0)}
+                            className="w-full px-3 py-2 border rounded"
+                            placeholder="2000"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={bulkStallQty}
+                            onChange={(e) => setBulkStallQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full px-3 py-2 border rounded"
+                            placeholder="10"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-700 mb-1">Prefix</label>
+                          <input
+                            type="text"
+                            value={bulkStallPrefix}
+                            onChange={(e) => setBulkStallPrefix(e.target.value.toUpperCase())}
+                            className="w-full px-3 py-2 border rounded"
+                            placeholder="A"
+                          />
+                        </div>
+                        <div>
+                          <Button type="button" className="w-full" onClick={addBulkStalls}>
+                            Add Bulk
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-700 mb-1">Category (optional)</label>
+                        <select
+                          value={bulkStallCategory}
+                          onChange={(e) => setBulkStallCategory(e.target.value)}
+                          className="w-full md:w-80 px-3 py-2 border rounded"
+                        >
+                          <option value="">None</option>
+                          <option value="Food & Beverage">Food & Beverage</option>
+                          <option value="Arts & Crafts">Arts & Crafts</option>
+                          <option value="Technology">Technology</option>
+                          <option value="Fashion & Accessories">Fashion & Accessories</option>
+                          <option value="Health & Wellness">Health & Wellness</option>
+                          <option value="Education">Education</option>
+                          <option value="Entertainment">Entertainment</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
 
                     {(editFormData.noOfStalls || editFormData.allStalls.length) > 0 && editFormData.allStalls.length >= (editFormData.noOfStalls || editFormData.allStalls.length) && (

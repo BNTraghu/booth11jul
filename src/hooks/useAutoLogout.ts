@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-const AUTO_LOGOUT_TIME = 10 * 60 * 1000; // 1 minute in milliseconds
+const AUTO_LOGOUT_TIME = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 export const useAutoLogout = () => {
   const { user, logout } = useAuth();
@@ -27,15 +27,7 @@ export const useAutoLogout = () => {
 
   const handleActivity = useCallback(() => {
     if (!user) return;
-
-    const now = Date.now();
-    const timeSinceLastActivity = now - lastActivityRef.current;
-
-    // Only reset timer if user has been inactive for more than 30 seconds
-    // This prevents excessive timer resets on rapid user interactions
-    if (timeSinceLastActivity > 30000) {
-      resetTimer();
-    }
+    resetTimer();
   }, [user, resetTimer]);
 
   useEffect(() => {
