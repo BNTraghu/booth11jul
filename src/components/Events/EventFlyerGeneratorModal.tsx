@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Download, Sparkles, Loader2 } from 'lucide-react';
+import { X, Download, Sparkles, Loader2, ImagePlus } from 'lucide-react';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Button } from '../UI/Button';
 import { Event } from '../../types';
@@ -9,6 +9,7 @@ type Props = {
   isOpen: boolean;
   event: Event | null;
   onClose: () => void;
+  onSaved?: (imageUrls: string[]) => void | Promise<void>;
 };
 
 type FlyerFormState = {
@@ -50,7 +51,30 @@ const getStallSummary = (event: Event): string => {
   return `Stalls: ${count} | ${priceText}`;
 };
 
-export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClose }) => {
+const parseEventImages = (eventImageUrl: unknown): string[] => {
+  if (eventImageUrl == null) return [];
+  if (Array.isArray(eventImageUrl)) {
+    return eventImageUrl
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .filter(Boolean);
+  }
+  if (typeof eventImageUrl !== 'string') return [];
+  const normalized = eventImageUrl.trim();
+  if (!normalized) return [];
+
+  if (normalized.startsWith('[') || normalized.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(normalized);
+      return parseEventImages(parsed);
+    } catch {
+      // fall through and treat raw string as url
+    }
+  }
+
+  return [normalized];
+};
+
+export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClose, onSaved }) => {
   const [form, setForm] = useState<FlyerFormState>({
     title: '',
     subtitle: '',
@@ -64,7 +88,9 @@ export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClo
   });
   const [loadingSponsors, setLoadingSponsors] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [saveMsg, setSaveMsg] = useState('');
   const [generatedSrc, setGeneratedSrc] = useState('');
 
   const eventId = event?.id || null;
@@ -73,6 +99,7 @@ export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClo
     if (!isOpen || !event) return;
     setGeneratedSrc('');
     setErrorMsg('');
+    setSaveMsg('');
     setForm({
       title: event.title || '',
       subtitle: event.description?.trim() || 'Join us for a colorful event experience',
@@ -209,6 +236,60 @@ export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClo
     document.body.removeChild(a);
   };
 
+  const handleSaveToEvent = async () => {
+    if (!event || !generatedSrc) return;
+
+    setIsSaving(true);
+    setErrorMsg('');
+    setSaveMsg('');
+
+    try {
+      const response = await fetch(generatedSrc);
+      if (!response.ok) {
+        throw new Error('Could not fetch generated flyer for upload.');
+      }
+      const blob = await response.blob();
+      const extension =
+        blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
+      const safeTitle = (event.title || 'event').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      const filePath = `event-images/${event.id}/ai-flyer-${safeTitle}-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('event-images').upload(filePath, blob, {
+        contentType: blob.type || 'image/png',
+        upsert: false,
+      });
+
+      if (uploadError) {
+        throw new Error(uploadError.message || 'Failed to upload flyer image.');
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('event-images').getPublicUrl(filePath);
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) {
+        throw new Error('Could not generate public URL for uploaded flyer.');
+      }
+
+      const existing = parseEventImages(event.eventImageUrl);
+      const updatedImages = [publicUrl, ...existing.filter((url) => url !== publicUrl)];
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({ event_image_url: JSON.stringify(updatedImages) })
+        .eq('id', event.id);
+
+      if (updateError) {
+        throw new Error(updateError.message || 'Failed to update event image URL.');
+      }
+
+      setSaveMsg('Flyer saved to event images.');
+      if (onSaved) {
+        await onSaved(updatedImages);
+      }
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Could not save flyer to event.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!isOpen || !event) return null;
 
   return (
@@ -301,6 +382,7 @@ export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClo
               />
             </div>
             {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+            {saveMsg && <p className="text-sm text-green-600">{saveMsg}</p>}
             <div className="flex items-center gap-2">
               <Button type="button" onClick={handleGenerate} disabled={!canGenerate || isGenerating}>
                 {isGenerating ? (
@@ -312,6 +394,24 @@ export const EventFlyerGeneratorModal: React.FC<Props> = ({ isOpen, event, onClo
                   <>
                     <Sparkles className="h-4 w-4 mr-2" />
                     Generate Flyer
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveToEvent}
+                disabled={!generatedSrc || isSaving || isGenerating}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="h-4 w-4 mr-2" />
+                    Use as Event Image
                   </>
                 )}
               </Button>

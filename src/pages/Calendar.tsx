@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
-  Plus, 
   Calendar as CalendarIcon, 
   Clock, 
   MapPin, 
@@ -578,6 +577,50 @@ export const Calendar: React.FC = () => {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 5);
 
+  const handleExport = () => {
+    if (events.length === 0) return;
+
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? '');
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+
+    const headers = [
+      'Title',
+      'Date',
+      'Time',
+      'Venue',
+      'Status',
+      'Attendees',
+      'Description',
+    ];
+
+    const rows = events.map((event) => [
+      event.title,
+      event.date,
+      event.time,
+      event.venue,
+      event.status,
+      event.attendees,
+      event.description || '',
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => escapeCsv(cell)).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStamp = format(new Date(), 'yyyy-MM-dd');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `event-calendar-export-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -603,16 +646,14 @@ export const Calendar: React.FC = () => {
           <p className="text-gray-600">Manage and view all scheduled events</p>
         </div>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-          <Button variant="outline" className="flex items-center space-x-2 w-full sm:w-auto justify-center">
+          <Button
+            variant="outline"
+            className="flex items-center space-x-2 w-full sm:w-auto justify-center"
+            onClick={handleExport}
+            disabled={events.length === 0}
+          >
             <Download className="h-4 w-4" />
             <span>Export</span>
-          </Button>
-          <Button 
-            onClick={() => setEventModal({ isOpen: true, event: null, mode: 'create' })}
-            className="flex items-center space-x-2 w-full sm:w-auto justify-center"
-          >
-            <Plus className="h-4 w-4" />
-            <span>New Event</span>
           </Button>
         </div>
       </div>
@@ -773,14 +814,6 @@ export const Calendar: React.FC = () => {
               {upcomingEvents.length === 0 && (
                 <div className="text-center py-4">
                   <p className="text-sm text-gray-500">No upcoming events</p>
-                  <Button 
-                    size="sm" 
-                    className="mt-2"
-                    onClick={() => setEventModal({ isOpen: true, event: null, mode: 'create' })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Create Event
-                  </Button>
                 </div>
               )}
             </CardContent>

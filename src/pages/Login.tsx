@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Building2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/newlogo.png';
 
@@ -109,24 +109,6 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <div className="text-sm text-gray-600">
-              <p className="mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-xs bg-gray-100 p-2 rounded">
-                <p><strong>Super Admin:</strong> admin@boothbuzz.com / admin123</p>
-                <p><strong>Demo User:</strong> demo@boothbuzz.com / demo123</p>
-              </div>
-              <button 
-                onClick={() => {
-                  setEmail('demo@boothbuzz.com');
-                  setPassword('demo123');
-                }}
-                className="mt-2 text-blue-600 hover:text-blue-800 text-xs"
-              >
-                Fill Demo Credentials
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

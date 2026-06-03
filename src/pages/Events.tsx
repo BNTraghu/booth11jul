@@ -82,6 +82,11 @@ interface EventRegistrationRow {
   created_at?: string;
 }
 
+interface OrganizerOption {
+  id: string;
+  name: string;
+}
+
 const SPONSOR_ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'title', label: 'Title Sponsorship' },
   { value: 'co_sponsor', label: 'Co-Sponsor' },
@@ -198,11 +203,36 @@ export const Events: React.FC = () => {
   );
   const { exhibitors, refetch: refetchExhibitors } = useExhibitors();
   const { sponsors } = useSponsors();
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
+  const [organizers, setOrganizers] = useState<OrganizerOption[]>([]);
+  const [selectedOrganizerId, setSelectedOrganizerId] = useState<string>('all');
 
   // Debug vendor data
   console.log('🔍 Vendors loaded:', vendors.length, vendors);
   const [exhibitorUpdates, setExhibitorUpdates] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    let cancelled = false;
+    supabase
+      .from('organizations')
+      .select('id, name')
+      .order('name', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled || error) return;
+        const rows = (data || [])
+          .map((org: any) => ({
+            id: String(org.id),
+            name: String(org.name || '').trim(),
+          }))
+          .filter((org) => org.id && org.name);
+        setOrganizers(rows);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperAdmin]);
 
   const extractUrlsFromString = (value: string): string[] => {
     // Handles values like:
@@ -260,6 +290,12 @@ export const Events: React.FC = () => {
   const getPrimaryEventImage = (eventImageUrl: unknown): string => {
     const images = parseEventImages(eventImageUrl);
     return images[0] || '';
+  };
+
+  const getTotalStalls = (event: Event): number => {
+    const plannedStalls = Number(event.noOfStalls || 0);
+    if (plannedStalls > 0) return plannedStalls;
+    return Array.isArray(event.allStalls) ? event.allStalls.length : 0;
   };
 
   /** Saved Supabase/public URLs (not blob: previews). */
@@ -933,7 +969,12 @@ export const Events: React.FC = () => {
     }
   };
 
-  const filteredEvents = events.filter(event => {
+  const organizerScopedEvents =
+    isSuperAdmin && selectedOrganizerId !== 'all'
+      ? events.filter((event) => String(event.organizationId || '') === selectedOrganizerId)
+      : events;
+
+  const filteredEvents = organizerScopedEvents.filter(event => {
     const matchesFilter = filter === 'all' || event.status === filter;
     const matchesSearch = searchTerm === '' ||
       event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1739,6 +1780,20 @@ export const Events: React.FC = () => {
                 />
               </div>
             </div>
+            {isSuperAdmin && (
+              <select
+                value={selectedOrganizerId}
+                onChange={(e) => setSelectedOrganizerId(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Organizers</option>
+                {organizers.map((organizer) => (
+                  <option key={organizer.id} value={organizer.id}>
+                    {organizer.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -1769,7 +1824,9 @@ export const Events: React.FC = () => {
             >
               {status === 'all' ? 'All Events' : status}
               <span className="ml-1 sm:ml-2 text-xs">
-                {status === 'all' ? events.length : events.filter(e => e.status === status).length}
+                {status === 'all'
+                  ? organizerScopedEvents.length
+                  : organizerScopedEvents.filter((e) => e.status === status).length}
               </span>
             </button>
           ))}
@@ -1854,6 +1911,10 @@ export const Events: React.FC = () => {
                   <div className="flex items-center text-sm text-gray-600">
                     <Users className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>{event.attendees}/{event.maxCapacity} attendees</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Building2 className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>{getTotalStalls(event)} total stalls</span>
                   </div>
                 </div>
 
@@ -2565,6 +2626,9 @@ export const Events: React.FC = () => {
       <EventFlyerGeneratorModal
         isOpen={showFlyerModal}
         event={flyerEvent}
+        onSaved={async () => {
+          await refetch();
+        }}
         onClose={() => {
           setShowFlyerModal(false);
           setFlyerEvent(null);

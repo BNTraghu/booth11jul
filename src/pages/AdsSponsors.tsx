@@ -226,12 +226,17 @@ export const AdsSponsors: React.FC = () => {
     if (!window.confirm('Delete this website ad?')) {
       return;
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('website_ads')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) {
       alert(error.message);
+      return;
+    }
+    if (!data || data.length === 0) {
+      alert('Delete was blocked by database permissions. Please run latest Supabase migrations and try again.');
       return;
     }
     refetchWebsiteAds();
